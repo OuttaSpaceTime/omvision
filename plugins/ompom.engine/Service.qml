@@ -275,6 +275,19 @@ Item {
       opacity: 0.92
     }
 
+    // Quickshell only reserves pointer input over areas that actually have a
+    // MouseArea (or similar), so without this, clicks over the plain
+    // background Rectangle above fall through to whatever window is
+    // underneath — the overlay looks blocking but the desktop keeps working
+    // right through it. This absorbs every click that doesn't land on one of
+    // the buttons below (those still win, since they're declared later and
+    // stack on top).
+    MouseArea {
+      anchors.fill: parent
+      acceptedButtons: Qt.AllButtons
+      hoverEnabled: true
+    }
+
     // --- block view: prompt / extend / break ---
     Column {
       anchors.centerIn: parent
