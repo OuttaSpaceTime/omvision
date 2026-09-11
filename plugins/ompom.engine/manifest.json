@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "ompom.engine",
+  "name": "Ompom Engine",
+  "version": "1.0.0",
+  "author": "outtaspacetime",
+  "description": "Pomodoro timer state machine and fullscreen break overlay for Ompom.",
+  "kinds": [
+    "service"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}
