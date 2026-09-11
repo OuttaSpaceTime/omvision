@@ -68,8 +68,10 @@ Item {
 
   // extend deliberately behaves like focus here: no overlay, normal desktop
   // use, just a ticking bar countdown you can't pause or escape via mode
-  // switch (see togglePause/cycleMode) until it runs out and drops you back
-  // at the prompt overlay.
+  // switch until it runs out and drops you back at the prompt overlay.
+  // break is the mirror case: overlay stays up, and togglePause/cycleMode
+  // both refuse to act, so there's no way to pause or mode-switch your way
+  // out of it early either — it only ends on its own.
   readonly property bool overlayVisible: mode !== "off" && (phase === "prompt" || phase === "break")
 
   function fmt(totalSeconds) {
@@ -101,7 +103,7 @@ Item {
   }
 
   function cycleMode() {
-    if (root.phase === "extend") return root.statusJson()
+    if (root.phase === "extend" || root.phase === "break") return root.statusJson()
     if (root.mode === "normal") root.mode = "long"
     else if (root.mode === "long") root.mode = "off"
     else root.mode = "normal"
