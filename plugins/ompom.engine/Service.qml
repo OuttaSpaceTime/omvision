@@ -105,7 +105,8 @@ Item {
   }
 
   function togglePause() {
-    if (root.mode === "off" || root.phase !== "focus") return root.statusJson()
+    if (root.mode === "off") return root.statusJson()
+    if (root.phase !== "focus" && root.phase !== "extend") return root.statusJson()
     root.paused = !root.paused
     return root.statusJson()
   }
@@ -318,10 +319,21 @@ Item {
         }
 
         OverlayButton {
-          visible: root.phase === "prompt"
+          visible: root.phase === "extend"
+          label: root.paused ? "Resume" : "Pause"
+          onActivated: root.togglePause()
+        }
+
+        OverlayButton {
+          visible: root.phase === "prompt" || root.phase === "extend"
           primary: true
           label: "Start break"
           onActivated: root.startBreak()
+        }
+
+        OverlayButton {
+          label: root.mode === "long" ? "Mode: Long Focus" : "Mode: Normal"
+          onActivated: root.cycleMode()
         }
 
         OverlayButton {
@@ -331,7 +343,7 @@ Item {
       }
     }
 
-    // --- notes view: Omawrite ---
+    // --- notes view ---
     Item {
       anchors.fill: parent
       anchors.margins: Style.space(80)
@@ -342,7 +354,7 @@ Item {
         spacing: Style.space(14)
 
         Text {
-          text: "Omawrite"
+          text: "What's on your mind?"
           color: Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.heading
@@ -367,6 +379,7 @@ Item {
               id: noteEdit
               width: parent.width
               wrapMode: TextEdit.Wrap
+              textFormat: TextEdit.MarkdownText
               color: Color.popups.text
               font.family: Style.font.family
               font.pixelSize: Style.font.body
