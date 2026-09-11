@@ -29,6 +29,23 @@ Item {
   readonly property string stateDir: home + "/.local/state/ompom"
   readonly property string dayMarkerPath: stateDir + "/notes-day"
 
+  // Trusted absolute executables — never resolved through a shell or PATH.
+  readonly property string mkdirBin: "/usr/bin/mkdir"
+  readonly property string mvBin: "/usr/bin/mv"
+
+  // Day markers this engine itself ever writes are exactly today's date
+  // (see todayStr()). Anything else read back — a corrupted or tampered
+  // file — is rejected outright before it can be used to build a path, so
+  // it can never steer the rollover mv outside the grave directory.
+  readonly property var dayMarkerPattern: /^\d{4}-\d{2}-\d{2}$/
+
+  // Hard ceilings so a single note or a runaway today-file can't grow
+  // without bound: ~20k characters per saved note, ~2MB for the whole
+  // day's file before this engine refuses to append further (existing
+  // content is left untouched either way — never truncated or discarded).
+  readonly property int maxNoteInputChars: 20000
+  readonly property int maxNoteFileChars: 2000000
+
   readonly property int normalFocusSec: 25 * 60
   readonly property int normalBreakSec: 5 * 60
   readonly property int longFocusSec: 50 * 60
@@ -141,10 +158,6 @@ Item {
     root.notesOpen = false
   }
 
-  function shQuote(s) {
-    return "'" + String(s).replace(/'/g, "'\\''") + "'"
-  }
-
   function todayStr() {
     var d = new Date()
     var mm = String(d.getMonth() + 1)
@@ -165,14 +178,18 @@ Item {
       root.notesOpen = false
       return
     }
+    if (text.length > root.maxNoteInputChars) text = text.slice(0, root.maxNoteInputChars)
     root.pendingNoteText = text
     root.saveInProgress = true
     ensureNotesDirsProc.running = true
   }
 
+  // Direct argv, no shell: mkdir/mv run as trusted absolute binaries with
+  // their arguments passed literally, so there's no command string to quote
+  // or escape — and nothing for a shell to reinterpret in the first place.
   Process {
     id: ensureNotesDirsProc
-    command: ["bash", "-c", "mkdir -p " + root.shQuote(root.todayDir) + " " + root.shQuote(root.graveDir) + " " + root.shQuote(root.stateDir)]
+    command: [root.mkdirBin, "-p", root.todayDir, root.graveDir, root.stateDir]
     onExited: { if (root.saveInProgress) dayMarkerFile.reload() }
   }
 
@@ -189,10 +206,14 @@ Item {
   function handleDayMarker(raw) {
     var marker = String(raw || "").trim()
     var today = root.todayStr()
-    if (marker.length > 0 && marker !== today) {
-      rolloverProc.command = ["bash", "-c",
-        "if [[ -f " + root.shQuote(root.todayFilePath) + " ]]; then mv " +
-        root.shQuote(root.todayFilePath) + " " + root.shQuote(root.graveDir + "/" + marker + ".md") + "; fi"]
+    // The strict format check happens before marker touches any path — an
+    // unrecognized marker (corrupted file, path separators, "..") is simply
+    // never used, never concatenated into the mv destination, and rollover
+    // is skipped for this save rather than guessed at.
+    if (marker.length > 0 && marker !== today && root.dayMarkerPattern.test(marker)) {
+      // mv exits non-zero (harmlessly) if todayFilePath doesn't exist yet —
+      // no shell, so no "test -f" needed to guard the call.
+      rolloverProc.command = [root.mvBin, root.todayFilePath, root.graveDir + "/" + marker + ".md"]
       rolloverProc.running = true
     } else {
       todayFileView.reload()
@@ -215,10 +236,16 @@ Item {
   }
 
   function finishSaveNote(existing) {
-    var stamp = Qt.formatDateTime(new Date(), "yyyy-MM-dd HH:mm")
-    var block = "## " + stamp + "\n\n" + root.pendingNoteText.trim() + "\n\n"
-    todayFileView.setText(String(existing || "") + block)
-    dayMarkerFile.setText(root.todayStr())
+    var base = String(existing || "")
+    // Refuse to grow an already-oversized file further. Existing content is
+    // left completely untouched (no truncation) — this note just isn't
+    // appended this time.
+    if (base.length <= root.maxNoteFileChars) {
+      var stamp = Qt.formatDateTime(new Date(), "yyyy-MM-dd HH:mm")
+      var block = "## " + stamp + "\n\n" + root.pendingNoteText.trim() + "\n\n"
+      todayFileView.setText(base + block)
+      dayMarkerFile.setText(root.todayStr())
+    }
     root.pendingNoteText = ""
     root.notesOpen = false
     root.saveInProgress = false
