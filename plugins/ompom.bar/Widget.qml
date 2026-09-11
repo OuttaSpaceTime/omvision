@@ -27,9 +27,9 @@ Item {
   // SVGs (icons/*.svg), tinted at runtime via MultiEffect — no font/emoji
   // involved, so there's no risk of a missing glyph collapsing to zero width
   // (that's what broke the off -> on toggle earlier) and no baked-in emoji
-  // color fighting the theme. pomodoro.svg is OpenMoji's black/outline
-  // tomato (CC BY-SA 4.0, see icons/ATTRIBUTION.md); off reuses the exact
-  // same icon rather than a different shape, distinguished only by color.
+  // color fighting the theme. See icons/ATTRIBUTION.md for provenance; off
+  // reuses the exact same icon rather than a different shape, distinguished
+  // only by color.
   readonly property url iconSource: paused ? Qt.resolvedUrl("icons/pause.svg")
     : Qt.resolvedUrl("icons/pomodoro.svg")
 
@@ -42,14 +42,25 @@ Item {
   // lighter tone deliberately, so it reads as a distinct, faded state.
   readonly property color dotColor: mode === "off" ? root.foreground : Color.bar.text
 
-  function runCommand(cmd) {
-    if (bar && typeof bar.run === "function") bar.run(cmd)
-    else Quickshell.execDetached(["bash", "-c", cmd])
+  // Trusted absolute binary — never resolved through a shell or PATH.
+  readonly property string omarchyShellBin: "/usr/bin/omarchy-shell"
+
+  // argv, always — no shell string to build or escape. bar.run() is a
+  // first-party facade that only accepts a string, so that one path still
+  // needs quoting; it goes through bar.shellQuote() (also first-party) for
+  // that, per argument, rather than hand-built concatenation.
+  function runCommand(argv) {
+    if (bar && typeof bar.run === "function") {
+      var quote = (typeof bar.shellQuote === "function") ? bar.shellQuote : function(a) { return a }
+      bar.run(argv.map(quote).join(" "))
+    } else {
+      Quickshell.execDetached(argv)
+    }
   }
 
   function handleClick(button) {
-    if (button === Qt.LeftButton) root.runCommand("omarchy-shell -q ompom togglePause")
-    else root.runCommand("omarchy-shell -q ompom cycleMode")
+    if (button === Qt.LeftButton) root.runCommand([root.omarchyShellBin, "-q", "ompom", "togglePause"])
+    else root.runCommand([root.omarchyShellBin, "-q", "ompom", "cycleMode"])
   }
 
   // The bar's own per-slot pointer layer only shows a pointing-hand cursor,
@@ -62,7 +73,12 @@ Item {
     root.handleClick(button)
   }
 
+  // status is always one small JSON object (well under 1KB); anything wildly
+  // larger than that is treated as noise rather than parsed.
+  readonly property int maxStatusChars: 4096
+
   function applyStatus(raw) {
+    if (!raw || raw.length > root.maxStatusChars) return
     var parsed
     try { parsed = JSON.parse(raw) } catch (e) { return }
     if (!parsed) return
@@ -132,13 +148,25 @@ Item {
     hoverEnabled: true
   }
 
+  // Direct argv against the trusted absolute binary — no shell, no login
+  // shell reading rc files every second, no PATH resolution.
   Process {
     id: pollProc
-    command: ["bash", "-lc", "omarchy-shell ompom status"]
+    command: [root.omarchyShellBin, "ompom", "status"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.applyStatus(text)
     }
+  }
+
+  // Watchdog: the poll is a local IPC round-trip that normally completes in
+  // a few ms. If it's still running well past that, something is wrong
+  // (hung shell, stuck IPC) — stop it rather than let it accumulate.
+  Timer {
+    id: pollWatchdog
+    interval: 4000
+    repeat: false
+    onTriggered: if (pollProc.running) pollProc.running = false
   }
 
   Timer {
@@ -146,6 +174,6 @@ Item {
     running: true
     repeat: true
     triggeredOnStart: true
-    onTriggered: if (!pollProc.running) pollProc.running = true
+    onTriggered: if (!pollProc.running) { pollProc.running = true; pollWatchdog.restart() }
   }
 }
