@@ -66,7 +66,11 @@ Item {
   property bool notesOpen: false
   property string pendingNoteText: ""
 
-  readonly property bool overlayVisible: mode !== "off" && phase !== "focus"
+  // extend deliberately behaves like focus here: no overlay, normal desktop
+  // use, just a ticking bar countdown you can't pause or escape via mode
+  // switch (see togglePause/cycleMode) until it runs out and drops you back
+  // at the prompt overlay.
+  readonly property bool overlayVisible: mode !== "off" && (phase === "prompt" || phase === "break")
 
   function fmt(totalSeconds) {
     var s = Math.max(0, totalSeconds)
@@ -97,6 +101,7 @@ Item {
   }
 
   function cycleMode() {
+    if (root.phase === "extend") return root.statusJson()
     if (root.mode === "normal") root.mode = "long"
     else if (root.mode === "long") root.mode = "off"
     else root.mode = "normal"
@@ -105,8 +110,7 @@ Item {
   }
 
   function togglePause() {
-    if (root.mode === "off") return root.statusJson()
-    if (root.phase !== "focus" && root.phase !== "extend") return root.statusJson()
+    if (root.mode === "off" || root.phase !== "focus") return root.statusJson()
     root.paused = !root.paused
     return root.statusJson()
   }
@@ -144,7 +148,7 @@ Item {
   }
 
   function startBreak() {
-    if (root.phase !== "prompt" && root.phase !== "extend") return
+    if (root.phase !== "prompt") return
     root.phase = "break"
     root.remaining = root.breakSecFor
   }
@@ -304,9 +308,7 @@ Item {
 
       Text {
         anchors.horizontalCenter: parent.horizontalCenter
-        text: root.phase === "break" ? "Break"
-          : root.phase === "extend" ? "+1 minute"
-          : "Focus complete"
+        text: root.phase === "break" ? "Break" : "Focus complete"
         color: Color.popups.text
         font.family: Style.font.family
         font.pixelSize: Style.font.display
@@ -314,7 +316,7 @@ Item {
 
       Text {
         anchors.horizontalCenter: parent.horizontalCenter
-        visible: root.phase !== "prompt"
+        visible: root.phase === "break"
         text: root.fmt(root.remaining)
         color: Color.accent
         font.family: Style.font.family
@@ -332,21 +334,10 @@ Item {
         }
 
         OverlayButton {
-          visible: root.phase === "extend"
-          label: root.paused ? "Resume" : "Pause"
-          onActivated: root.togglePause()
-        }
-
-        OverlayButton {
-          visible: root.phase === "prompt" || root.phase === "extend"
+          visible: root.phase === "prompt"
           primary: true
           label: "Start break"
           onActivated: root.startBreak()
-        }
-
-        OverlayButton {
-          label: root.mode === "long" ? "Mode: Long Focus" : "Mode: Normal"
-          onActivated: root.cycleMode()
         }
 
         OverlayButton {
