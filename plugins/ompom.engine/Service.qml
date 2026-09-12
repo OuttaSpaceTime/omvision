@@ -21,30 +21,22 @@ Item {
   // service entry-point contract.
   property var shell: null
 
-  readonly property string home: Quickshell.env("HOME")
-  readonly property string notesDir: home + "/Notes/Ompom"
-  readonly property string todayDir: notesDir + "/today"
-  readonly property string graveDir: notesDir + "/grave"
-  readonly property string todayFilePath: todayDir + "/ompom.md"
-  readonly property string stateDir: home + "/.local/state/ompom"
-  readonly property string dayMarkerPath: stateDir + "/notes-day"
+  // All note/state filesystem work (mkdir, read, append, day rollover) is
+  // delegated to notes-helper.py — a fixed interpreter/script pair, never a
+  // shell — which holds validated, no-follow directory file descriptors for
+  // the whole operation. That closes a gap this same choreography had here
+  // in QML: doing it as several separate FileView/Process steps meant an
+  // intermediate directory swapped for a symlink between two of those steps
+  // could redirect a read, write, or rollover move outside ~/Notes/Ompom or
+  // ~/.local/state/ompom. See notes-helper.py's own docstring for the rest.
+  readonly property string pythonBin: "/usr/bin/python3"
+  readonly property string notesHelperPath: decodeURIComponent(
+    Qt.resolvedUrl("notes-helper.py").toString().replace(/^file:\/\//, ""))
 
-  // Trusted absolute executables — never resolved through a shell or PATH.
-  readonly property string mkdirBin: "/usr/bin/mkdir"
-  readonly property string mvBin: "/usr/bin/mv"
-
-  // Day markers this engine itself ever writes are exactly today's date
-  // (see todayStr()). Anything else read back — a corrupted or tampered
-  // file — is rejected outright before it can be used to build a path, so
-  // it can never steer the rollover mv outside the grave directory.
-  readonly property var dayMarkerPattern: /^\d{4}-\d{2}-\d{2}$/
-
-  // Hard ceilings so a single note or a runaway today-file can't grow
-  // without bound: ~20k characters per saved note, ~2MB for the whole
-  // day's file before this engine refuses to append further (existing
-  // content is left untouched either way — never truncated or discarded).
+  // Belt-and-suspenders: the helper enforces this same ceiling itself
+  // (it's the actual trust boundary), but trimming here too means an
+  // oversized paste is never even written to the subprocess's stdin.
   readonly property int maxNoteInputChars: 20000
-  readonly property int maxNoteFileChars: 2000000
 
   readonly property int normalFocusSec: 25 * 60
   readonly property int normalBreakSec: 5 * 60
@@ -165,20 +157,6 @@ Item {
     root.notesOpen = false
   }
 
-  function todayStr() {
-    var d = new Date()
-    var mm = String(d.getMonth() + 1)
-    var dd = String(d.getDate())
-    return d.getFullYear() + "-" + (mm.length < 2 ? "0" + mm : mm) + "-" + (dd.length < 2 ? "0" + dd : dd)
-  }
-
-  // Guards the whole day-marker / today-file chain below. FileView performs
-  // an implicit load as soon as it's created (e.g. on every shell restart),
-  // which would otherwise cascade through handleDayMarker into
-  // finishSaveNote and silently append a blank note block. Only an explicit
-  // saveNote() call may flip this on, and every step bails out while it's off.
-  property bool saveInProgress: false
-
   function saveNote() {
     var text = String(noteEdit.text || "")
     if (text.trim().length === 0) {
@@ -187,75 +165,32 @@ Item {
     }
     if (text.length > root.maxNoteInputChars) text = text.slice(0, root.maxNoteInputChars)
     root.pendingNoteText = text
-    root.saveInProgress = true
-    ensureNotesDirsProc.running = true
+    // stdinEnabled must be re-armed before every run: Process.write() is a
+    // no-op once it's been turned off, and it's turned off below right
+    // after writing so the helper's stdin read() sees EOF.
+    saveNoteProc.stdinEnabled = true
+    saveNoteProc.running = true
   }
 
-  // Direct argv, no shell: mkdir/mv run as trusted absolute binaries with
-  // their arguments passed literally, so there's no command string to quote
-  // or escape — and nothing for a shell to reinterpret in the first place.
+  // One trusted absolute interpreter running one fixed, plugin-local script
+  // — never a shell, never anything resolved via PATH. The note text goes
+  // over stdin rather than argv, so there's no argument for anything to
+  // reinterpret and no length limit to fight. The save is best-effort from
+  // this side either way: the UI resets as soon as the helper exits,
+  // whatever its exit code (see notes-helper.py for what "best-effort"
+  // actually means on disk — nothing is ever silently corrupted or
+  // partially written, worst case a note just isn't appended).
   Process {
-    id: ensureNotesDirsProc
-    command: [root.mkdirBin, "-p", root.todayDir, root.graveDir, root.stateDir]
-    onExited: { if (root.saveInProgress) dayMarkerFile.reload() }
-  }
-
-  FileView {
-    id: dayMarkerFile
-    path: root.dayMarkerPath
-    watchChanges: false
-    atomicWrites: true
-    printErrors: false
-    onLoaded: { if (root.saveInProgress) root.handleDayMarker(text()) }
-    onLoadFailed: { if (root.saveInProgress) root.handleDayMarker("") }
-  }
-
-  function handleDayMarker(raw) {
-    var marker = String(raw || "").trim()
-    var today = root.todayStr()
-    // The strict format check happens before marker touches any path — an
-    // unrecognized marker (corrupted file, path separators, "..") is simply
-    // never used, never concatenated into the mv destination, and rollover
-    // is skipped for this save rather than guessed at.
-    if (marker.length > 0 && marker !== today && root.dayMarkerPattern.test(marker)) {
-      // mv exits non-zero (harmlessly) if todayFilePath doesn't exist yet —
-      // no shell, so no "test -f" needed to guard the call.
-      rolloverProc.command = [root.mvBin, root.todayFilePath, root.graveDir + "/" + marker + ".md"]
-      rolloverProc.running = true
-    } else {
-      todayFileView.reload()
+    id: saveNoteProc
+    command: [root.pythonBin, root.notesHelperPath, "save-note"]
+    onStarted: {
+      saveNoteProc.write(root.pendingNoteText)
+      saveNoteProc.stdinEnabled = false
     }
-  }
-
-  Process {
-    id: rolloverProc
-    onExited: { if (root.saveInProgress) todayFileView.reload() }
-  }
-
-  FileView {
-    id: todayFileView
-    path: root.todayFilePath
-    watchChanges: false
-    atomicWrites: true
-    printErrors: false
-    onLoaded: { if (root.saveInProgress) root.finishSaveNote(text()) }
-    onLoadFailed: { if (root.saveInProgress) root.finishSaveNote("") }
-  }
-
-  function finishSaveNote(existing) {
-    var base = String(existing || "")
-    // Refuse to grow an already-oversized file further. Existing content is
-    // left completely untouched (no truncation) — this note just isn't
-    // appended this time.
-    if (base.length <= root.maxNoteFileChars) {
-      var stamp = Qt.formatDateTime(new Date(), "yyyy-MM-dd HH:mm")
-      var block = "## " + stamp + "\n\n" + root.pendingNoteText.trim() + "\n\n"
-      todayFileView.setText(base + block)
-      dayMarkerFile.setText(root.todayStr())
+    onExited: {
+      root.pendingNoteText = ""
+      root.notesOpen = false
     }
-    root.pendingNoteText = ""
-    root.notesOpen = false
-    root.saveInProgress = false
   }
 
   IpcHandler {
