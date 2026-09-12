@@ -74,11 +74,14 @@ Item {
   }
 
   // status is always one small JSON object (well under 1KB); anything wildly
-  // larger than that is treated as noise rather than parsed.
+  // larger than that is treated as noise rather than parsed. The cap is
+  // enforced as bytes arrive (see pollProc.stdout below), not by measuring
+  // the finished string — by the time a finished string exists, an
+  // unbounded one would already have been sitting in memory.
   readonly property int maxStatusChars: 4096
 
   function applyStatus(raw) {
-    if (!raw || raw.length > root.maxStatusChars) return
+    if (!raw) return
     var parsed
     try { parsed = JSON.parse(raw) } catch (e) { return }
     if (!parsed) return
@@ -153,10 +156,37 @@ Item {
   Process {
     id: pollProc
     command: [root.omarchyShellBin, "ompom", "status"]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.applyStatus(text)
+
+    property string buffer: ""
+    property bool overCap: false
+
+    // splitMarker: "" makes SplitParser re-emit onRead per underlying read
+    // call instead of buffering until a delimiter (or stream end) shows up
+    // — the same mechanism StdioCollector uses internally, minus the part
+    // where it holds everything until the stream is done. That's what lets
+    // the cap below be enforced against a subprocess that's still running
+    // and still writing, instead of only after it has already finished
+    // producing however much output it wanted to.
+    stdout: SplitParser {
+      splitMarker: ""
+      onRead: function(data) {
+        if (pollProc.overCap) return
+        if (pollProc.buffer.length + data.length > root.maxStatusChars) {
+          // Kill outright rather than politely stopping the poll: a
+          // compromised or malfunctioning omarchy-shell might not honor
+          // terminate(), and every byte already in this chunk is dropped
+          // instead of merged into the buffer first.
+          pollProc.overCap = true
+          pollProc.buffer = ""
+          pollProc.signal(9)
+          return
+        }
+        pollProc.buffer += data
+      }
     }
+
+    onRunningChanged: if (running) { buffer = ""; overCap = false }
+    onExited: if (!overCap) root.applyStatus(buffer)
   }
 
   // Watchdog: the poll is a local IPC round-trip that normally completes in
