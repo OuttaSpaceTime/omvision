@@ -128,11 +128,7 @@ Item {
       return
     }
     if (root.phase === "focus") {
-      // A genuinely new break cycle starting -- clear any note left over
-      // from the previous one. Re-opening notes *within* the same cycle
-      // (including through an extend) must not clear it; see openNotes().
       root.phase = "prompt"
-      noteEdit.text = ""
     } else if (root.phase === "extend") {
       root.phase = "prompt"
     } else if (root.phase === "break") {
@@ -161,14 +157,18 @@ Item {
     if (root.phase !== "prompt") return
     root.phase = "break"
     root.remaining = root.breakSecFor
+    // Take Notes is only reachable during "break" (see the block view), so
+    // this is the actual start of a note-taking cycle: clear whatever's
+    // left from a previous break. Saving no longer clears the box (see
+    // saveNote()), so this is the only place notes get wiped.
+    noteEdit.text = ""
   }
 
   function openNotes() {
-    // Deliberately doesn't clear noteEdit.text: "Back" (see the notes view)
-    // and Escape both always save, so in practice this only ever runs
-    // against an already-empty box. Left as a no-op rather than an
-    // explicit clear so it stays correct even if another close path is
-    // ever added.
+    // Deliberately doesn't touch noteEdit.text: reopening Take Notes during
+    // the same break should show whatever was last written (saveNote() no
+    // longer clears it either). Only startBreak() clears the box, at the
+    // start of the next break.
     root.notesOpen = true
     Qt.callLater(function() { noteEdit.forceActiveFocus() })
   }
@@ -181,11 +181,12 @@ Item {
     }
     if (text.length > root.maxNoteInputChars) text = text.slice(0, root.maxNoteInputChars)
     root.pendingNoteText = text
-    // Cleared immediately rather than waiting for the save process to exit:
-    // its content is now captured in pendingNoteText, and leaving it in the
-    // box would duplicate it into a second saved block if Save is pressed
-    // again later in the same break.
-    noteEdit.text = ""
+    // Deliberately not cleared: Back always saves (see the notes view), and
+    // reopening Take Notes should show what you last wrote, not a blank
+    // box. The tradeoff is that pressing Back again without changing
+    // anything re-saves the same text as a second timestamped block --
+    // accepted as the simpler, more predictable behavior. Only startBreak()
+    // clears the box, at the start of the next break.
     // stdinEnabled must be re-armed before every run: Process.write() is a
     // no-op once it's been turned off, and it's turned off below right
     // after writing so the helper's stdin read() sees EOF.
@@ -234,7 +235,6 @@ Item {
     Rectangle {
       anchors.fill: parent
       color: Color.background
-      opacity: 0.92
     }
 
     // Quickshell only reserves pointer input over areas that actually have a
@@ -299,6 +299,10 @@ Item {
         }
 
         OverlayButton {
+          // Only once the break has actually started -- the prompt/extend
+          // screen is a "focus just ended, what now" decision point, not a
+          // writing moment.
+          visible: root.phase === "break"
           label: "Take notes"
           onActivated: root.openNotes()
         }
@@ -328,7 +332,9 @@ Item {
           spacing: Style.space(16)
 
           OverlayButton {
-            label: "← Back"
+            // Icon-only, deliberately minimal: a label would compete with
+            // the heading text right next to it for attention.
+            label: "←"
             // Always saves rather than offering a separate discard: an
             // empty/whitespace note is already a no-op in saveNote(), so
             // there's nothing a discard would do that leaving the box
@@ -341,7 +347,7 @@ Item {
             text: "What's your focus?"
             color: Color.popups.text
             font.family: Style.font.family
-            font.pixelSize: Style.font.heading
+            font.pixelSize: Style.font.display
           }
         }
 
