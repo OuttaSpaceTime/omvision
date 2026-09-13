@@ -403,6 +403,14 @@ Item {
           }
         }
 
+        // See NoteHighlighterHost.qml for why this is a Loader rather than
+        // a plain "import Ompom.Highlight 1.0" + NoteHighlighter here: it
+        // keeps a missing native plugin from taking down the whole engine.
+        Loader {
+          id: highlighterLoader
+          source: "NoteHighlighterHost.qml"
+          onLoaded: item.document = noteEdit.textDocument
+        }
       }
 
       // Floats over the scrollable text instead of reserving its own
@@ -445,6 +453,22 @@ Item {
         }
       }
 
+      // setColors() is an imperative call, not a binding, so it has to be
+      // re-run explicitly on theme changes rather than picking them up
+      // automatically. Re-running it every time notes open is good enough
+      // -- a theme switch mid-note-taking is a rare edge case, and
+      // reopening notes always shows the current theme correctly. Guarded
+      // on Loader.Ready since the highlighter may not have loaded at all.
+      Connections {
+        target: root
+        function onNotesOpenChanged() {
+          if (root.notesOpen && highlighterLoader.status === Loader.Ready) {
+            highlighterLoader.item.setColors(Color.popups.background.toString(),
+                                              Color.popups.text.toString(),
+                                              Color.accent.toString())
+          }
+        }
+      }
     }
   }
 }

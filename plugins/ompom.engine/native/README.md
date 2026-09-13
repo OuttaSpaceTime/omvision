@@ -1,9 +1,11 @@
 # Ompom.Highlight (native)
 
-> **Status: built, verified working in isolation, but NOT wired into
-> Service.qml — it crashed the entire Quickshell compositor process
-> once during a plugin hot-reload. Do not wire this in without first
-> fixing the lifecycle bug described below.** See "The crash" section.
+> **Status: wired in and stable.** It crashed the entire Quickshell
+> compositor process once, during development — root-caused and fixed,
+> see "The crash" below. If you're deploying an updated `.so` (or any
+> file) to the *installed*, currently-running plugin, always replace it
+> atomically (write to a temp file in the same directory, then rename
+> over the real path) — never overwrite the destination file in place.
 
 A native QML plugin providing `NoteHighlighter`, a thin wrapper around
 `MarkdownHighlighter` (copied from
@@ -65,40 +67,50 @@ itself inherits.
 
 ## The crash
 
-Once wired in (see git history around commit `c038c08` and the revert
-after it), a save-triggered hot-reload of `ompom.engine` crashed the
-entire `quickshell` process with SIGSEGV — not a QML error, an actual
-native crash taking down the whole compositor shell (bar, lock screen,
-idle management, everything) with it. Confirmed via
-`coredumpctl gdb <pid>`; the backtrace was a cascade of
-`QObjectPrivate::deleteChildren()` / `QObject::~QObject()` frames through
-a `QTextDocument::~QTextDocument()` destruction.
+While developing this, a hot-reload of `ompom.engine` crashed the entire
+`quickshell` process with SIGSEGV — not a QML error, an actual native
+crash taking down the whole compositor shell (bar, lock screen, idle
+management, everything) with it. Confirmed via `coredumpctl gdb <pid>`;
+the backtrace was a generic cascade of `QObjectPrivate::deleteChildren()`
+/ `QObject::~QObject()` frames through a `QTextDocument::~QTextDocument()`
+destruction — no frame named anything in this plugin's own code.
 
-Suspected cause: `NoteHighlighter::setDocument()`
-(`native/notehighlighter.cpp`) does `delete m_highlighter` manually, but
-`MarkdownHighlighter`'s base class `QSyntaxHighlighter(QTextDocument*)`
-already parents itself to that document, so Qt's own parent-child
-teardown *also* deletes it when the document goes away. During a normal
-run this never overlaps. During a hot-reload, the whole old component
-tree (old `TextEdit`, old `QQuickTextDocument`, and everything parented
-under it) gets torn down by the QML engine at some point that isn't
-obviously synchronized with `NoteHighlighter`'s own QML-object
-destruction — plausibly a double-delete or use-after-free of the same
-`MarkdownHighlighter` instance from two teardown paths at once. Not
-confirmed with certainty; would need a debug build of Quickshell/Qt or
-targeted logging in `NoteHighlighter`'s destructor (currently doesn't
-have one — that's arguably the first thing to add: an explicit
-`~NoteHighlighter()` that clears `m_highlighter` to `nullptr` *without*
-deleting it, so Qt's parent-child mechanism is the *only* thing that
-ever frees it, rather than two mechanisms potentially racing).
+That last detail pointed away from the first theory (a double-free
+between `NoteHighlighter::setDocument()`'s manual `delete m_highlighter`
+and `QSyntaxHighlighter`'s own parent-child teardown — a real
+double-management issue, fixed anyway as cheap defense in depth, but not
+what actually crashed it) and toward the real cause: **the installed
+`.so` was being deployed with a plain `cp` while the running process
+already had it mapped.** `cp` opens, truncates, and writes the
+destination file in place — it is not atomic. A process that dlopen'd
+the old file keeps a private, file-backed mapping of it; any page not
+yet faulted in at the time of the overwrite can, on a later access, read
+back bytes from the *new* file content instead of the one that was
+actually mapped when the library was loaded. That's silent code/vtable
+corruption, exactly consistent with a crash whose backtrace looks
+generic rather than pointing at any specific logic bug — and it fit the
+timeline exactly: the `cp` of a rebuilt `.so` landed seconds before a
+"Local plugin changed, reloading" hot-reload, which is when the process
+next touched pages of that file.
 
-Separately from this: a `Loader { source: "NoteHighlighterHost.qml" }`
+Fix: **deploy the installed `.so` (and, for consistency, every file)
+via atomic rename** — write to a temp file in the same directory, then
+`mv` it over the real path. `rename(2)` on the same filesystem swaps the
+directory entry without touching the old inode's contents, so a process
+with the old file still mapped keeps a fully consistent view of it
+indefinitely, while anything that opens the path afterward gets the
+complete new file. Verified by redeploying the `.so` four times in a row
+while `omarchy-shell` was running live (`ompom.engine`'s timer kept
+ticking correctly throughout, single process, no crash) — see the git
+history around the second wiring-in commit for the exact commands.
+
+Separately: the `Loader { source: "NoteHighlighterHost.qml" }`
 indirection (rather than importing `Ompom.Highlight` directly in
-Service.qml) was built and confirmed to correctly turn a *missing*
-native plugin into a graceful `Loader.status === Loader.Error` instead
-of a whole-file load failure. That part of the design is sound and
-worth keeping whenever this gets re-attempted — it just doesn't help
-with a crash that happens *after* successful loading, during teardown.
+Service.qml) is still worth keeping regardless of the above — it turns
+a *missing* native plugin (e.g. `QML2_IMPORT_PATH` not set yet) into a
+graceful `Loader.status === Loader.Error` instead of a whole-file load
+failure. That's a different failure mode than the crash and this fix
+doesn't substitute for it; both are needed.
 
 ## Compiled artifact, not portable
 

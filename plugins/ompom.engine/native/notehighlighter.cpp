@@ -4,7 +4,13 @@ void NoteHighlighter::setDocument(QQuickTextDocument *doc) {
     if (m_quickDocument == doc)
         return;
 
-    delete m_highlighter;
+    // Not manually deleted: QSyntaxHighlighter's own constructor parents
+    // the highlighter to the QTextDocument it's given, so Qt's ordinary
+    // parent-child ownership already deletes it whenever that document is
+    // destroyed. Deleting it here too meant two independent mechanisms
+    // could free the same object -- defense in depth against a possible
+    // double-free, cheap regardless of whether it was the actual cause of
+    // the crash this plugin once caused (see native/README.md).
     m_highlighter = nullptr;
     m_quickDocument = doc;
 
