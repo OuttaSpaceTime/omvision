@@ -3,17 +3,6 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
-// Native plugin under native/Ompom/Highlight, built from native/*.pro (see
-// native/README.md). Requires QML2_IMPORT_PATH to include this plugin's
-// own native/ directory -- Quickshell has no first-class notion of a
-// per-plugin native module path, so that's provided at the process level
-// via ~/.config/uwsm/env-hyprland, not discovered automatically. If that
-// path isn't set when omarchy-shell starts (e.g. before the next full
-// session restart picks it up), THIS IMPORT FAILS AND THE WHOLE ENGINE
-// (timer included, not just notes) FAILS TO LOAD -- a missing QML import
-// is a hard, all-or-nothing component load failure, not something QML
-// can catch and fall back from.
-import Ompom.Highlight 1.0
 
 // Ompom pomodoro engine. Always running (keepLoaded), owns the timer state
 // machine, and renders its own fullscreen blocking overlay directly (the same
@@ -97,13 +86,23 @@ Item {
     })
   }
 
+  // Single owner of "a note-taking cycle just ended" cleanup, called from
+  // every path that can end one: an explicit mode switch (resetRun), a new
+  // break starting (startBreak), and a break timing out on its own while
+  // notes were still open (tick). Without this, notesOpen could survive
+  // into the next prompt and the block view would open straight into the
+  // notes screen instead of the normal +1-minute/Start-break buttons.
+  function clearNotes() {
+    root.notesOpen = false
+    noteEdit.text = ""
+  }
+
   function resetRun() {
     root.paused = false
     root.extensionsUsed = 0
     root.phase = "focus"
     root.remaining = root.focusSecFor
-    root.notesOpen = false
-    noteEdit.text = ""
+    root.clearNotes()
   }
 
   function cycleMode() {
@@ -135,6 +134,7 @@ Item {
       root.phase = "focus"
       root.extensionsUsed = 0
       root.remaining = root.focusSecFor
+      root.clearNotes()
     }
   }
 
@@ -158,17 +158,18 @@ Item {
     root.phase = "break"
     root.remaining = root.breakSecFor
     // Take Notes is only reachable during "break" (see the block view), so
-    // this is the actual start of a note-taking cycle: clear whatever's
-    // left from a previous break. Saving no longer clears the box (see
-    // saveNote()), so this is the only place notes get wiped.
-    noteEdit.text = ""
+    // this is the start of a new note-taking cycle: clear whatever's left
+    // from a previous break. See clearNotes() for the other paths that
+    // also need this (an explicit mode switch, or a break timing out
+    // while notes were still open).
+    root.clearNotes()
   }
 
   function openNotes() {
     // Deliberately doesn't touch noteEdit.text: reopening Take Notes during
     // the same break should show whatever was last written (saveNote() no
-    // longer clears it either). Only startBreak() clears the box, at the
-    // start of the next break.
+    // longer clears it either) -- see clearNotes() for where it does get
+    // cleared, at the start of the next cycle.
     root.notesOpen = true
     Qt.callLater(function() { noteEdit.forceActiveFocus() })
   }
@@ -185,8 +186,8 @@ Item {
     // reopening Take Notes should show what you last wrote, not a blank
     // box. The tradeoff is that pressing Back again without changing
     // anything re-saves the same text as a second timestamped block --
-    // accepted as the simpler, more predictable behavior. Only startBreak()
-    // clears the box, at the start of the next break.
+    // accepted as the simpler, more predictable behavior. See clearNotes()
+    // for where the box does get cleared, at the start of the next cycle.
     // stdinEnabled must be re-armed before every run: Process.write() is a
     // no-op once it's been turned off, and it's turned off below right
     // after writing so the helper's stdin read() sees EOF.
@@ -402,10 +403,6 @@ Item {
           }
         }
 
-        NoteHighlighter {
-          id: noteHighlighter
-          document: noteEdit.textDocument
-        }
       }
 
       // Floats over the scrollable text instead of reserving its own
@@ -448,21 +445,6 @@ Item {
         }
       }
 
-      // setColors() is an imperative call, not a binding, so it has to be
-      // re-run explicitly on theme changes rather than picking them up
-      // automatically. Re-running it every time notes open is good enough
-      // -- a theme switch mid-note-taking is a rare edge case, and
-      // reopening notes always shows the current theme correctly.
-      Connections {
-        target: root
-        function onNotesOpenChanged() {
-          if (root.notesOpen) {
-            noteHighlighter.setColors(Color.popups.background.toString(),
-                                      Color.popups.text.toString(),
-                                      Color.accent.toString())
-          }
-        }
-      }
     }
   }
 }

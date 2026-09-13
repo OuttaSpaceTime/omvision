@@ -1,5 +1,10 @@
 # Ompom.Highlight (native)
 
+> **Status: built, verified working in isolation, but NOT wired into
+> Service.qml — it crashed the entire Quickshell compositor process
+> once during a plugin hot-reload. Do not wire this in without first
+> fixing the lifecycle bug described below.** See "The crash" section.
+
 A native QML plugin providing `NoteHighlighter`, a thin wrapper around
 `MarkdownHighlighter` (copied from
 [omacom-io/omawrite](https://github.com/omacom-io/omawrite), MIT — see
@@ -32,17 +37,15 @@ make
 
 Produces `native/Ompom/Highlight/{libompomhighlight.so,qmldir,plugins.qmltypes}`.
 Copy that `Ompom/` directory into the *installed* plugin's own directory
-(`~/.config/omarchy/plugins/ompom.engine/native/Ompom/`) — Service.qml's
-`import Ompom.Highlight 1.0` resolves against whatever `QML2_IMPORT_PATH`
-points at, not against its own plugin directory.
+(`~/.config/omarchy/plugins/ompom.engine/native/Ompom/`) — an
+`import Ompom.Highlight 1.0` line resolves against whatever
+`QML2_IMPORT_PATH` points at, not against its own plugin directory.
 
 ## Required: QML2_IMPORT_PATH
 
 `omarchy-shell` (Quickshell) needs `QML2_IMPORT_PATH` to include this
-plugin's `native/` directory *before* it loads `ompom.engine`, or the
-`import Ompom.Highlight 1.0` line in Service.qml fails outright — and
-because a missing QML import is a hard, whole-file load failure, that
-takes down the *entire* pomodoro engine, not just the notes highlighting.
+plugin's `native/` directory *before* it loads `ompom.engine`, or
+`import Ompom.Highlight 1.0` fails.
 
 For the current session:
 
@@ -50,44 +53,52 @@ For the current session:
 systemctl --user set-environment QML2_IMPORT_PATH="$HOME/.config/omarchy/plugins/ompom.engine/native"
 ```
 
-This does **not** survive logout/reboot. For that, the environment
-variable needs to be added wherever this session's persistent env is
-configured (this machine uses UWSM — see `~/.config/uwsm/env-hyprland`
-or `~/.config/uwsm/env`) so it's present before Hyprland launches
-`omarchy-launch-shell`.
+Verified this does **not** actually reach `omarchy-shell`: the process is
+launched via Hyprland's internal `hl.dsp.exec_cmd` dispatch
+(`omarchy-restart-shell`'s mechanism), which inherits Hyprland's own
+captured environment, not the systemd user manager's dynamic one — so
+`systemctl --user set-environment` has no effect on it. What did work:
+adding `export QML2_IMPORT_PATH=...` to `~/.config/uwsm/env-hyprland`
+(this machine uses UWSM), which takes effect on the next full
+logout/login, since that's when UWSM sources it into the session Hyprland
+itself inherits.
 
-## Wiring it into Service.qml
+## The crash
 
-Not currently wired in (see the git history around this commit for the
-attempt and why it was reverted: the import path can't yet be persisted
-for this session without a disruptive full compositor/session restart,
-and a missing `import` is a hard failure for the *entire* Service.qml,
-not just the notes view — better to ship working plain text than a
-timer that silently doesn't run). To re-enable once `QML2_IMPORT_PATH`
-is actually in place before `omarchy-shell` starts:
+Once wired in (see git history around commit `c038c08` and the revert
+after it), a save-triggered hot-reload of `ompom.engine` crashed the
+entire `quickshell` process with SIGSEGV — not a QML error, an actual
+native crash taking down the whole compositor shell (bar, lock screen,
+idle management, everything) with it. Confirmed via
+`coredumpctl gdb <pid>`; the backtrace was a cascade of
+`QObjectPrivate::deleteChildren()` / `QObject::~QObject()` frames through
+a `QTextDocument::~QTextDocument()` destruction.
 
-1. Add near the top of Service.qml, after the existing imports:
-   ```qml
-   import Ompom.Highlight 1.0
-   ```
-2. Inside the notes view, as a sibling of the `noteEdit` `TextEdit`:
-   ```qml
-   NoteHighlighter {
-     id: noteHighlighter
-     document: noteEdit.textDocument
-   }
+Suspected cause: `NoteHighlighter::setDocument()`
+(`native/notehighlighter.cpp`) does `delete m_highlighter` manually, but
+`MarkdownHighlighter`'s base class `QSyntaxHighlighter(QTextDocument*)`
+already parents itself to that document, so Qt's own parent-child
+teardown *also* deletes it when the document goes away. During a normal
+run this never overlaps. During a hot-reload, the whole old component
+tree (old `TextEdit`, old `QQuickTextDocument`, and everything parented
+under it) gets torn down by the QML engine at some point that isn't
+obviously synchronized with `NoteHighlighter`'s own QML-object
+destruction — plausibly a double-delete or use-after-free of the same
+`MarkdownHighlighter` instance from two teardown paths at once. Not
+confirmed with certainty; would need a debug build of Quickshell/Qt or
+targeted logging in `NoteHighlighter`'s destructor (currently doesn't
+have one — that's arguably the first thing to add: an explicit
+`~NoteHighlighter()` that clears `m_highlighter` to `nullptr` *without*
+deleting it, so Qt's parent-child mechanism is the *only* thing that
+ever frees it, rather than two mechanisms potentially racing).
 
-   Connections {
-     target: root
-     function onNotesOpenChanged() {
-       if (root.notesOpen) {
-         noteHighlighter.setColors(Color.popups.background.toString(),
-                                   Color.popups.text.toString(),
-                                   Color.accent.toString())
-       }
-     }
-   }
-   ```
+Separately from this: a `Loader { source: "NoteHighlighterHost.qml" }`
+indirection (rather than importing `Ompom.Highlight` directly in
+Service.qml) was built and confirmed to correctly turn a *missing*
+native plugin into a graceful `Loader.status === Loader.Error` instead
+of a whole-file load failure. That part of the design is sound and
+worth keeping whenever this gets re-attempted — it just doesn't help
+with a crash that happens *after* successful loading, during teardown.
 
 ## Compiled artifact, not portable
 

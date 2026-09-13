@@ -9,9 +9,11 @@ void NoteHighlighter::setDocument(QQuickTextDocument *doc) {
     m_quickDocument = doc;
 
     if (doc && doc->textDocument()) {
+        // No need to guard this on m_background/etc. being non-empty:
+        // MarkdownHighlighter::setColors() already early-returns when the
+        // incoming values match its current (also default-empty) fields.
         m_highlighter = new MarkdownHighlighter(doc->textDocument());
-        if (!m_background.isEmpty() || !m_foreground.isEmpty() || !m_accent.isEmpty())
-            m_highlighter->setColors(m_background, m_foreground, m_accent);
+        m_highlighter->setColors(m_background, m_foreground, m_accent);
     }
 
     emit documentChanged();
