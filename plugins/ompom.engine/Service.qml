@@ -92,6 +92,7 @@ Item {
     root.phase = "focus"
     root.remaining = root.focusSecFor
     root.notesOpen = false
+    noteEdit.text = ""
   }
 
   function cycleMode() {
@@ -116,7 +117,11 @@ Item {
       return
     }
     if (root.phase === "focus") {
+      // A genuinely new break cycle starting -- clear any note left over
+      // from the previous one. Re-opening notes *within* the same cycle
+      // (including through an extend) must not clear it; see openNotes().
       root.phase = "prompt"
+      noteEdit.text = ""
     } else if (root.phase === "extend") {
       root.phase = "prompt"
     } else if (root.phase === "break") {
@@ -148,7 +153,11 @@ Item {
   }
 
   function openNotes() {
-    noteEdit.text = ""
+    // Deliberately doesn't clear noteEdit.text: reopening notes within the
+    // same break/prompt cycle (e.g. after Discard just to look at something
+    // else) should pick back up where you left off. It's only cleared when
+    // a new cycle actually starts (tick()'s focus->prompt transition) or a
+    // note is actually saved (saveNote()).
     root.notesOpen = true
     Qt.callLater(function() { noteEdit.forceActiveFocus() })
   }
@@ -165,6 +174,11 @@ Item {
     }
     if (text.length > root.maxNoteInputChars) text = text.slice(0, root.maxNoteInputChars)
     root.pendingNoteText = text
+    // Cleared immediately rather than waiting for the save process to exit:
+    // its content is now captured in pendingNoteText, and leaving it in the
+    // box would duplicate it into a second saved block if Save is pressed
+    // again later in the same break.
+    noteEdit.text = ""
     // stdinEnabled must be re-armed before every run: Process.write() is a
     // no-op once it's been turned off, and it's turned off below right
     // after writing so the helper's stdin read() sees EOF.
@@ -285,93 +299,81 @@ Item {
     }
 
     // --- notes view ---
+    // Plain text, deliberately: QML's TextEdit has no supported way to apply
+    // rich formatting to text as it's being typed without either a C++
+    // QSyntaxHighlighter (unavailable to a QML-only Quickshell plugin) or
+    // round-tripping through TextEdit's own Markdown (de)serializer, which
+    // in practice escapes literal "#"/"**" characters and grows the buffer
+    // on every keystroke instead of ever converting anything (verified by
+    // hand). So no live rendering here -- just calm, minimal plain text,
+    // with Return smart enough to continue a bullet/numbered list.
     Item {
       anchors.fill: parent
-      anchors.margins: Style.space(80)
+      anchors.margins: Style.space(120)
       visible: root.notesOpen
 
       Column {
         anchors.fill: parent
-        spacing: Style.space(14)
+        spacing: Style.space(28)
 
         Text {
-          text: "What's on your mind?"
+          text: "What's your focus?"
           color: Color.popups.text
           font.family: Style.font.family
           font.pixelSize: Style.font.heading
         }
 
-        Row {
+        Flickable {
           width: parent.width
-          height: parent.height - notesButtonRow.height - Style.space(60)
-          spacing: Style.space(16)
+          height: parent.height - notesButtonRow.height - Style.space(28) * 2 - Style.font.heading
+          clip: true
+          contentWidth: width
+          contentHeight: Math.max(height, noteEdit.paintedHeight)
 
-          // Qt's TextEdit only converts Markdown -> rich text when its
-          // `text` property is assigned wholesale (e.g. on load); it does
-          // not re-parse as the user types into it, so typing "# " or
-          // "**x**" directly into a MarkdownText-format TextEdit never
-          // renders live. The input pane below is therefore kept as plain
-          // text, and the preview pane's `text: noteEdit.text` binding
-          // re-assigns its whole text on every keystroke, which *does* run
-          // the Markdown conversion each time -- that's what actually
-          // makes formatting show up live, just in a separate pane.
-          Rectangle {
-            width: (parent.width - parent.spacing) / 2
-            height: parent.height
-            radius: Style.cornerRadius > 0 ? Style.cornerRadius : Style.space(8)
-            color: Color.popups.background
-            border.color: Color.popups.border
-            border.width: Style.space(1)
+          TextEdit {
+            id: noteEdit
+            width: parent.width
+            wrapMode: TextEdit.Wrap
+            textFormat: TextEdit.PlainText
+            color: Color.popups.text
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+            selectByMouse: true
+            focus: root.notesOpen
+            Keys.onEscapePressed: root.discardNotes()
 
-            Flickable {
-              anchors.fill: parent
-              anchors.margins: Style.space(16)
-              clip: true
-              contentWidth: width
-              contentHeight: Math.max(height, noteEdit.paintedHeight)
+            // Continues a "- ", "* ", or "1. " list line onto the next line,
+            // auto-incrementing numbered markers. Pressing Return on an
+            // already-empty list line ends the list instead of piling up
+            // empty markers.
+            Keys.onReturnPressed: function(event) {
+              event.accepted = true
+              var pos = noteEdit.cursorPosition
+              var text = noteEdit.text
+              var lineStart = text.lastIndexOf("\n", pos - 1) + 1
+              var lineEnd = text.indexOf("\n", lineStart)
+              if (lineEnd === -1) lineEnd = text.length
+              var line = text.substring(lineStart, lineEnd)
 
-              TextEdit {
-                id: noteEdit
-                width: parent.width
-                wrapMode: TextEdit.Wrap
-                textFormat: TextEdit.PlainText
-                color: Color.popups.text
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-                selectByMouse: true
-                focus: root.notesOpen
-                Keys.onEscapePressed: root.discardNotes()
+              var bullet = line.match(/^(\s*)([-*])\s+(.*)$/)
+              var numbered = line.match(/^(\s*)(\d+)\.\s+(.*)$/)
+              var marker = bullet || numbered
+
+              if (marker && marker[3].trim().length === 0) {
+                noteEdit.remove(lineStart, lineEnd)
+                noteEdit.insert(lineStart, "\n")
+                noteEdit.cursorPosition = lineStart + 1
+                return
               }
-            }
-          }
 
-          Rectangle {
-            width: (parent.width - parent.spacing) / 2
-            height: parent.height
-            radius: Style.cornerRadius > 0 ? Style.cornerRadius : Style.space(8)
-            color: Color.popups.background
-            border.color: Color.popups.border
-            border.width: Style.space(1)
-
-            Flickable {
-              anchors.fill: parent
-              anchors.margins: Style.space(16)
-              clip: true
-              contentWidth: width
-              contentHeight: Math.max(height, notePreview.paintedHeight)
-
-              TextEdit {
-                id: notePreview
-                width: parent.width
-                wrapMode: TextEdit.Wrap
-                textFormat: TextEdit.MarkdownText
-                readOnly: true
-                text: noteEdit.text
-                color: Color.popups.text
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-                selectByMouse: true
+              var continuation = "\n"
+              if (bullet) {
+                continuation += bullet[1] + bullet[2] + " "
+              } else if (numbered) {
+                continuation += numbered[1] + (parseInt(numbered[2], 10) + 1) + ". "
               }
+              noteEdit.insert(pos, continuation)
+              noteEdit.cursorPosition = pos + continuation.length
             }
           }
         }
