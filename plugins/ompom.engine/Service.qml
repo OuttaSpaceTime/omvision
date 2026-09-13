@@ -319,16 +319,112 @@ Item {
     // hand). So no live rendering here -- just calm, minimal plain text,
     // with Return smart enough to continue a bullet/numbered list.
     Item {
+      id: notesPage
       anchors.fill: parent
       anchors.margins: Style.space(120)
       visible: root.notesOpen
 
-      Column {
+      readonly property real headerHeight: notesHeaderRow.implicitHeight + Style.space(32)
+
+      Flickable {
+        id: noteFlick
         anchors.fill: parent
-        spacing: Style.space(48)
+        clip: true
+        contentWidth: width
+        contentHeight: Math.max(height, noteEdit.y + noteEdit.paintedHeight)
+
+        // Standard Qt recipe for keeping the caret visible in a TextEdit
+        // wrapped in a Flickable (TextEdit has no built-in auto-scroll):
+        // called on every cursor move, including the one Return itself
+        // causes, so pressing Enter at the bottom scrolls down like any
+        // normal editor instead of typing off the bottom of the screen.
+        function ensureCursorVisible() {
+          var top = noteEdit.y + noteEdit.cursorRectangle.y
+          var bottom = top + noteEdit.cursorRectangle.height
+          if (top < noteFlick.contentY) {
+            noteFlick.contentY = top
+          } else if (bottom > noteFlick.contentY + noteFlick.height) {
+            noteFlick.contentY = bottom - noteFlick.height
+          }
+        }
+
+        TextEdit {
+          id: noteEdit
+          x: 0
+          y: notesPage.headerHeight
+          width: noteFlick.width
+          wrapMode: TextEdit.Wrap
+          textFormat: TextEdit.PlainText
+          color: Color.popups.text
+          font.family: Style.font.family
+          // Deliberately much larger than Style.font.body (12px): this is
+          // the one thing on screen you're meant to be focused on, and a
+          // Typora/Omawrite-style writing surface reads at a size closer
+          // to a printed page than to UI chrome.
+          font.pixelSize: Style.font.display
+          selectByMouse: true
+          focus: root.notesOpen
+          onCursorRectangleChanged: noteFlick.ensureCursorVisible()
+          Keys.onEscapePressed: root.saveNote()
+
+          // Continues a "- ", "* ", or "1. " list line onto the next line,
+          // auto-incrementing numbered markers. Pressing Return on an
+          // already-empty list line ends the list instead of piling up
+          // empty markers.
+          Keys.onReturnPressed: function(event) {
+            event.accepted = true
+            var pos = noteEdit.cursorPosition
+            var text = noteEdit.text
+            var lineStart = text.lastIndexOf("\n", pos - 1) + 1
+            var lineEnd = text.indexOf("\n", lineStart)
+            if (lineEnd === -1) lineEnd = text.length
+            var line = text.substring(lineStart, lineEnd)
+
+            var bullet = line.match(/^(\s*)([-*])\s+(.*)$/)
+            var numbered = line.match(/^(\s*)(\d+)\.\s+(.*)$/)
+            var marker = bullet || numbered
+
+            if (marker && marker[3].trim().length === 0) {
+              noteEdit.remove(lineStart, lineEnd)
+              noteEdit.insert(lineStart, "\n")
+              noteEdit.cursorPosition = lineStart + 1
+              return
+            }
+
+            var continuation = "\n"
+            if (bullet) {
+              continuation += bullet[1] + bullet[2] + " "
+            } else if (numbered) {
+              continuation += numbered[1] + (parseInt(numbered[2], 10) + 1) + ". "
+            }
+            noteEdit.insert(pos, continuation)
+            noteEdit.cursorPosition = pos + continuation.length
+          }
+        }
+
+        NoteHighlighter {
+          id: noteHighlighter
+          document: noteEdit.textDocument
+        }
+      }
+
+      // Floats over the scrollable text instead of reserving its own
+      // permanent row, so scrolled-past lines disappear behind it like a
+      // normal editor's sticky header. Opaque (matching the overlay's own
+      // background) rather than translucent so scrolled text doesn't show
+      // through illegibly.
+      Rectangle {
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: notesPage.headerHeight
+        color: Color.background
+        z: 2
 
         Row {
           id: notesHeaderRow
+          anchors.left: parent.left
+          anchors.verticalCenter: parent.verticalCenter
           spacing: Style.space(16)
 
           OverlayButton {
@@ -350,84 +446,20 @@ Item {
             font.pixelSize: Style.font.display
           }
         }
+      }
 
-        Flickable {
-          width: parent.width
-          height: parent.height - notesHeaderRow.height - Style.space(48)
-          clip: true
-          contentWidth: width
-          contentHeight: Math.max(height, noteEdit.paintedHeight)
-
-          TextEdit {
-            id: noteEdit
-            width: parent.width
-            wrapMode: TextEdit.Wrap
-            textFormat: TextEdit.PlainText
-            color: Color.popups.text
-            font.family: Style.font.family
-            // Deliberately much larger than Style.font.body (12px): this is
-            // the one thing on screen you're meant to be focused on, and a
-            // Typora/Omawrite-style writing surface reads at a size closer
-            // to a printed page than to UI chrome.
-            font.pixelSize: Style.font.display
-            selectByMouse: true
-            focus: root.notesOpen
-            Keys.onEscapePressed: root.saveNote()
-
-            // Continues a "- ", "* ", or "1. " list line onto the next line,
-            // auto-incrementing numbered markers. Pressing Return on an
-            // already-empty list line ends the list instead of piling up
-            // empty markers.
-            Keys.onReturnPressed: function(event) {
-              event.accepted = true
-              var pos = noteEdit.cursorPosition
-              var text = noteEdit.text
-              var lineStart = text.lastIndexOf("\n", pos - 1) + 1
-              var lineEnd = text.indexOf("\n", lineStart)
-              if (lineEnd === -1) lineEnd = text.length
-              var line = text.substring(lineStart, lineEnd)
-
-              var bullet = line.match(/^(\s*)([-*])\s+(.*)$/)
-              var numbered = line.match(/^(\s*)(\d+)\.\s+(.*)$/)
-              var marker = bullet || numbered
-
-              if (marker && marker[3].trim().length === 0) {
-                noteEdit.remove(lineStart, lineEnd)
-                noteEdit.insert(lineStart, "\n")
-                noteEdit.cursorPosition = lineStart + 1
-                return
-              }
-
-              var continuation = "\n"
-              if (bullet) {
-                continuation += bullet[1] + bullet[2] + " "
-              } else if (numbered) {
-                continuation += numbered[1] + (parseInt(numbered[2], 10) + 1) + ". "
-              }
-              noteEdit.insert(pos, continuation)
-              noteEdit.cursorPosition = pos + continuation.length
-            }
-          }
-
-          NoteHighlighter {
-            id: noteHighlighter
-            document: noteEdit.textDocument
-          }
-
-          // setColors() is an imperative call, not a binding, so it has to
-          // be re-run explicitly on theme changes rather than picking them
-          // up automatically. Re-running it every time notes open is good
-          // enough -- a theme switch mid-note-taking is a rare edge case,
-          // and reopening notes always shows the current theme correctly.
-          Connections {
-            target: root
-            function onNotesOpenChanged() {
-              if (root.notesOpen) {
-                noteHighlighter.setColors(Color.popups.background.toString(),
-                                          Color.popups.text.toString(),
-                                          Color.accent.toString())
-              }
-            }
+      // setColors() is an imperative call, not a binding, so it has to be
+      // re-run explicitly on theme changes rather than picking them up
+      // automatically. Re-running it every time notes open is good enough
+      // -- a theme switch mid-note-taking is a rare edge case, and
+      // reopening notes always shows the current theme correctly.
+      Connections {
+        target: root
+        function onNotesOpenChanged() {
+          if (root.notesOpen) {
+            noteHighlighter.setColors(Color.popups.background.toString(),
+                                      Color.popups.text.toString(),
+                                      Color.accent.toString())
           }
         }
       }
