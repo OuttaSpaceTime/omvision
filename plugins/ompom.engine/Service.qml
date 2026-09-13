@@ -153,17 +153,13 @@ Item {
   }
 
   function openNotes() {
-    // Deliberately doesn't clear noteEdit.text: reopening notes within the
-    // same break/prompt cycle (e.g. after Discard just to look at something
-    // else) should pick back up where you left off. It's only cleared when
-    // a new cycle actually starts (tick()'s focus->prompt transition) or a
-    // note is actually saved (saveNote()).
+    // Deliberately doesn't clear noteEdit.text: "Back" (see the notes view)
+    // and Escape both always save, so in practice this only ever runs
+    // against an already-empty box. Left as a no-op rather than an
+    // explicit clear so it stays correct even if another close path is
+    // ever added.
     root.notesOpen = true
     Qt.callLater(function() { noteEdit.forceActiveFocus() })
-  }
-
-  function discardNotes() {
-    root.notesOpen = false
   }
 
   function saveNote() {
@@ -316,16 +312,31 @@ Item {
         anchors.fill: parent
         spacing: Style.space(28)
 
-        Text {
-          text: "What's your focus?"
-          color: Color.popups.text
-          font.family: Style.font.family
-          font.pixelSize: Style.font.heading
+        Row {
+          id: notesHeaderRow
+          spacing: Style.space(16)
+
+          OverlayButton {
+            label: "← Back"
+            // Always saves rather than offering a separate discard: an
+            // empty/whitespace note is already a no-op in saveNote(), so
+            // there's nothing a discard would do that leaving the box
+            // empty and going back doesn't already do.
+            onActivated: root.saveNote()
+          }
+
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: "What's your focus?"
+            color: Color.popups.text
+            font.family: Style.font.family
+            font.pixelSize: Style.font.heading
+          }
         }
 
         Flickable {
           width: parent.width
-          height: parent.height - notesButtonRow.height - Style.space(28) * 2 - Style.font.heading
+          height: parent.height - notesHeaderRow.height - Style.space(28)
           clip: true
           contentWidth: width
           contentHeight: Math.max(height, noteEdit.paintedHeight)
@@ -340,7 +351,7 @@ Item {
             font.pixelSize: Style.font.body
             selectByMouse: true
             focus: root.notesOpen
-            Keys.onEscapePressed: root.discardNotes()
+            Keys.onEscapePressed: root.saveNote()
 
             // Continues a "- ", "* ", or "1. " list line onto the next line,
             // auto-incrementing numbered markers. Pressing Return on an
@@ -375,22 +386,6 @@ Item {
               noteEdit.insert(pos, continuation)
               noteEdit.cursorPosition = pos + continuation.length
             }
-          }
-        }
-
-        Row {
-          id: notesButtonRow
-          spacing: Style.space(16)
-
-          OverlayButton {
-            primary: true
-            label: "Save"
-            onActivated: root.saveNote()
-          }
-
-          OverlayButton {
-            label: "Discard"
-            onActivated: root.discardNotes()
           }
         }
       }
