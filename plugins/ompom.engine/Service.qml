@@ -310,7 +310,7 @@ Item {
 
       Column {
         anchors.fill: parent
-        spacing: Style.space(28)
+        spacing: Style.space(48)
 
         Row {
           id: notesHeaderRow
@@ -336,7 +336,7 @@ Item {
 
         Flickable {
           width: parent.width
-          height: parent.height - notesHeaderRow.height - Style.space(28)
+          height: parent.height - notesHeaderRow.height - Style.space(48)
           clip: true
           contentWidth: width
           contentHeight: Math.max(height, noteEdit.paintedHeight)
@@ -348,7 +348,13 @@ Item {
             textFormat: TextEdit.PlainText
             color: Color.popups.text
             font.family: Style.font.family
-            font.pixelSize: Style.font.body
+            // Deliberately much larger than Style.font.body (12px): this is
+            // the one thing on screen you're meant to be focused on, and a
+            // Typora/Omawrite-style writing surface reads at a size closer
+            // to a printed page than to UI chrome.
+            font.pixelSize: Style.font.display
+            lineHeight: 1.5
+            lineHeightMode: TextEdit.ProportionalHeight
             selectByMouse: true
             focus: root.notesOpen
             Keys.onEscapePressed: root.saveNote()
