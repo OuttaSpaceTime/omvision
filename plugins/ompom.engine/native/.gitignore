@@ -1,0 +1,6 @@
+.qmake.stash
+Makefile
+*.o
+moc_*
+*_metatypes.json
+*_qmltyperegistrations.*
