@@ -3,6 +3,17 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+// Native plugin under native/Ompom/Highlight, built from native/*.pro (see
+// native/README.md). Requires QML2_IMPORT_PATH to include this plugin's
+// own native/ directory -- Quickshell has no first-class notion of a
+// per-plugin native module path, so that's provided at the process level
+// via ~/.config/uwsm/env-hyprland, not discovered automatically. If that
+// path isn't set when omarchy-shell starts (e.g. before the next full
+// session restart picks it up), THIS IMPORT FAILS AND THE WHOLE ENGINE
+// (timer included, not just notes) FAILS TO LOAD -- a missing QML import
+// is a hard, all-or-nothing component load failure, not something QML
+// can catch and fall back from.
+import Ompom.Highlight 1.0
 
 // Ompom pomodoro engine. Always running (keepLoaded), owns the timer state
 // machine, and renders its own fullscreen blocking overlay directly (the same
@@ -389,6 +400,27 @@ Item {
               }
               noteEdit.insert(pos, continuation)
               noteEdit.cursorPosition = pos + continuation.length
+            }
+          }
+
+          NoteHighlighter {
+            id: noteHighlighter
+            document: noteEdit.textDocument
+          }
+
+          // setColors() is an imperative call, not a binding, so it has to
+          // be re-run explicitly on theme changes rather than picking them
+          // up automatically. Re-running it every time notes open is good
+          // enough -- a theme switch mid-note-taking is a rare edge case,
+          // and reopening notes always shows the current theme correctly.
+          Connections {
+            target: root
+            function onNotesOpenChanged() {
+              if (root.notesOpen) {
+                noteHighlighter.setColors(Color.popups.background.toString(),
+                                          Color.popups.text.toString(),
+                                          Color.accent.toString())
+              }
             }
           }
         }
