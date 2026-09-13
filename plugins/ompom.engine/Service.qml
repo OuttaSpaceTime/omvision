@@ -353,8 +353,6 @@ Item {
             // Typora/Omawrite-style writing surface reads at a size closer
             // to a printed page than to UI chrome.
             font.pixelSize: Style.font.display
-            lineHeight: 1.5
-            lineHeightMode: TextEdit.ProportionalHeight
             selectByMouse: true
             focus: root.notesOpen
             Keys.onEscapePressed: root.saveNote()
