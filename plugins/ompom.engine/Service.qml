@@ -301,32 +301,77 @@ Item {
           font.pixelSize: Style.font.heading
         }
 
-        Rectangle {
+        Row {
           width: parent.width
           height: parent.height - notesButtonRow.height - Style.space(60)
-          radius: Style.cornerRadius > 0 ? Style.cornerRadius : Style.space(8)
-          color: Color.popups.background
-          border.color: Color.popups.border
-          border.width: Style.space(1)
+          spacing: Style.space(16)
 
-          Flickable {
-            anchors.fill: parent
-            anchors.margins: Style.space(16)
-            clip: true
-            contentWidth: width
-            contentHeight: Math.max(height, noteEdit.paintedHeight)
+          // Qt's TextEdit only converts Markdown -> rich text when its
+          // `text` property is assigned wholesale (e.g. on load); it does
+          // not re-parse as the user types into it, so typing "# " or
+          // "**x**" directly into a MarkdownText-format TextEdit never
+          // renders live. The input pane below is therefore kept as plain
+          // text, and the preview pane's `text: noteEdit.text` binding
+          // re-assigns its whole text on every keystroke, which *does* run
+          // the Markdown conversion each time -- that's what actually
+          // makes formatting show up live, just in a separate pane.
+          Rectangle {
+            width: (parent.width - parent.spacing) / 2
+            height: parent.height
+            radius: Style.cornerRadius > 0 ? Style.cornerRadius : Style.space(8)
+            color: Color.popups.background
+            border.color: Color.popups.border
+            border.width: Style.space(1)
 
-            TextEdit {
-              id: noteEdit
-              width: parent.width
-              wrapMode: TextEdit.Wrap
-              textFormat: TextEdit.MarkdownText
-              color: Color.popups.text
-              font.family: Style.font.family
-              font.pixelSize: Style.font.body
-              selectByMouse: true
-              focus: root.notesOpen
-              Keys.onEscapePressed: root.discardNotes()
+            Flickable {
+              anchors.fill: parent
+              anchors.margins: Style.space(16)
+              clip: true
+              contentWidth: width
+              contentHeight: Math.max(height, noteEdit.paintedHeight)
+
+              TextEdit {
+                id: noteEdit
+                width: parent.width
+                wrapMode: TextEdit.Wrap
+                textFormat: TextEdit.PlainText
+                color: Color.popups.text
+                font.family: Style.font.family
+                font.pixelSize: Style.font.body
+                selectByMouse: true
+                focus: root.notesOpen
+                Keys.onEscapePressed: root.discardNotes()
+              }
+            }
+          }
+
+          Rectangle {
+            width: (parent.width - parent.spacing) / 2
+            height: parent.height
+            radius: Style.cornerRadius > 0 ? Style.cornerRadius : Style.space(8)
+            color: Color.popups.background
+            border.color: Color.popups.border
+            border.width: Style.space(1)
+
+            Flickable {
+              anchors.fill: parent
+              anchors.margins: Style.space(16)
+              clip: true
+              contentWidth: width
+              contentHeight: Math.max(height, notePreview.paintedHeight)
+
+              TextEdit {
+                id: notePreview
+                width: parent.width
+                wrapMode: TextEdit.Wrap
+                textFormat: TextEdit.MarkdownText
+                readOnly: true
+                text: noteEdit.text
+                color: Color.popups.text
+                font.family: Style.font.family
+                font.pixelSize: Style.font.body
+                selectByMouse: true
+              }
             }
           }
         }
