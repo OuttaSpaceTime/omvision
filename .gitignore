@@ -1,0 +1,10 @@
+# editor / OS
+*~
+*.swp
+.DS_Store
+.idea/
+.vscode/
+
+# qml
+*.qmlc
+*.jsc
