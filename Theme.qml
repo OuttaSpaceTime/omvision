@@ -96,6 +96,12 @@ QtObject {
   readonly property color secondaryInk: textForContrast(foreground, background, 7.0)
   readonly property color dim: textForContrast(foreground, background, 5.5)
   readonly property color faint: textForContrast(foreground, background, 4.5)
+  // The one deliberate exception to that floor: markdown syntax in the
+  // journal (`#`, `-`, `1.`, `>`). It is not text to be read but the scaffold
+  // around it, and it has to recede for the words to stand out -- at 4.5:1 it
+  // sat barely lighter than the prose. 2:1 is what omawrite's markers measure
+  // on the same paper.
+  readonly property color markup: textForContrast(foreground, background, 2.0)
   readonly property color hairline: themeLoaded ? alpha(foreground, 0.14) : fallbackHairline
   readonly property color border: themeLoaded ? alpha(foreground, 0.40) : fallbackBorder
   readonly property color fill: themeLoaded ? alpha(foreground, 0.04) : fallbackFill
@@ -115,13 +121,58 @@ QtObject {
   readonly property int headingSize: 16
   readonly property int displaySize: 24
 
-  // ---- spacing / geometry ---------------------------------------------------
+  // ---- spacing scale -------------------------------------------------------
+  // One scale, 4px based, and every margin and gap in the app comes from it.
+  // Before this the same decisions were spelled 2, 4, 6, 8, 10, 12, 14, 16,
+  // 18, 20, 24 and 28 across ten files, which is how two rows that were meant
+  // to match ended up a pixel or two apart and why nothing could be adjusted
+  // globally. The steps are deliberately few: if a value here looks wrong for
+  // a place, the fix is to pick the neighbouring step, not to type a number.
+  readonly property int spaceXxs: 2   // hairline gaps inside a single line of text
+  readonly property int spaceXs: 4    // between a label and the value under it
+  readonly property int spaceSm: 8    // inside a control, between chips
+  readonly property int spaceMd: 12   // between rows of related text
+  readonly property int spaceLg: 16   // between controls in a row
+  readonly property int spaceXl: 24   // between a screen's blocks
+  readonly property int space2xl: 32  // a page's own margin
+  readonly property int space3xl: 48
+  readonly property int space4xl: 64  // the writing page's gutter
+
+  // Named for what they are, defined by the scale. These are the ones a
+  // screen should reach for; the raw steps above are for the gaps inside a
+  // component that has no name of its own.
+  readonly property int panelPadding: space2xl // every screen's page margin
+  readonly property int sectionGap: spaceXl    // between a header and its content
+  readonly property int rowGap: spaceMd        // between list rows' contents
+  readonly property int rowPadding: spaceXl    // a list row's text to its hairline
+
+  // ---- geometry -------------------------------------------------------------
   readonly property int radius: 0
-  readonly property int panelPadding: 18
-  readonly property int rowGap: 8
   readonly property int controlHeight: 28
   readonly property int hairlineWidth: 1
   readonly property int borderWidth: 1
+
+  // ---- writing surface (Journal) -------------------------------------------
+  // The journal is a writing tool, not a list screen: it gets its own type
+  // size and its own measure rather than the 12px body size and full-width
+  // text the rest of the app uses. Sized against omawrite side by side --
+  // ~20px of text with a lot of air around it, not UI-sized type.
+  //
+  // This one size is in *points*, not pixels, and it is the only place in the
+  // app that is. The markdown highlighter's character formats are point-sized
+  // (that is how omawrite shrinks a hidden marker to 1pt), and mixing a
+  // pixel-sized document font with point-sized character formats gives Qt two
+  // different size systems to reconcile on the same run of text.
+  readonly property real writingPointSize: 15
+
+  // The measure is in characters, not pixels, so it survives a change of
+  // writing size or font: the column is as wide as this many monospace
+  // characters, and the screen only decides whether it fits.
+  readonly property int writingColumns: 70
+  // The page's own margins, sized against the 15pt text rather than against
+  // the 12px UI elsewhere in the app: at 40px the column sat too close to the
+  // window edge to read as a page.
+  readonly property int writingGutter: space4xl
 
   function parseToml(text) {
     var out = {}

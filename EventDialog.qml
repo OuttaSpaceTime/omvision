@@ -124,12 +124,12 @@ FocusScope {
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.top: parent.top
-      anchors.margins: 18
-      spacing: 12
+      anchors.margins: Theme.spaceLg
+      spacing: Theme.spaceMd
 
       RowLayout {
         Layout.fillWidth: true
-        spacing: 10
+        spacing: Theme.spaceSm
         Text {
           text: "Add event"
           font.family: Theme.fontFamily
@@ -154,7 +154,7 @@ FocusScope {
       // ---- type chips -----------------------------------------------------
       Flow {
         Layout.fillWidth: true
-        spacing: 6
+        spacing: Theme.spaceXs
         Repeater {
           model: root.kinds
           delegate: Rectangle {
@@ -186,7 +186,7 @@ FocusScope {
       // ---- what -------------------------------------------------------------
       ColumnLayout {
         Layout.fillWidth: true
-        spacing: 5
+        spacing: Theme.spaceXs
         Text {
           text: "WHAT"
           font.family: Theme.fontFamily
@@ -204,8 +204,8 @@ FocusScope {
           TextInput {
             id: whatInput
             anchors.fill: parent
-            anchors.leftMargin: 9
-            anchors.rightMargin: 9
+            anchors.leftMargin: Theme.spaceSm
+            anchors.rightMargin: Theme.spaceSm
             verticalAlignment: TextInput.AlignVCenter
             clip: true
             font.family: Theme.fontFamily
@@ -223,10 +223,10 @@ FocusScope {
       // ---- when / how long ----------------------------------------------
       RowLayout {
         Layout.fillWidth: true
-        spacing: 10
+        spacing: Theme.spaceSm
         ColumnLayout {
           Layout.fillWidth: true
-          spacing: 5
+          spacing: Theme.spaceXs
           Text {
             text: "WHEN"
             font.family: Theme.fontFamily
@@ -243,8 +243,8 @@ FocusScope {
             border.width: 1
             TextInput {
               anchors.fill: parent
-              anchors.leftMargin: 9
-              anchors.rightMargin: 9
+              anchors.leftMargin: Theme.spaceSm
+              anchors.rightMargin: Theme.spaceSm
               verticalAlignment: TextInput.AlignVCenter
               clip: true
               font.family: Theme.fontFamily
@@ -260,7 +260,7 @@ FocusScope {
         }
         ColumnLayout {
           Layout.preferredWidth: 120
-          spacing: 5
+          spacing: Theme.spaceXs
           Text {
             text: "HOW LONG"
             font.family: Theme.fontFamily
@@ -277,8 +277,8 @@ FocusScope {
             border.width: 1
             TextInput {
               anchors.fill: parent
-              anchors.leftMargin: 9
-              anchors.rightMargin: 9
+              anchors.leftMargin: Theme.spaceSm
+              anchors.rightMargin: Theme.spaceSm
               verticalAlignment: TextInput.AlignVCenter
               clip: true
               font.family: Theme.fontFamily
@@ -297,7 +297,7 @@ FocusScope {
       // ---- goal -------------------------------------------------------------
       ColumnLayout {
         Layout.fillWidth: true
-        spacing: 5
+        spacing: Theme.spaceXs
         Text {
           text: "GOAL"
           font.family: Theme.fontFamily
@@ -308,7 +308,7 @@ FocusScope {
         }
         Flow {
           Layout.fillWidth: true
-          spacing: 6
+          spacing: Theme.spaceXs
 
           Rectangle {
             readonly property bool selected: root.selectedSlug === ""
@@ -357,7 +357,7 @@ FocusScope {
         Layout.preferredHeight: 20
         RowLayout {
           anchors.fill: parent
-          spacing: 9
+          spacing: Theme.spaceSm
           Rectangle {
             width: 13
             height: 13
@@ -401,7 +401,7 @@ FocusScope {
 
       RowLayout {
         Layout.fillWidth: true
-        spacing: 10
+        spacing: Theme.spaceSm
         Text {
           Layout.fillWidth: true
           wrapMode: Text.WordWrap

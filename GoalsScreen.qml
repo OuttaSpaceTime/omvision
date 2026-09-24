@@ -60,7 +60,7 @@ Item {
   Column {
     anchors.fill: parent
     anchors.margins: Theme.panelPadding
-    spacing: 16
+    spacing: Theme.sectionGap
 
     // Header. The title and the buttons own the first row and never move.
     // The filter chips join them there when they fit and drop to a row of
@@ -75,7 +75,7 @@ Item {
       RowLayout {
         id: headerRow
         width: parent.width
-        spacing: 14
+        spacing: Theme.spaceMd
 
         Text {
           id: titleText
@@ -118,7 +118,7 @@ Item {
           id: filters
           anchors.left: parent.left
           anchors.verticalCenter: parent.verticalCenter
-          spacing: 14
+          spacing: Theme.spaceMd
           Repeater {
             model: ["active", "paused", "done", "cancelled"]
             delegate: Text {
@@ -214,17 +214,17 @@ Item {
               anchors.fill: parent
               anchors.leftMargin: Theme.panelPadding
               anchors.rightMargin: Theme.panelPadding
-              anchors.topMargin: 14
-              anchors.bottomMargin: 14
-              spacing: 18
+              anchors.topMargin: Theme.rowPadding
+              anchors.bottomMargin: Theme.rowPadding
+              spacing: Theme.spaceLg
 
               ColumnLayout {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignTop
-                spacing: 4
+                spacing: Theme.spaceXs
 
                 RowLayout {
-                  spacing: 8
+                  spacing: Theme.spaceSm
                   Text {
                     text: rowItem.g.meta.title
                     font.family: Theme.fontFamily

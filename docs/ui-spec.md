@@ -1,6 +1,7 @@
 # Omvision UI spec (from the approved mockups)
 
-A Quickshell QML app: `qs -p ~/Code/omvision/omvision.qml`, one `FloatingWindow`, no build step.
+A Quickshell QML app: `~/Code/omvision/bin/omvision`, one `FloatingWindow`. The journal's
+markdown highlighter is the one compiled part (`highlighter/build.sh`); everything else is QML.
 Milestone 2 is **read-only** — it renders what ompom and a hand-written goal file put on disk.
 
 ## Tokens
@@ -18,19 +19,31 @@ file is missing or unparseable. Never crash on a missing theme.
   display 24. Section labels are caption, **bold, uppercase, letterSpacing 1.2**, dimmed.
 - Surfaces: fills are the foreground colour at 4% alpha (8% hover, 18% selected); borders are
   1px at 40% alpha. No drop shadows, no gradients.
-- Spacing: panel padding 18, row gap 8, control height 28.
+- **Spacing is a scale, and nothing outside it is allowed.** 4px based, nine steps:
+  `spaceXxs` 2, `spaceXs` 4, `spaceSm` 8, `spaceMd` 12, `spaceLg` 16, `spaceXl` 24,
+  `space2xl` 32, `space3xl` 48, `space4xl` 64. Four named tokens sit on top of it and are
+  what a screen should reach for: `panelPadding` (32, every page's margin), `sectionGap`
+  (24, a header to its content), `rowGap` (12), `rowPadding` (24, a list row's text to its
+  hairline). If a value looks wrong somewhere, take the neighbouring step — do not type a
+  number. Before the scale the same decision was spelled 2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
+  24 and 28 across ten files, which is why rows meant to match sat a pixel or two apart and
+  why none of it could be tuned globally. Control height stays 28, small actions 20.
 - Fallback palette (Flexoki Light): paper `#FFFCF0`, ink `#100F0F`, secondary ink `#403E3C`,
   dim `#6F6E69`, faint `#878580`, hairline `#DAD8CC`, border `#B7B5AC`, fill `#F6F3E8`,
   accent `#205EA6`, accent fill `#E8EDF4`, red `#AF3029`.
 
 ## Window
 
-1440×900 default, resizable, title "Omvision". Left sidebar 176px wide, 1px hairline on its
-right edge. Sidebar contents, top to bottom: a 18px square outlined in accent containing the
-text `λi`, then the word `omvision` at title size, bold, letterSpacing 1; then the nav rows at
-body size, 6px vertical padding — **Today, Goals, Coaching, Journal**. The selected row is
-accent-coloured with a 2px accent bar on its left edge; the others are dim. No "Archive" row.
-Only Goals and the goal detail need to work in M2; the others may render an empty state.
+1440×900 default, resizable, title "Omvision". One sidebar, one state: a **64px icon rail**,
+1px hairline on its right edge. Top to bottom: the 26px Omvision mark (`assets/mark.svg`, a λ
+in a double seal with four gate ticks) tinted to the accent, then one 36px row per screen — **Today, Goals, Coaching, Journal** — each a centred
+Nerd Font glyph with the label carried by a tooltip. The selected row is accent-coloured with
+a 2px accent bar on its left edge; the others are dim. No wordmark, no labelled variant, no
+width breakpoint and no collapse toggle: a second layout was never worth the state it needed,
+and switching between the two was behind every sidebar bug this app has had. No "Archive" row.
+
+The only screen that changes this is the Journal, which hides the rail entirely while you
+write and brings it back from its own control — see **Screen: Journal**.
 
 ## Screen: Goals
 
@@ -77,6 +90,53 @@ never ticks one off — you do, or the coach does." Then a caption heading `NEXT
 bordered box holding `claude /ompom-coach <slug>` with a small `copy` button, and under it, in
 faint: "Runs in your own terminal. It reads all of this and rewrites what's next."
 
+## Screen: Journal
+
+The one screen that is not a list. It is a writing surface, and the spec's ordinary chrome
+rules are suspended here on purpose — no screen title, no buttons, no section labels.
+
+Entering the Journal **is** entering writing mode:
+
+- The app sidebar is **hidden**, so the page has nothing down its side. The `»` control
+  brings the ordinary rail back in flow while you look around; leaving the Journal
+  restores it, and coming back hides it again, so writing always starts clear.
+- The list of days starts collapsed and opens as an overlay from the left edge, 260px, over
+  the text, so opening it never reflows the text column. It slides out from the edge of the
+  journal's own area (clipped there), never across the sidebar.
+- Starting to write puts both away: a click on the paper, or any keystroke that edits the
+  text, closes the day list and hides the sidebar again. Arrows and Escape don't count.
+- The screen's own chrome is two 24px controls, `»` (sidebar, hidden while the sidebar is
+  out) and `≡` (days), in `faint` with no border and no fill until hovered. Ctrl+O opens the
+  days, Ctrl+N jumps to today, Ctrl+B toggles the sidebar (handled here because the editor
+  would otherwise swallow it).
+
+The text column is centred and `Theme.writingColumns` (70) monospace characters wide,
+measured off the live font, regardless of window width. Type is `Theme.writingPointSize`
+(15pt ≈ 20px) — the only *point* size in the app, because the highlighter's character formats
+are point-sized (see README) — on a 185% line height. A sticky 44px header floats over the
+text, opaque in `paper`, holding both controls and the day's label (`Today`, else
+`Tue 23 Sep`) on one line; the text scrolls behind it. Bottom right, on its own opaque patch
+for the same reason, the word count in caption faint, and above it in red the one write error
+this screen can raise.
+
+The text is always live: no read mode, no edit mode, no click-to-edit. Markdown is styled in
+place by the `MarkdownHighlight` module, matching omawrite line for line:
+
+- `#`, `##`, `-`, `>` and `---` stay **visible** in `faint`.
+- `**`, `*`, `_` and a link's `[`/`](url)` are drawn at 1pt, transparent, with their advance
+  width cancelled by negative letter-spacing — gone from the eye, still in the document and
+  the file.
+- Headings are **bold and not bigger**, at every level.
+- Quotes italic in `faint`; inline code in `fill`, backticks included and undimmed; links
+  accent + underline. `~~` and ``` ``` ``` are not markers here — omawrite has no rule for
+  either, so neither does this.
+- Blocks sit on a 185% proportional line height.
+
+Nothing is deleted or rewritten: the file keeps every byte that was typed.
+
+One file per day, `journal/YYYY-MM-DD.md`, attached to no goal. Today always has a row in the
+day list whether or not its file exists — typing is what creates it.
+
 ## Data
 
 Read the files directly, in QML, without shelling out to ompom's helper:
@@ -87,6 +147,8 @@ Read the files directly, in QML, without shelling out to ompom's helper:
   `### <D Mon HH:MM> · <N>m` or `### <D Mon HH:MM> · event · <kind> · <dur>`, then
   `focus:` / `done:` / `left:` lines, or a free line for an event.
 - `~/Notes/Omvision/days/YYYY-MM-DD.md` — same entry grammar, for runs with no goal.
+- `~/Notes/Omvision/journal/YYYY-MM-DD.md` — free-form markdown, one file per calendar day,
+  no grammar to fail to parse. Omvision is its only writer.
 - The full contract, including every tolerance rule, is
   `~/Code/ompom-engine/docs/goal-files.md`. **Read it before writing a parser.**
 

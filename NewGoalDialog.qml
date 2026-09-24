@@ -107,8 +107,8 @@ FocusScope {
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.top: parent.top
-      anchors.margins: 18
-      spacing: 12
+      anchors.margins: Theme.spaceLg
+      spacing: Theme.spaceMd
 
       Text {
         text: "New goal"
@@ -123,7 +123,7 @@ FocusScope {
       // ---- title --------------------------------------------------------
       ColumnLayout {
         Layout.fillWidth: true
-        spacing: 5
+        spacing: Theme.spaceXs
         Text {
           // The only required field; "*" marks it instead of a header caption.
           text: "TITLE *"
@@ -142,8 +142,8 @@ FocusScope {
           TextInput {
             id: titleInput
             anchors.fill: parent
-            anchors.leftMargin: 9
-            anchors.rightMargin: 9
+            anchors.leftMargin: Theme.spaceSm
+            anchors.rightMargin: Theme.spaceSm
             verticalAlignment: TextInput.AlignVCenter
             clip: true
             font.family: Theme.fontFamily
@@ -161,7 +161,7 @@ FocusScope {
       // ---- why ------------------------------------------------------------
       ColumnLayout {
         Layout.fillWidth: true
-        spacing: 5
+        spacing: Theme.spaceXs
         Text {
           text: "WHY"
           font.family: Theme.fontFamily
@@ -179,8 +179,8 @@ FocusScope {
           TextInput {
             id: whyInput
             anchors.fill: parent
-            anchors.leftMargin: 9
-            anchors.rightMargin: 9
+            anchors.leftMargin: Theme.spaceSm
+            anchors.rightMargin: Theme.spaceSm
             verticalAlignment: TextInput.AlignVCenter
             clip: true
             font.family: Theme.fontFamily
@@ -198,10 +198,10 @@ FocusScope {
       // ---- estimate / done by ---------------------------------------------
       RowLayout {
         Layout.fillWidth: true
-        spacing: 10
+        spacing: Theme.spaceSm
         ColumnLayout {
           Layout.preferredWidth: 120
-          spacing: 5
+          spacing: Theme.spaceXs
           Text {
             text: "ESTIMATE (POMS)"
             font.family: Theme.fontFamily
@@ -218,8 +218,8 @@ FocusScope {
             border.width: 1
             TextInput {
               anchors.fill: parent
-              anchors.leftMargin: 9
-              anchors.rightMargin: 9
+              anchors.leftMargin: Theme.spaceSm
+              anchors.rightMargin: Theme.spaceSm
               verticalAlignment: TextInput.AlignVCenter
               clip: true
               font.family: Theme.fontFamily
@@ -235,7 +235,7 @@ FocusScope {
         }
         ColumnLayout {
           Layout.fillWidth: true
-          spacing: 5
+          spacing: Theme.spaceXs
           Text {
             text: "DONE BY (YYYY-MM-DD)"
             font.family: Theme.fontFamily
@@ -252,8 +252,8 @@ FocusScope {
             border.width: 1
             TextInput {
               anchors.fill: parent
-              anchors.leftMargin: 9
-              anchors.rightMargin: 9
+              anchors.leftMargin: Theme.spaceSm
+              anchors.rightMargin: Theme.spaceSm
               verticalAlignment: TextInput.AlignVCenter
               clip: true
               font.family: Theme.fontFamily
@@ -283,7 +283,7 @@ FocusScope {
 
       RowLayout {
         Layout.fillWidth: true
-        spacing: 10
+        spacing: Theme.spaceSm
         Text {
           Layout.fillWidth: true
           wrapMode: Text.WordWrap

@@ -114,7 +114,7 @@ Item {
   ColumnLayout {
     anchors.fill: parent
     anchors.margins: Theme.panelPadding
-    spacing: 14
+    spacing: Theme.sectionGap
 
     // ---- header ---------------------------------------------------------
     // The title and the buttons own the first row and never move. The back
@@ -129,7 +129,7 @@ Item {
 
       RowLayout {
         Layout.fillWidth: true
-        spacing: 14
+        spacing: Theme.spaceMd
 
         Text {
           Layout.fillWidth: true
@@ -164,7 +164,7 @@ Item {
           id: subHeaderRow
           anchors.left: parent.left
           anchors.verticalCenter: parent.verticalCenter
-          spacing: 14
+          spacing: Theme.spaceMd
 
           // A real control, not a bare Text + MouseArea: sized
           // deterministically (28px hit target, like the sidebar toggle)
@@ -223,7 +223,7 @@ Item {
     // width beneath them, wrapped or not.
     Flow {
       Layout.fillWidth: true
-      spacing: 28
+      spacing: Theme.spaceXl
 
       Text {
         // Parser.formatHm, not a local hours-only calculation: flooring to
@@ -281,7 +281,7 @@ Item {
         Column {
           id: timelineColumn
           width: parent.width
-          spacing: 10
+          spacing: Theme.spaceSm
 
           Text {
             text: "WHAT HAPPENED"
@@ -307,11 +307,11 @@ Item {
               id: dayBlock
               required property var modelData
               width: timelineColumn.width
-              spacing: 6
+              spacing: Theme.spaceXs
 
               RowLayout {
                 width: dayBlock.width
-                spacing: 8
+                spacing: Theme.spaceSm
                 Text {
                   text: Parser.dayHeaderLabel(dayBlock.modelData.date)
                   font.family: Theme.fontFamily
@@ -354,7 +354,7 @@ Item {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     anchors.left: timeText.right
-                    anchors.leftMargin: 16
+                    anchors.leftMargin: Theme.spaceLg
                     width: 1
                     color: Theme.hairline
                   }
@@ -366,7 +366,7 @@ Item {
                     anchors.left: rule.left
                     anchors.horizontalCenter: rule.horizontalCenter
                     anchors.top: parent.top
-                    anchors.topMargin: 5
+                    anchors.topMargin: Theme.spaceXs
                     color: entryRow.e.type === "coaching" ? Theme.accentColor : Theme.paper
                     border.color: entryRow.e.type === "coaching" ? Theme.accentColor : Theme.ink
                     border.width: 1
@@ -392,10 +392,10 @@ Item {
                   Column {
                     id: contentCol
                     anchors.left: rule.right
-                    anchors.leftMargin: 14
+                    anchors.leftMargin: Theme.spaceMd
                     anchors.right: parent.right
                     anchors.top: parent.top
-                    spacing: 2
+                    spacing: Theme.spaceXxs
 
                     Text {
                       text: root.entryLabel(entryRow.e)
@@ -441,6 +441,17 @@ Item {
                       font.pixelSize: Theme.bodySmallSize
                       color: Theme.dim
                     }
+                    Text {
+                      // goal-files.md §4's "Anything else?" line, written
+                      // only when the break's open question was answered.
+                      visible: entryRow.e.type === "pomodoro" && !!entryRow.e.other
+                      width: contentCol.width
+                      text: "else: " + entryRow.e.other
+                      wrapMode: Text.WordWrap
+                      font.family: Theme.fontFamily
+                      font.pixelSize: Theme.bodySmallSize
+                      color: Theme.dim
+                    }
                   }
                 }
               }
@@ -466,14 +477,14 @@ Item {
           anchors.right: parent.right
           anchors.top: parent.top
           anchors.bottom: parent.bottom
-          anchors.leftMargin: 18
-          anchors.rightMargin: 18
-          anchors.bottomMargin: 18
-          spacing: 10
+          anchors.leftMargin: Theme.spaceLg
+          anchors.rightMargin: Theme.spaceLg
+          anchors.bottomMargin: Theme.spaceLg
+          spacing: Theme.spaceSm
 
           RowLayout {
             Layout.fillWidth: true
-            spacing: 8
+            spacing: Theme.spaceSm
             Text {
               text: "TASKS"
               font.family: Theme.fontFamily
@@ -507,7 +518,7 @@ Item {
           Column {
             Layout.fillWidth: true
             visible: root.addingTask
-            spacing: 4
+            spacing: Theme.spaceXs
 
             Rectangle {
               width: parent.width
@@ -519,8 +530,8 @@ Item {
               TextInput {
                 id: addTaskInput
                 anchors.fill: parent
-                anchors.leftMargin: 6
-                anchors.rightMargin: 6
+                anchors.leftMargin: Theme.spaceXs
+                anchors.rightMargin: Theme.spaceXs
                 verticalAlignment: TextInput.AlignVCenter
                 clip: true
                 font.family: Theme.fontFamily
@@ -613,9 +624,9 @@ Item {
 
                   Text {
                     anchors.left: taskCheckbox.right
-                    anchors.leftMargin: 8
+                    anchors.leftMargin: Theme.spaceSm
                     anchors.right: taskEstimate.left
-                    anchors.rightMargin: 8
+                    anchors.rightMargin: Theme.spaceSm
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.text
                     font.family: Theme.fontFamily
@@ -667,13 +678,13 @@ Item {
           ColumnLayout {
             Layout.fillWidth: true
             visible: root.isOpenGoal
-            spacing: 10
+            spacing: Theme.spaceSm
 
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.hairline }
 
             RowLayout {
               Layout.fillWidth: true
-              spacing: 10
+              spacing: Theme.spaceSm
               Button {
                 label: "Close goal · done"
                 inert: false
@@ -703,7 +714,7 @@ Item {
           ColumnLayout {
             Layout.fillWidth: true
             visible: !!root.meta && root.meta.status === "cancelled" && !!root.meta.cancelled
-            spacing: 4
+            spacing: Theme.spaceXs
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.hairline }
             Text {
               text: "CANCELLED"
@@ -741,7 +752,7 @@ Item {
   // screen's own Item, it could only ever cover the content area to the
   // right of the sidebar (the Item this screen fills is already narrower
   // than the window, see omvision.qml's `width: parent.width -
-  // inFlowSidebar.width`), leaving the sidebar itself clickable behind a
+  // sidebarSlot.width`), leaving the sidebar itself clickable behind a
   // dialog that is supposed to be fully modal. omvision.qml mounts one
   // shared CancelDialog at the window root instead, the same level
   // EventDialog already lived at, driven by this screen's own

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Launches Omvision.
+#
+# The only reason this script exists: the journal's live markdown styling is a
+# C++ QSyntaxHighlighter in the MarkdownHighlight QML module (highlighter/),
+# and Quickshell blackholes directory-relative module imports -- it rewrites
+# them onto its own `qs:` scheme, so a module sitting next to omvision.qml is
+# invisible to it. The module has to arrive on the QML import path instead.
+#
+# Running `qs -p ~/Code/omvision/omvision.qml` by hand still works; the journal
+# is then plain monospace markdown, because JournalScreen loads the styling
+# through a Loader that is allowed to fail.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [ ! -f "$ROOT/MarkdownHighlight/libmarkdownhighlight.so" ]; then
+  echo "building the markdown highlighter..." >&2
+  "$ROOT/highlighter/build.sh"
+fi
+
+exec env QML2_IMPORT_PATH="$ROOT${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}" \
+  qs -p "$ROOT/omvision.qml" "$@"

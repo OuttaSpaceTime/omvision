@@ -208,21 +208,26 @@ function parseLogEntries(text, now) {
         var body = []
         while (i < lines.length && !lines[i].match(/^###\s/)) { body.push(lines[i]); i++ }
         if (monIdx === -1) continue // unparseable month, skip entry silently
-        var focus = "", done = "", left = ""
+        // `else:` is goal-files.md §4's "Anything else?" line, written only
+        // when the break's open question was answered -- so its absence is
+        // the normal case and never an error.
+        var focus = "", done = "", left = "", other = ""
         for (var b = 0; b < body.length; b++) {
           var fm2 = body[b].match(/^focus:\s?(.*)$/)
           var dm = body[b].match(/^done:\s?(.*)$/)
           var lm = body[b].match(/^left:\s?(.*)$/)
+          var om = body[b].match(/^else:\s?(.*)$/)
           if (fm2) focus = fm2[1]
           else if (dm) done = dm[1]
           else if (lm) left = lm[1]
+          else if (om) other = om[1]
         }
         entries.push({
           type: "pomodoro",
           date: resolveDate(day, monIdx, hh, mm, referenceNow),
           minutes: minutes,
           heading: pm[1] + " " + pm[2] + " " + pm[3] + ":" + pm[4],
-          focus: focus, done: done, left: left
+          focus: focus, done: done, left: left, other: other
         })
       } else if (em) {
         var day2 = Number(em[1]), monIdx2 = monthIndex(em[2])
@@ -253,7 +258,37 @@ function parseLogEntries(text, now) {
       i++
     }
   }
-  return entries
+  return dedupePomodoros(entries)
+}
+
+// One pomodoro, one entry.
+//
+// `.log.md` and `days/*.md` are append-only by contract, so a writer that
+// saves the same run twice leaves two entries behind and can never take one
+// back. ompom used to do exactly that -- pressing the notes screen's back
+// control again, or reopening "Take notes" during the same break, appended
+// the same run under the same `### <D Mon HH:MM> · <N>m` heading, with
+// whatever done/left/else had been typed by then. That is fixed at the
+// source now, but the duplicates it already wrote are on disk forever, and
+// nothing here may rewrite an append-only file to clean them up.
+//
+// So the reader collapses them: same heading and same duration is the same
+// pomodoro -- two runs cannot start in the same minute -- and the last one
+// wins, because each re-save carried the fuller note. Display only; the file
+// is untouched.
+function dedupePomodoros(entries) {
+  var lastIndexByKey = {}
+  for (var i = 0; i < entries.length; i++) {
+    if (entries[i].type !== "pomodoro") continue
+    lastIndexByKey[entries[i].heading + "·" + entries[i].minutes] = i
+  }
+  var out = []
+  for (var j = 0; j < entries.length; j++) {
+    var e = entries[j]
+    if (e.type === "pomodoro" && lastIndexByKey[e.heading + "·" + e.minutes] !== j) continue
+    out.push(e)
+  }
+  return out
 }
 
 // Total minutes actually invested in a goal: every pomodoro, plus any

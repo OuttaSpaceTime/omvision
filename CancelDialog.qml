@@ -96,12 +96,12 @@ FocusScope {
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.top: parent.top
-      anchors.margins: 18
-      spacing: 14
+      anchors.margins: Theme.spaceLg
+      spacing: Theme.spaceMd
 
       ColumnLayout {
         Layout.fillWidth: true
-        spacing: 5
+        spacing: Theme.spaceXs
         Text {
           Layout.fillWidth: true
           wrapMode: Text.WordWrap
@@ -125,7 +125,7 @@ FocusScope {
 
       ColumnLayout {
         Layout.fillWidth: true
-        spacing: 7
+        spacing: Theme.spaceSm
         Text {
           text: "WHY"
           font.family: Theme.fontFamily
@@ -146,7 +146,7 @@ FocusScope {
 
             RowLayout {
               anchors.fill: parent
-              spacing: 9
+              spacing: Theme.spaceSm
 
               Rectangle {
                 width: 13
@@ -183,7 +183,7 @@ FocusScope {
 
       ColumnLayout {
         Layout.fillWidth: true
-        spacing: 6
+        spacing: Theme.spaceXs
         Text {
           text: "WHAT DO YOU TAKE FROM IT?"
           font.family: Theme.fontFamily
@@ -201,7 +201,7 @@ FocusScope {
 
           Flickable {
             anchors.fill: parent
-            anchors.margins: 8
+            anchors.margins: Theme.spaceSm
             clip: true
             contentHeight: Math.max(height, takeawayInput.contentHeight)
             TextEdit {
@@ -234,7 +234,7 @@ FocusScope {
 
       RowLayout {
         Layout.fillWidth: true
-        spacing: 10
+        spacing: Theme.spaceSm
         Item { Layout.fillWidth: true }
         Button {
           label: "Back"

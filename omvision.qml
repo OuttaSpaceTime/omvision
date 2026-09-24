@@ -30,36 +30,41 @@ ShellRoot {
   readonly property string home: Quickshell.env("HOME")
   readonly property string goalsDir: home + "/Notes/Omvision/goals"
   readonly property string daysDir: home + "/Notes/Omvision/days"
+  // The journal is not filed under a goal: one free-form file per calendar
+  // day, flat, about whatever was on your mind that day. A reader (the coach
+  // skill) takes the directory whole and decides for itself what is relevant.
+  readonly property string journalDir: home + "/Notes/Omvision/journal"
   readonly property string todayPath: daysDir + "/" + Parser.dayKey(new Date()) + ".md"
 
   property string currentScreen: "goals" // today | goals | coaching | journal | goalDetail
   property string openGoalSlug: ""
 
-  // ---- collapsible sidebar -------------------------------------------------
-  // Breakpoint picked off the widest screen (Goal detail: timeline + a 312px
-  // rail). Below this, the two-column body starts crowding, so the sidebar
-  // collapses on its own to give the content room; above it, it's back to an
-  // ordinary in-flow 176px sidebar. A manual toggle always wins over the
-  // automatic choice until the window crosses the breakpoint again — that's
-  // `sidebarOverride`, reset to "no override" exactly when `sidebarWide` flips.
-  readonly property int sidebarBreakpoint: 960
-  readonly property bool sidebarWide: window.width >= sidebarBreakpoint
-  property var sidebarOverride: null // null = follow automatic; true/false = manual pin
+  // ---- sidebar -------------------------------------------------------------
+  // There is one sidebar and one state for it: the 64px icon rail (see
+  // Sidebar.qml for what was removed and why). The only question left is
+  // whether it is on screen at all, and only the Journal ever answers no:
+  // writing mode hides it, and the journal's own faint control brings it
+  // back for as long as you want it. Leaving the journal restores it, and
+  // entering the journal hides it again however it was left -- writing
+  // always starts with nothing down the side of the page.
+  readonly property bool writingMode: currentScreen === "journal"
+  property bool sidebarRevealed: false
 
-  function sidebarCollapsed() {
-    return sidebarOverride !== null ? sidebarOverride : !sidebarWide
+  function sidebarHidden() {
+    return writingMode && !sidebarRevealed
   }
   function toggleSidebar() {
-    sidebarOverride = !sidebarCollapsed()
+    if (!writingMode) return // nothing to toggle: the rail is the only state
+    sidebarRevealed = !sidebarRevealed
   }
-  function closeNarrowOverlay() {
-    if (!sidebarWide) sidebarOverride = true
-  }
-  onSidebarWideChanged: sidebarOverride = null // crossing the breakpoint clears the manual pin
+  onWritingModeChanged: if (writingMode) sidebarRevealed = false
 
   // slug -> { meta, logEntries }
   property var goalsData: ({})
   property var goalSlugs: []
+  // Logs with no goal file of their own -- see applyGoalsList().
+  property var orphanLogSlugs: []
+  property var orphanLogs: ({}) // slug -> entries
   property var dayEntries: []
 
   function syncGoal(slug, meta, entries) {
@@ -69,19 +74,58 @@ ShellRoot {
     root.goalsData = d
   }
 
+  function syncOrphanLog(slug, entries) {
+    var d = {}
+    for (var k in root.orphanLogs) d[k] = root.orphanLogs[k]
+    d[slug] = entries || []
+    root.orphanLogs = d
+  }
+
   function applyGoalsList(text) {
     var lines = String(text || "").split("\n")
     var slugs = []
+    var logStems = []
     for (var i = 0; i < lines.length; i++) {
       var p = lines[i].trim()
       if (p === "") continue
       var base = p.replace(/^.*\//, "")
       if (!base.match(/\.md$/)) continue
       var stem = base.replace(/\.md$/, "")
-      if (stem.match(/\.log$/)) continue // "<slug>.log.md" — that's the log, not a goal file
+      if (stem.match(/\.log$/)) { // "<slug>.log.md" — the log, not the goal file
+        logStems.push(stem.replace(/\.log$/, ""))
+        continue
+      }
       slugs.push(stem)
     }
     slugs.sort()
+
+    // A log whose goal file is gone (renamed, deleted, or written by the
+    // timer against a slug that never had one) still describes pomodoros
+    // that really happened. The goal loaders below are driven by `slugs`,
+    // so those entries used to be invisible everywhere in the app --
+    // Today showed nothing for a run that is sitting right there on disk.
+    // They get loaded separately and shown on Today under their slug.
+    var have = {}
+    for (var h = 0; h < slugs.length; h++) have[slugs[h]] = true
+    var orphans = []
+    for (var l = 0; l < logStems.length; l++) {
+      if (!have[logStems[l]]) orphans.push(logStems[l])
+    }
+    orphans.sort()
+    var orphansChanged = orphans.length !== root.orphanLogSlugs.length
+    if (!orphansChanged) {
+      for (var o = 0; o < orphans.length; o++) {
+        if (orphans[o] !== root.orphanLogSlugs[o]) { orphansChanged = true; break }
+      }
+    }
+    if (orphansChanged) {
+      root.orphanLogSlugs = orphans
+      var keep = {}
+      for (var k = 0; k < orphans.length; k++) keep[orphans[k]] = true
+      var prunedOrphans = {}
+      for (var ko in root.orphanLogs) if (keep[ko]) prunedOrphans[ko] = root.orphanLogs[ko]
+      root.orphanLogs = prunedOrphans
+    }
 
     var changed = slugs.length !== root.goalSlugs.length
     if (!changed) {
@@ -342,6 +386,24 @@ ShellRoot {
 
   // ---- per-goal file loaders ----------------------------------------------
   Instantiator {
+    id: orphanLogLoaders
+    model: root.orphanLogSlugs
+    delegate: QtObject {
+      id: orphanLoader
+      required property string modelData
+
+      property FileView logFile: FileView {
+        path: root.goalsDir + "/" + orphanLoader.modelData + ".log.md"
+        watchChanges: true
+        printErrors: false
+        onLoaded: root.syncOrphanLog(orphanLoader.modelData, Parser.parseLogEntries(text(), new Date()))
+        onLoadFailed: function(error) { root.syncOrphanLog(orphanLoader.modelData, []) }
+        onFileChanged: reload()
+      }
+    }
+  }
+
+  Instantiator {
     id: goalLoaders
     model: root.goalSlugs
     delegate: QtObject {
@@ -395,12 +457,11 @@ ShellRoot {
     onFileChanged: reload()
   }
 
-  // ---- journal files: goals/<slug>/journal/*.md ---------------------------
+  // ---- journal files: journal/YYYY-MM-DD.md -------------------------------
   // Same discovery/load idiom as the goal loaders above: poll a `find` for
   // the file list, then a per-file FileView loads and watches each one.
-  // Journal screen (Journal.md, goal-files.md §1) only ever receives the
-  // already-read result.
-  property var journalFiles: []      // [{slug, path, dateIso}]
+  // The Journal screen only ever receives the already-read result.
+  property var journalFiles: []      // [{path, dateIso}]
   property var journalContents: ({}) // path -> raw text
 
   function applyJournalList(text) {
@@ -412,10 +473,7 @@ ShellRoot {
       var base = p.replace(/^.*\//, "")
       var m = base.match(/^(\d{4}-\d{2}-\d{2})\.md$/)
       if (!m) continue
-      var parts = p.split("/")
-      var slug = parts.length >= 3 ? parts[parts.length - 3] : ""
-      if (!slug) continue
-      files.push({ slug: slug, path: p, dateIso: m[1] })
+      files.push({ path: p, dateIso: m[1] })
     }
     files.sort(function(a, b) { return a.path < b.path ? -1 : (a.path > b.path ? 1 : 0) })
 
@@ -445,7 +503,10 @@ ShellRoot {
 
   Process {
     id: journalListProc
-    command: ["/usr/bin/find", root.goalsDir, "-mindepth", "3", "-maxdepth", "3", "-type", "f", "-name", "*.md"]
+    // Missing directory is not an error here: `find` writes to stderr, stdout
+    // stays empty, and the screen shows today as the one (not-yet-created)
+    // day -- which is exactly the state of a journal nobody has written in.
+    command: ["/usr/bin/find", root.journalDir, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "-name", "*.md"]
     stdout: StdioCollector {
       id: journalListCollector
       onStreamFinished: root.applyJournalList(text)
@@ -631,8 +692,9 @@ ShellRoot {
   FloatingWindow {
     id: window
     title: "Omvision"
-    implicitWidth: 1440
-    implicitHeight: 900
+    // bin/shot sets these to capture at other sizes; unset, they are 0.
+    implicitWidth: parseInt(Quickshell.env("OMVISION_SHOT_WIDTH") || "0") || 1440
+    implicitHeight: parseInt(Quickshell.env("OMVISION_SHOT_HEIGHT") || "0") || 900
     minimumSize: Qt.size(720, 560)
     color: Theme.paper
 
@@ -648,24 +710,53 @@ ShellRoot {
         }
       }
 
+      // Offscreen screenshots for bin/shot; inactive (nothing loaded) in a
+      // normal launch. Behind everything, since it also paints the paper
+      // the grab needs -- see ShotDriver.qml.
+      Loader {
+        anchors.fill: parent
+        z: -1
+        active: Quickshell.env("OMVISION_SHOT_DIR") !== null
+                && Quickshell.env("OMVISION_SHOT_DIR") !== ""
+        source: "ShotDriver.qml"
+        onLoaded: {
+          item.app = root
+          item.journal = journalScreen
+          item.target = contentRoot
+        }
+      }
+
       Row {
         anchors.fill: parent
         spacing: 0
 
-        Sidebar {
-          id: inFlowSidebar
+        // Showing and hiding the sidebar animates the room it takes, not the
+        // sidebar itself: this slot opens from 0 to the rail's width, the
+        // rail (always its full 64px, so nothing inside it squeezes) slides
+        // in along with it, and the content beside it narrows in step
+        // instead of jumping sideways.
+        Item {
+          id: sidebarSlot
           height: parent.height
-          // While narrow, the in-flow rail is always the collapsed rail —
-          // an "expanded while narrow" choice renders as the overlay below,
-          // it never pushes this layout (spec: overlay, don't push).
-          collapsed: root.sidebarWide ? root.sidebarCollapsed() : true
-          currentScreen: root.currentScreen === "goalDetail" ? "goals" : root.currentScreen
-          onNavigate: function(screen) { root.currentScreen = screen }
-          onToggle: root.toggleSidebar()
+          width: root.sidebarHidden() ? 0 : inFlowSidebar.railWidth
+          visible: width > 0
+          clip: true
+
+          Behavior on width {
+            NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+          }
+
+          Sidebar {
+            id: inFlowSidebar
+            height: parent.height
+            x: sidebarSlot.width - width
+            currentScreen: root.currentScreen === "goalDetail" ? "goals" : root.currentScreen
+            onNavigate: function(screen) { root.currentScreen = screen }
+          }
         }
 
         Item {
-          width: parent.width - inFlowSidebar.width
+          width: parent.width - sidebarSlot.width
           height: parent.height
 
           GoalsScreen {
@@ -714,6 +805,7 @@ ShellRoot {
           visible: root.currentScreen === "today"
           goalsData: root.goalsData
           dayEntries: root.dayEntries
+          orphanLogs: root.orphanLogs
         }
 
         CoachingScreen {
@@ -724,43 +816,15 @@ ShellRoot {
         }
 
         JournalScreen {
+          id: journalScreen
           anchors.fill: parent
           visible: root.currentScreen === "journal"
           journalFiles: root.journalFiles
           journalContents: root.journalContents
-          goalsData: root.goalsData
+          sidebarShown: !root.sidebarHidden()
+          onToggleSidebar: root.toggleSidebar()
         }
         }
-      }
-
-      // Click-outside catcher for the narrow-mode overlay: sits above the
-      // content but below the overlay sidebar itself, so a click anywhere
-      // in the content closes the overlay without also acting on whatever
-      // is underneath it.
-      MouseArea {
-        anchors.left: overlaySidebar.right
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        visible: overlaySidebar.visible
-        enabled: overlaySidebar.visible
-        onClicked: root.closeNarrowOverlay()
-      }
-
-      // Narrow-mode "expanded anyway" overlay: floats over the content,
-      // anchored to the left edge, full height, opaque background (Sidebar's
-      // own Rectangle fill already is), own right hairline. Never resizes
-      // the in-flow layout — see `inFlowSidebar.collapsed` above.
-      Sidebar {
-        id: overlaySidebar
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        collapsed: false
-        visible: !root.sidebarWide && !root.sidebarCollapsed()
-        currentScreen: root.currentScreen === "goalDetail" ? "goals" : root.currentScreen
-        onNavigate: function(screen) { root.currentScreen = screen; root.closeNarrowOverlay() }
-        onToggle: root.closeNarrowOverlay()
       }
 
       EventDialog {
@@ -830,7 +894,7 @@ ShellRoot {
         visible: root.writeError.length > 0
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: 14
+        anchors.topMargin: Theme.spaceMd
         width: Math.min(parent.width - 40, bannerText.implicitWidth + 28)
         height: bannerText.implicitHeight + 16
         color: Theme.paper

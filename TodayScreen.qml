@@ -12,6 +12,11 @@ Item {
 
   property var goalsData: ({})
   property var dayEntries: []
+  // slug -> entries, for `<slug>.log.md` files whose goal file is gone. They
+  // are real pomodoros and belong in today's account of what happened; they
+  // just have a slug where a title would be. See omvision.qml's
+  // applyGoalsList() for how they are found.
+  property var orphanLogs: ({})
 
   function typeLabel(e) {
     if (e.type === "pomodoro") return "POMODORO"
@@ -22,7 +27,7 @@ Item {
 
   // Every log entry (goal logs + the day file) whose timestamp is today,
   // newest first. Day-file entries carry no goal.
-  function buildTodayList(data, dayList) {
+  function buildTodayList(data, dayList, orphans) {
     var now = new Date()
     var todayKey = Parser.dayKey(now)
     var out = []
@@ -37,8 +42,24 @@ Item {
         if (Parser.dayKey(e.date) !== todayKey) continue
         out.push({
           date: e.date, type: e.type, time: e.heading.split(" ").pop(),
-          focus: e.focus || "", kind: e.kind || "", title2: e.title || "",
+          focus: e.focus || "", done: e.done || "", left: e.left || "",
+          other: e.other || "", kind: e.kind || "", title2: e.title || "",
           minutes: e.minutes || 0, goalTitle: title, goalSlug: slug
+        })
+      }
+    }
+
+    var orph = orphans || ({})
+    for (var oslug in orph) {
+      var oentries = orph[oslug] || []
+      for (var o = 0; o < oentries.length; o++) {
+        var eo = oentries[o]
+        if (Parser.dayKey(eo.date) !== todayKey) continue
+        out.push({
+          date: eo.date, type: eo.type, time: eo.heading.split(" ").pop(),
+          focus: eo.focus || "", done: eo.done || "", left: eo.left || "",
+          other: eo.other || "", kind: eo.kind || "", title2: eo.title || "",
+          minutes: eo.minutes || 0, goalTitle: oslug, goalSlug: oslug
         })
       }
     }
@@ -49,7 +70,8 @@ Item {
       if (Parser.dayKey(e2.date) !== todayKey) continue
       out.push({
         date: e2.date, type: e2.type, time: e2.heading.split(" ").pop(),
-        focus: e2.focus || "", kind: e2.kind || "", title2: e2.title || "",
+        focus: e2.focus || "", done: e2.done || "", left: e2.left || "",
+        other: e2.other || "", kind: e2.kind || "", title2: e2.title || "",
         minutes: e2.minutes || 0, goalTitle: "", goalSlug: ""
       })
     }
@@ -58,7 +80,7 @@ Item {
     return out
   }
 
-  readonly property var todayList: buildTodayList(root.goalsData, root.dayEntries)
+  readonly property var todayList: buildTodayList(root.goalsData, root.dayEntries, root.orphanLogs)
 
   function totalMinutes(list) {
     var n = 0
@@ -71,7 +93,7 @@ Item {
   Column {
     anchors.fill: parent
     anchors.margins: Theme.panelPadding
-    spacing: 16
+    spacing: Theme.sectionGap
 
     // Header. Title + the count/time summary share the first row, per the
     // hand-off brief; a hairline bands it off from the list below, same
@@ -79,11 +101,11 @@ Item {
     Column {
       id: header
       width: parent.width
-      spacing: 14
+      spacing: Theme.spaceMd
 
       RowLayout {
         width: parent.width
-        spacing: 14
+        spacing: Theme.spaceMd
 
         Text {
           text: "Today"
@@ -133,7 +155,9 @@ Item {
             required property int index
 
             width: rowsColumn.width
-            height: contentCol.height + 20
+            // The row's padding, top and bottom, so its text sits centred
+            // between its hairlines rather than riding the top.
+            height: contentCol.height + Theme.rowPadding * 2
 
             Rectangle {
               anchors.left: parent.left
@@ -151,12 +175,12 @@ Item {
               anchors.top: parent.top
               anchors.leftMargin: Theme.panelPadding
               anchors.rightMargin: Theme.panelPadding
-              anchors.topMargin: 12
-              spacing: 4
+              anchors.topMargin: Theme.rowPadding
+              spacing: Theme.spaceXs
 
               RowLayout {
                 width: parent.width
-                spacing: 10
+                spacing: Theme.spaceSm
 
                 Text {
                   text: rowItem.modelData.time
@@ -211,6 +235,37 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.bodySize
                 color: Theme.ink
+              }
+              // What the break actually recorded. Same three lines, same
+              // styling, as the goal-detail timeline -- a run logged with no
+              // `focus:` used to render as a bare timestamp here, with every
+              // word the user wrote about it dropped on the floor.
+              Text {
+                visible: rowItem.modelData.type === "pomodoro" && !!rowItem.modelData.done
+                width: parent.width
+                text: "done: " + rowItem.modelData.done
+                wrapMode: Text.WordWrap
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.bodySmallSize
+                color: Theme.dim
+              }
+              Text {
+                visible: rowItem.modelData.type === "pomodoro" && !!rowItem.modelData.left
+                width: parent.width
+                text: "left: " + rowItem.modelData.left
+                wrapMode: Text.WordWrap
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.bodySmallSize
+                color: Theme.dim
+              }
+              Text {
+                visible: rowItem.modelData.type === "pomodoro" && !!rowItem.modelData.other
+                width: parent.width
+                text: "else: " + rowItem.modelData.other
+                wrapMode: Text.WordWrap
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.bodySmallSize
+                color: Theme.dim
               }
             }
           }

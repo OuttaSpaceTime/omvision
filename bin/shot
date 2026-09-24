@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Screenshots of the real app, offscreen: no window ever appears on the
+# desktop. Drives omvision.qml through ShotDriver.qml (see there), which
+# picks the screen, optionally toggles something, grabs PNGs and quits.
+#
+#   bin/shot                                  goals screen, 1440x900
+#   bin/shot -s journal -w 720                journal, narrow
+#   bin/shot -s goal:learn-rust               one goal's detail screen
+#   bin/shot -s journal -a sidebar -f 0,40,80,200
+#                                             sidebar animation, 4 frames
+#
+# Prints each PNG it wrote. Read them -- that is the point.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+screen=goals width=1440 height=900 action="" frames=0 settle=1500
+out="${TMPDIR:-/tmp}/omvision-shots"
+
+usage() {
+  cat >&2 <<'EOF'
+usage: bin/shot [-s screen] [-w width] [-h height] [-a action] [-f frames] [-t settle] [-o dir]
+  -s  goals | today | coaching | journal | goal:<slug>   (default goals)
+  -w  window width, -h window height                     (default 1440x900)
+  -a  sidebar | days    toggle it after settling         (default none)
+  -f  comma-separated ms after the action to grab at     (default 0)
+  -t  ms to wait for data to load before anything        (default 1500)
+  -o  output directory                                   (default $TMPDIR/omvision-shots)
+EOF
+  exit 2
+}
+
+while getopts "s:w:h:a:f:t:o:" opt; do
+  case "$opt" in
+    s) screen=$OPTARG ;;
+    w) width=$OPTARG ;;
+    h) height=$OPTARG ;;
+    a) action=$OPTARG ;;
+    f) frames=$OPTARG ;;
+    t) settle=$OPTARG ;;
+    o) out=$OPTARG ;;
+    *) usage ;;
+  esac
+done
+
+mkdir -p "$out"
+
+# offscreen: Qt renders into memory instead of opening a Wayland window.
+# timeout: a safety net only -- the driver quits on its own after the last
+# frame, and qs does exit on the SIGTERM timeout sends.
+# The grep drops Quickshell's (expected) warning about offscreen under Wayland.
+QT_QPA_PLATFORM=offscreen \
+OMVISION_SHOT_DIR="$out" \
+OMVISION_SHOT_SCREEN="$screen" \
+OMVISION_SHOT_WIDTH="$width" \
+OMVISION_SHOT_HEIGHT="$height" \
+OMVISION_SHOT_ACTION="$action" \
+OMVISION_SHOT_FRAMES="$frames" \
+OMVISION_SHOT_SETTLE="$settle" \
+  timeout 60 "$ROOT/bin/omvision" --no-color 2>&1 \
+  | grep -vE 'WAYLAND_DISPLAY is present|actually running wayland|--- WARNING ---|window masks' || true

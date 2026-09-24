@@ -8,3 +8,7 @@
 # qml
 *.qmlc
 *.jsc
+
+# built by highlighter/build.sh
+/MarkdownHighlight/
+/highlighter/build/

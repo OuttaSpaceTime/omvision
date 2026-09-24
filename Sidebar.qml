@@ -1,28 +1,33 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Effects
 
-// Left sidebar: mark, wordmark, nav rows, and a collapse toggle.
-// Spec §Window, plus the collapsible-sidebar addendum:
-//   - `collapsed` drives narrow-rail vs full-width rendering. The rail is
-//     never zero-width: mark + toggle + icon-only nav stay reachable.
-//   - When used as the narrow-mode overlay, the caller sets `collapsed: false`
-//     and positions/sizes this item itself; the sidebar doesn't know it's
-//     floating, it just always paints an opaque background + right hairline.
-//   - No conditional anchor *lines* anywhere below (anchors.left vs undefined
-//     etc.) — only margins/visibility vary with state. Toggling which anchor
-//     line is bound turned out to silently fail to lay the item out at all,
-//     which is why an earlier version of this file had an invisible toggle
-//     control. Margins-only keeps every element's anchor set fixed and valid.
+// Left sidebar: the mark, then one icon per screen. 64px, always.
+//
+// There used to be two variants -- a labelled sidebar and this rail -- with a
+// width breakpoint choosing between them, a manual override pinning that
+// choice, and a floating overlay for "expanded while narrow". All of it is
+// gone: four screens with four icons and four tooltips never needed a second
+// layout, and the machinery that chose between them was behind every sidebar
+// bug this app has had -- a choice made on one screen following you to the
+// next, an overlay opening underneath another overlay.
+//
+// One consequence worth keeping in mind: the rail is the only state, so
+// nothing here toggles anything. The Journal hides it outright while you
+// write and brings it back from its own control; that is the app's single
+// remaining sidebar question, and it lives there, not here.
+//
+// No conditional anchor *lines* anywhere below -- only margins and
+// visibility vary. Toggling which anchor line is bound turned out to
+// silently fail to lay the item out at all, which is why an earlier version
+// of this file had an invisible toggle control.
 Rectangle {
   id: root
 
   property string currentScreen: "goals"
-  property bool collapsed: false
   signal navigate(string screen)
-  signal toggle()
 
-  readonly property int expandedWidth: 176
-  readonly property int collapsedWidth: 64
+  readonly property int railWidth: 64
 
   readonly property var navItems: [
     { id: "today", label: "Today", glyph: "" },
@@ -31,13 +36,9 @@ Rectangle {
     { id: "journal", label: "Journal", glyph: "" }
   ]
 
-  width: collapsed ? collapsedWidth : expandedWidth
+  width: railWidth
   color: Theme.paper
   clip: true
-
-  Behavior on width {
-    NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
-  }
 
   Rectangle {
     anchors.right: parent.right
@@ -47,104 +48,46 @@ Rectangle {
     color: Theme.hairline
   }
 
-  // ---- header: mark + wordmark + collapse toggle ---------------------------
-  // Expanded, the three share one row: mark, wordmark, toggle at the right.
-  // Collapsed, the mark and the toggle become two stacked entries of their
-  // own, so the rail reads as a single column of one-purpose rows all the
-  // way down rather than cramming two controls onto one line.
-  // Only margins and heights vary between the states -- see the note at the
-  // top of this file about why anchor *lines* must stay bound either way.
+  // The mark is black-on-transparent (assets/mark.svg) and tinted to the
+  // accent here, the same way the ompom bar widget tints its copy of it.
   Item {
-    id: header
+    id: mark
+    width: 26
+    height: 26
     anchors.left: parent.left
-    anchors.right: parent.right
+    anchors.leftMargin: Math.round((root.railWidth - width) / 2)
     anchors.top: parent.top
-    anchors.topMargin: 10
-    height: root.collapsed ? 60 : 28
+    anchors.topMargin: Theme.spaceMd
 
-    Rectangle {
-      id: mark
-      width: 26
-      height: 26
-      anchors.left: parent.left
-      // Centred in the rail when collapsed; at the normal inset when not.
-      anchors.leftMargin: root.collapsed ? Math.round((root.collapsedWidth - width) / 2) : 6
-      anchors.top: parent.top
-      // 1 centres a 26px mark in the 28px first row of either state.
-      anchors.topMargin: 1
-      color: "transparent"
-      border.color: Theme.accentColor
-      border.width: Theme.borderWidth
-      Text {
-        anchors.centerIn: parent
-        text: "λi"
-        font.family: Theme.fontFamily
-        font.pixelSize: 13
-        color: Theme.accentColor
-      }
+    Image {
+      id: markSvg
+      anchors.fill: parent
+      source: Qt.resolvedUrl("assets/mark.svg")
+      sourceSize.width: mark.width
+      sourceSize.height: mark.height
+      smooth: true
+      visible: false
     }
 
-    Text {
-      visible: !root.collapsed
-      anchors.left: mark.right
-      anchors.leftMargin: 8
-      anchors.right: toggleBtn.left
-      anchors.verticalCenter: mark.verticalCenter
-      elide: Text.ElideRight
-      text: "omvision"
-      font.family: Theme.fontFamily
-      font.pixelSize: Theme.titleSize
-      font.bold: true
-      font.letterSpacing: 1
-      color: Theme.ink
-    }
-
-    // Always-visible, always-hittable way back. Secondary ink (not faint —
-    // this is a control, not receding text) with a hover fill and a real
-    // >=28px hit target. Collapsed, it drops to its own row under the mark
-    // and centres in the rail; expanded, it sits at the header's right end.
-    Rectangle {
-      id: toggleBtn
-      width: 28
-      height: 28
-      anchors.right: parent.right
-      anchors.rightMargin: root.collapsed ? Math.round((root.collapsedWidth - width) / 2) : 0
-      anchors.top: parent.top
-      anchors.topMargin: root.collapsed ? 32 : 0
-      color: toggleArea.containsMouse ? Theme.hoverFill : "transparent"
-
-      Text {
-        anchors.centerIn: parent
-        text: root.collapsed ? "»" : "«"
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.subtitleSize
-        color: Theme.secondaryInk
-      }
-
-      MouseArea {
-        id: toggleArea
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: root.toggle()
-      }
-
-      ToolTip.visible: toggleArea.containsMouse
-      ToolTip.delay: 400
-      ToolTip.text: root.collapsed ? "Expand sidebar (Ctrl+B)" : "Collapse sidebar (Ctrl+B)"
+    MultiEffect {
+      anchors.fill: parent
+      source: markSvg
+      colorization: 1.0
+      colorizationColor: Theme.accentColor
+      brightness: 1.0
     }
   }
 
   // ---- nav ------------------------------------------------------------------
-  // Expanded: full text rows. Collapsed: icon-only — labels are text, not
-  // icons, so they're hidden rather than squeezed; a Nerd Font glyph plus a
-  // tooltip keeps every screen reachable without expanding.
+  // Icon-only, with the label carried by a tooltip. The labels are text, not
+  // icons, so beside a 64px rail they are not squeezed -- they are simply not
+  // drawn.
   Column {
     anchors.left: parent.left
     anchors.right: parent.right
-    anchors.top: header.bottom
-    anchors.topMargin: 14
-    spacing: 2
+    anchors.top: mark.bottom
+    anchors.topMargin: Theme.spaceXl
+    spacing: Theme.spaceXxs
 
     Repeater {
       model: root.navItems
@@ -152,7 +95,7 @@ Rectangle {
         id: navRow
         required property var modelData
         width: parent.width
-        height: root.collapsed ? 36 : (Theme.bodySize + 12)
+        height: 36
 
         readonly property bool selected: root.currentScreen === modelData.id
 
@@ -171,21 +114,7 @@ Rectangle {
           color: Theme.hoverFill
         }
 
-        // Expanded: text label.
         Text {
-          visible: !root.collapsed
-          anchors.left: parent.left
-          anchors.leftMargin: navRow.selected ? 10 : 8
-          anchors.verticalCenter: parent.verticalCenter
-          text: navRow.modelData.label
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.bodySize
-          color: navRow.selected ? Theme.accentColor : Theme.dim
-        }
-
-        // Collapsed: centered Nerd Font glyph, tooltip carries the label.
-        Text {
-          visible: root.collapsed
           anchors.centerIn: parent
           text: navRow.modelData.glyph
           font.family: Theme.fontFamily
@@ -201,7 +130,7 @@ Rectangle {
           onClicked: root.navigate(navRow.modelData.id)
         }
 
-        ToolTip.visible: root.collapsed && navArea.containsMouse
+        ToolTip.visible: navArea.containsMouse
         ToolTip.delay: 400
         ToolTip.text: navRow.modelData.label
       }

@@ -94,7 +94,7 @@ Item {
   Column {
     anchors.fill: parent
     anchors.margins: Theme.panelPadding
-    spacing: 16
+    spacing: Theme.sectionGap
 
     Text {
       text: "Coaching"
@@ -122,12 +122,12 @@ Item {
       Column {
         id: bodyColumn
         width: parent.width
-        spacing: 20
+        spacing: Theme.spaceLg
 
         // ---- goal chips -----------------------------------------------
         Column {
           width: parent.width
-          spacing: 8
+          spacing: Theme.spaceSm
 
           Text {
             text: "GOAL"
@@ -141,7 +141,7 @@ Item {
 
           Flow {
             width: parent.width
-            spacing: 14
+            spacing: Theme.spaceMd
             Repeater {
               model: root.goalList
               delegate: Text {
@@ -167,7 +167,7 @@ Item {
         // ---- method chips -----------------------------------------------
         Column {
           width: parent.width
-          spacing: 8
+          spacing: Theme.spaceSm
 
           Text {
             text: "METHOD"
@@ -181,7 +181,7 @@ Item {
 
           Flow {
             width: parent.width
-            spacing: 14
+            spacing: Theme.spaceMd
             Repeater {
               model: root.methods
               delegate: Text {
@@ -207,7 +207,7 @@ Item {
         // ---- command box --------------------------------------------------
         Column {
           width: parent.width
-          spacing: 8
+          spacing: Theme.spaceSm
 
           Text {
             text: "COMMAND"
@@ -228,8 +228,8 @@ Item {
 
             RowLayout {
               anchors.fill: parent
-              anchors.margins: 8
-              spacing: 8
+              anchors.margins: Theme.spaceSm
+              spacing: Theme.spaceSm
               Text {
                 Layout.fillWidth: true
                 text: root.command
@@ -266,7 +266,7 @@ Item {
         // ---- what a session reads ------------------------------------------
         Column {
           width: parent.width
-          spacing: 8
+          spacing: Theme.spaceSm
 
           Text {
             text: "THIS SESSION READS"
@@ -280,13 +280,13 @@ Item {
 
           Column {
             width: parent.width
-            spacing: 4
+            spacing: Theme.spaceXs
             Repeater {
               model: root.readsList
               delegate: RowLayout {
                 required property string modelData
                 width: parent.width
-                spacing: 8
+                spacing: Theme.spaceSm
                 Text {
                   text: "-"
                   font.family: Theme.fontFamily
@@ -309,7 +309,7 @@ Item {
         // ---- past sessions --------------------------------------------------
         Column {
           width: parent.width
-          spacing: 8
+          spacing: Theme.spaceSm
 
           Text {
             text: "PAST SESSIONS"
@@ -338,7 +338,7 @@ Item {
                 required property var modelData
                 required property int index
                 width: parent.width
-                spacing: 2
+                spacing: Theme.spaceXxs
 
                 Rectangle {
                   width: parent.width
@@ -351,7 +351,7 @@ Item {
 
                 RowLayout {
                   width: parent.width
-                  spacing: 8
+                  spacing: Theme.spaceSm
                   Text {
                     text: modelData.date
                     font.family: Theme.fontFamily

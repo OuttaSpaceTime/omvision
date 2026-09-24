@@ -9,7 +9,7 @@ QML fails silently where CSS fails loudly: a child too wide for its parent simpl
 draws past it, with no clipping, wrapping or ellipsis unless you ask for them.
 Layout written without looking at the result has been wrong every single time in
 this repo. After any visual change, screenshot it and **read the image**, at both a
-wide and a narrow window. See "Screenshotting" below for the recipe that works.
+wide and a narrow window. See "Screenshotting" below: `bin/shot`, offscreen.
 
 ## 2. Text aligns at one left edge, per screen
 
@@ -82,45 +82,51 @@ had to be pulled back. Square corners, 1px hairlines, no shadows.
 
 ## Screenshotting
 
-```bash
-# 1. launch (setsid so it survives the shell)
-pkill -x qs            # NOT pkill -f, which matches and kills your own shell
-(setsid qs -p ~/Code/omvision/omvision.qml > /tmp/omvision.log 2>&1 &)
-sleep 6
-
-# 2. find it — it may not be on the visible workspace
-hyprctl clients -j | python3 -c "
-import json,sys
-for c in json.load(sys.stdin):
-    if c['class']=='org.quickshell': print(c['workspace']['id'], c['at'], c['size'])"
-
-# 3. if it is on another workspace, switch there, capture, switch back
-hyprctl dispatch workspace <n>; sleep 2
-grim -g "<x>,<y> <w>x<h>" /tmp/shot.png
-hyprctl dispatch workspace <original>
-
-# 4. READ the png
-```
-
-`pkill -x qs` kills **every** instance, including one another person or agent is
-running. If someone else may have the app open, kill your own by PID instead.
-
-Hyprland on this machine is a Lua-scripted fork: `hyprctl --batch "dispatch a ; dispatch b"`
-fails with a Lua parse error, and dispatchers behave differently from the documented
-`hyprctl dispatch <name> <args>`. The working form targets a window explicitly by address:
+Use `bin/shot`. It runs the real app with real data from `~/Notes/Omvision/`, but
+**offscreen** (`QT_QPA_PLATFORM=offscreen`). Qt draws into memory, so no window ever
+appears on the desktop. The app switches to the requested screen, takes its own
+screenshots and quits. One run takes about 2–3 seconds.
 
 ```bash
-hyprctl dispatch 'hl.dsp.window.<action>({window="address:0x...", ...})'
+bin/shot                                   # goals, 1440x900
+bin/shot -w 720                            # narrow (720 is the window's minimum)
+bin/shot -s goal:<slug>                    # a goal's detail screen
+bin/shot -s journal -a sidebar -f 0,40,200 # toggle the sidebar, grab 3 frames
+bin/shot -s journal -a days    -f 0,40,200 # open the day list, grab 3 frames
+bin/shot -o <dir>                          # default dir: $TMPDIR/omvision-shots
 ```
 
-**An untargeted dispatch acts on whatever Hyprland considers focused**, which is not the
-window you just launched — it has hit the user's terminal three separate times in this
-project, floating it, resizing it, or moving it to another workspace. Get the address from
-`hyprctl clients -j` and pass it, or better, launch the window at the size you want to test
-and don't drive the compositor at all.
+It prints each PNG path. **Read every image.** That is the point of rule 1.
 
-Do not use `hyprctl dispatch movecursor` or `resizeactive` to set up a shot: they
-act on whatever is focused, which has twice turned out to be the user's terminal.
-Omarchy shows a "screenshot saved" toast over the top-right of the screen for a few
-seconds after each `grim` call — take a throwaway shot, wait ~7s, then take the real
-one, or your capture will have the toast in it.
+How it works: `bin/shot` sets `OMVISION_SHOT_*` environment variables and runs
+`bin/omvision` offscreen, so the compiled highlighter is loaded too. `omvision.qml`
+loads `ShotDriver.qml` only when `OMVISION_SHOT_DIR` is set, and a normal launch never
+loads it. The driver:
+1. waits `-t` ms (default 1500) for files to load,
+2. switches screens the way a click would,
+3. runs the `-a` action,
+4. grabs the window with `grabToImage`, once per `-f` time.
+
+Things to know:
+- **`-f` times are when the grab starts, not exact.** The first grab after a change
+  takes about 50–80ms, so a 40ms frame may really land at 80ms. The driver logs the
+  actual time next to each file.
+- **Switch screens late, never at startup.** A journal opened before its files have
+  loaded stays blank (TODO.md, Open 5). The driver switches only after `-t` for this
+  reason. If a screen looks empty, suspect that before suspecting the layout.
+- **It only reads.** It never types, so nothing under `~/Notes` changes. Keep it that way
+  if you add actions: the data is the user's real data.
+- **Mouse input can't be simulated offscreen either.** Drive state through the same
+  functions a click would call (see `runAction()` in `ShotDriver.qml`).
+
+**Never screenshot by launching a real window.** The recipe that used to be here did
+that (`setsid qs …`, then `hyprctl` to find the window and `grim` to capture it). It
+left Omvision windows piling up on the user's desktop. `pkill -x qs` killed the user's
+own instances. Untargeted `hyprctl dispatch` commands (this Hyprland is a Lua-scripted
+fork) landed on the user's terminal three times, floating it, resizing it or moving it
+to another workspace. Omarchy's "screenshot saved" toast also got into the captures.
+None of that happens offscreen.
+
+To check that a change still **loads**, without a screenshot:
+`QT_QPA_PLATFORM=offscreen timeout 10 bin/omvision`. QML warnings print to stderr.
+Ignore Quickshell's warning that WAYLAND_DISPLAY is set.
