@@ -1,5 +1,16 @@
 # Ompom.Highlight (native)
 
+> **Superseded (2026-09-24).** The overlay no longer imports this module.
+> `NoteHighlighterHost.qml` now loads omvision's `MarkdownHighlight`
+> (built from `~/Code/omvision/highlighter/`), so the overlay's writing
+> looks exactly like omvision's journal. The deployed plugin carries that
+> module at `native/MarkdownHighlight/`, which the `QML2_IMPORT_PATH` below
+> already covers. Deploy it the same atomic way described here, then
+> restart the whole shell (`omarchy restart shell`) rather than relying on
+> a hot reload: this library also exports a class named
+> `MarkdownHighlighter`, and a fresh process never has both loaded.
+> The sources here are kept until someone decides to remove them.
+
 > **Status: wired in and stable.** It crashed the entire Quickshell
 > compositor process once, during development — root-caused and fixed,
 > see "The crash" below. If you're deploying an updated `.so` (or any

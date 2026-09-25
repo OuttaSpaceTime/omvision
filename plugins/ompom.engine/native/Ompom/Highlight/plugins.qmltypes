@@ -24,10 +24,20 @@ Module {
             index: 0
             lineNumber: 18
         }
-        Signal { name: "documentChanged"; lineNumber: 32 }
+        Property {
+            name: "lineHeight"
+            type: "int"
+            read: "lineHeight"
+            write: "setLineHeight"
+            notify: "lineHeightChanged"
+            index: 1
+            lineNumber: 23
+        }
+        Signal { name: "documentChanged"; lineNumber: 40 }
+        Signal { name: "lineHeightChanged"; lineNumber: 41 }
         Method {
             name: "setColors"
-            lineNumber: 28
+            lineNumber: 33
             Parameter { name: "background"; type: "QString" }
             Parameter { name: "foreground"; type: "QString" }
             Parameter { name: "accent"; type: "QString" }

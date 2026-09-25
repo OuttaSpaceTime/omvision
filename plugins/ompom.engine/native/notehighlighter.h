@@ -16,6 +16,11 @@ class NoteHighlighter : public QObject {
     Q_OBJECT
     QML_ELEMENT
     Q_PROPERTY(QQuickTextDocument *document READ document WRITE setDocument NOTIFY documentChanged)
+    // Percent, QTextBlockFormat::ProportionalHeight. QML's TextEdit has no
+    // lineHeight of its own (verified -- the property simply does not
+    // exist), and a writing surface set solid reads nothing like omawrite,
+    // so the one piece of typography QML cannot do is done here.
+    Q_PROPERTY(int lineHeight READ lineHeight WRITE setLineHeight NOTIFY lineHeightChanged)
 
 public:
     explicit NoteHighlighter(QObject *parent = nullptr) : QObject(parent) {}
@@ -28,11 +33,22 @@ public:
     Q_INVOKABLE void setColors(const QString &background, const QString &foreground,
                                const QString &accent);
 
+    int lineHeight() const { return m_lineHeight; }
+    void setLineHeight(int percent);
+
 signals:
     void documentChanged();
+    void lineHeightChanged();
 
 private:
+    // Applies m_lineHeight to every block that does not already carry it.
+    // Cheap: a note is a handful of blocks, and a block that already agrees
+    // is skipped, so after the first pass this is a no-op per keystroke.
+    void applyLineHeight();
+
     QPointer<QQuickTextDocument> m_quickDocument;
+    int m_lineHeight = 185;
+    bool m_applyingLineHeight = false;
     MarkdownHighlighter *m_highlighter = nullptr;
     QString m_background;
     QString m_foreground;
