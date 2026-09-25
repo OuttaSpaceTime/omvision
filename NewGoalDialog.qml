@@ -19,6 +19,11 @@ FocusScope {
   id: root
 
   property string errorMessage: ""
+  // Set both to edit an existing goal instead of creating one: `initial`
+  // is that goal's parsed meta (Parser.parseGoalFile), used to pre-fill.
+  property string editSlug: ""
+  property var initial: null
+  readonly property bool editing: editSlug !== ""
 
   signal submitted(var fields)
   signal dismissed()
@@ -39,12 +44,20 @@ FocusScope {
       return
     }
     root.previousFocusItem = root.Window ? root.Window.activeFocusItem : null
-    titleText = ""
-    whyText = ""
-    estimateText = ""
-    doneByText = ""
+    var g = root.editing ? root.initial : null
+    titleText = g ? g.title : ""
+    whyText = g ? g.why : ""
+    estimateText = g ? root.leadingNumber(g.raw.estimate) : ""
+    doneByText = g && g.done_by ? g.done_by : ""
     localError = ""
     titleInput.forceActiveFocus()
+  }
+
+  // The raw front-matter value, not meta.estimate: the coach writes
+  // "estimate: 6   # was 9", which meta.estimate reads as not-a-number.
+  function leadingNumber(raw) {
+    var m = String(raw || "").match(/^\s*(\d+)/)
+    return m ? m[1] : ""
   }
 
   function submit() {
@@ -111,7 +124,7 @@ FocusScope {
       spacing: Theme.spaceLg
 
       Text {
-        text: "New goal"
+        text: root.editing ? "Edit goal" : "New goal"
         font.family: Theme.fontFamily
         font.pixelSize: Theme.bodySize
         font.bold: true
@@ -286,7 +299,9 @@ FocusScope {
         Text {
           Layout.fillWidth: true
           wrapMode: Text.WordWrap
-          text: "Creates ~/Notes/Omvision/goals/<slug>.md with an empty Tasks list."
+          text: root.editing
+            ? "Saves to goals/" + root.editSlug + ".md. The file name stays the same."
+            : "Creates ~/Notes/Omvision/goals/<slug>.md with an empty Tasks list."
           font.family: Theme.fontFamily
           font.pixelSize: Theme.captionSize
           color: Theme.faint
@@ -299,7 +314,7 @@ FocusScope {
           onActivated: root.dismissed()
         }
         Button {
-          label: "Create goal"
+          label: root.editing ? "Save" : "Create goal"
           filled: true
           inert: false
           Layout.preferredWidth: implicitWidth

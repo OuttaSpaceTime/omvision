@@ -62,6 +62,9 @@ Rectangle {
     else if (driver.action === "event") driver.app.openEventDialog(driver.app.currentScreen === "goalDetail" ? driver.app.openGoalSlug : "")
     else if (driver.action === "newgoal") driver.app.openNewGoalDialog()
     else if (driver.action === "cancel" && driver.goalDetail) driver.goalDetail.cancelDialogOpen = true
+    else if (driver.action === "editgoal") driver.app.openEditGoalDialog(driver.app.openGoalSlug)
+    else if (driver.action === "edittask" && driver.goalDetail && driver.goalDetail.tasks.length > 0)
+      driver.goalDetail.startEditTask(0, driver.goalDetail.tasks[0].text)
     else if (driver.action !== "") console.warn("shot: unknown action", driver.action)
   }
 

@@ -14,6 +14,23 @@ Milestones 2, 3 and 4 are in: it reads and writes `~/Notes/Omvision/goals/*.md`,
 `~/.claude/skills/ompom-coach/SKILL.md`. The UI spec is `docs/ui-spec.md`, the layout rules are
 `docs/layout-rules.md`, and the file contract is `~/Code/ompom-engine/docs/goal-files.md`.
 
+## Landed 2026-09-25
+
+- **Tasks wrap** instead of eliding; checkbox and `≈N` sit on the first line.
+- **Edit a task**: hover pencil (always-reserved slot, so no reflow), inline wrapping field,
+  cursor at the end. `Writer.editTask` keeps `[x]` and `≈N`; saving it empty deletes the task.
+- **Edit a goal**: hover pencil on Goals rows opens NewGoalDialog in edit mode (`editSlug`,
+  `initial`). `Writer.updateGoalFields` rewrites only changed front-matter keys, so a coach's
+  `# was 9` note survives; the slug never changes.
+- **Reopen goal** button on done goals (`status: active`). Not offered on cancelled goals: their
+  `## Cancelled` note would stay and a second cancel would append another.
+- **No paused status**: filter chip removed (no goal used it; the pomodoro pause is unrelated).
+- The "Tasks belong to the goal…" caption only shows when there are no tasks.
+- Both pencils are `PencilIcon.qml` (U+F040, 16px; tried upright, looked strange), centred vertically on
+  their row. Hover can't be driven offscreen; they were checked by shooting a scratch copy
+  with the hover conditions forced true.
+- `bin/shot -a editgoal|edittask` added. Verified offscreen with fixture data.
+
 ## Landed 2026-09-24 (ompom-engine, deployed, not committed)
 
 - **Overlay buttons match Omvision's `Button.qml`**: square, 1px border at 40% foreground,

@@ -116,6 +116,7 @@ bin/shot -s goal:<slug>                    # a goal's detail screen
 bin/shot -s journal -a sidebar -f 0,40,200 # toggle the sidebar, grab 3 frames
 bin/shot -s journal -a days    -f 0,40,200 # open the day list, grab 3 frames
 bin/shot -a event                          # a dialog: event | newgoal | cancel (on goal:<slug>)
+bin/shot -s goal:<slug> -a editgoal        # also: edittask (first task's inline edit)
 bin/shot -o <dir>                          # default dir: $TMPDIR/omvision-shots
 ```
 

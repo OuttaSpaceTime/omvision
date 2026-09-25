@@ -23,7 +23,9 @@ Item {
   // its own since it only ever sees whatever omvision.qml last loaded.
   signal toggleTask(int index)
   signal addTask(string text)
+  signal editTask(int index, string text)
   signal closeGoal()
+  signal reopenGoal()
   signal cancelGoal(string reason, string takeaway)
   signal addEventRequested()
   signal coachRequested()
@@ -39,6 +41,26 @@ Item {
   function onCancelResult(ok, message) {
     if (ok) { cancelDialogOpen = false; cancelError = "" }
     else cancelError = message || "couldn't save"
+  }
+  function onEditTaskResult(ok, message) {
+    if (ok) { root.editingTaskIndex = -1; root.editTaskText = "" }
+    else root.editTaskError = message || "couldn't save"
+  }
+
+  function startEditTask(index, text) {
+    root.editTaskText = text
+    root.editTaskError = ""
+    root.editingTaskIndex = index
+  }
+  // Saving an emptied task deletes it (Writer.editTask).
+  function commitEditTask(index) {
+    root.editTaskError = ""
+    root.editTask(index, root.editTaskText.trim())
+  }
+  function cancelEditTask() {
+    root.editingTaskIndex = -1
+    root.editTaskText = ""
+    root.editTaskError = ""
   }
 
   function commitAddTask() {
@@ -57,6 +79,9 @@ Item {
   property bool addingTask: false
   property string addTaskText: ""
   property string addTaskError: ""
+  property int editingTaskIndex: -1
+  property string editTaskText: ""
+  property string editTaskError: ""
   property bool cancelDialogOpen: false
   property string cancelError: ""
 
@@ -627,64 +652,185 @@ Item {
                 // The checkbox is the row's leading element and owns the
                 // rail's left edge -- the same edge the TASKS heading
                 // sits at -- with the label inset a consistent gap to its
-                // right. Row height is the control-height token, not a
-                // bare text height, so the checkbox and label both have
-                // room to breathe; the hit target covers the whole row,
-                // not just the checkbox, so ticking a task is easy.
+                // right. Row height floors at the control-height token but
+                // grows for a task long enough to wrap (no more eliding --
+                // the row still centres the checkbox and estimate against
+                // whatever height that takes). The hit target covers the
+                // whole row, not just the checkbox, so ticking a task is
+                // easy; the toggle MouseArea sits *behind* the RowLayout
+                // (declared first) so the edit control and the inline edit
+                // field, both on top, get first claim on their own clicks
+                // and everything else falls through to the toggle.
                 Item {
+                  id: taskRow
                   width: parent.width
-                  height: Theme.controlHeight
+                  implicitHeight: taskRowLayout.implicitHeight + pad * 2
+                  height: implicitHeight
 
-                  Rectangle {
-                    id: taskCheckbox
-                    width: 12
-                    height: 12
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    border.color: Theme.border
-                    border.width: 1
-                    color: "transparent"
+                  readonly property bool editing: root.editingTaskIndex === index
+                  // One line of task text. The side items (checkbox,
+                  // estimate, pencil) sit in boxes this tall, top-aligned,
+                  // so on a wrapped task they line up with the first line
+                  // rather than floating mid-block. `pad` keeps a one-line
+                  // row at the control height, and a wrapped one off its
+                  // hairlines.
+                  readonly property int lineH: Math.ceil(taskFont.height)
+                  readonly property int pad: Math.max(Theme.spaceXs, Math.floor((Theme.controlHeight - lineH) / 2))
 
-                    Text {
-                      visible: modelData.done
-                      anchors.centerIn: parent
-                      text: "✓"
-                      font.family: Theme.fontFamily
-                      font.pixelSize: 9
-                      color: Theme.accentColor
-                    }
-                  }
-
-                  Text {
-                    id: taskEstimate
-                    visible: modelData.estimate !== undefined
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: modelData.estimate !== undefined ? ("≈" + modelData.estimate) : ""
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.bodySmallSize
-                    color: Theme.dim
-                  }
-
-                  Text {
-                    anchors.left: taskCheckbox.right
-                    anchors.leftMargin: Theme.spaceSm
-                    anchors.right: taskEstimate.left
-                    anchors.rightMargin: Theme.spaceSm
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: modelData.text
+                  FontMetrics {
+                    id: taskFont
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.bodySize
-                    font.strikeout: modelData.done
-                    color: modelData.done ? Theme.faint : Theme.ink
-                    elide: Text.ElideRight
                   }
+
+                  // Passive, so it stays hovered while the pointer is over
+                  // the pencil's own MouseArea too.
+                  HoverHandler { id: taskRowHover }
 
                   MouseArea {
                     anchors.fill: parent
+                    enabled: !taskRow.editing
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.toggleTask(index)
                   }
+
+                  RowLayout {
+                    id: taskRowLayout
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.topMargin: taskRow.pad
+                    spacing: Theme.spaceSm
+
+                    Item {
+                      Layout.preferredWidth: 12
+                      Layout.preferredHeight: taskRow.lineH
+                      Layout.alignment: Qt.AlignTop
+
+                      Rectangle {
+                        anchors.centerIn: parent
+                        width: 12
+                        height: 12
+                        border.color: Theme.border
+                        border.width: 1
+                        color: "transparent"
+
+                        Text {
+                          visible: modelData.done
+                          anchors.centerIn: parent
+                          text: "✓"
+                          font.family: Theme.fontFamily
+                          font.pixelSize: 9
+                          color: Theme.accentColor
+                        }
+                      }
+                    }
+
+                    Text {
+                      visible: !taskRow.editing
+                      Layout.fillWidth: true
+                      Layout.alignment: Qt.AlignTop
+                      wrapMode: Text.WordWrap
+                      text: modelData.text
+                      font.family: Theme.fontFamily
+                      font.pixelSize: Theme.bodySize
+                      font.strikeout: modelData.done
+                      color: modelData.done ? Theme.faint : Theme.ink
+                    }
+
+                    // Inline edit field, same minimal-input pattern as
+                    // "+ task" (Enter commits, Escape cancels) rather than
+                    // a dialog -- editing one task's wording is a small
+                    // secondary action, not one that deserves a modal.
+                    // A TextEdit so a long task wraps while being edited
+                    // exactly as it does when shown; Enter is taken by the
+                    // key handlers, so it never inserts a newline.
+                    TextEdit {
+                      id: taskEditInput
+                      visible: taskRow.editing
+                      Layout.fillWidth: true
+                      Layout.alignment: Qt.AlignTop
+                      wrapMode: TextEdit.Wrap
+                      font.family: Theme.fontFamily
+                      font.pixelSize: Theme.bodySize
+                      color: Theme.ink
+                      selectionColor: Theme.accentFill
+                      selectedTextColor: Theme.ink
+                      selectByMouse: true
+
+                      // Cursor at the end, nothing selected: an edit is
+                      // usually a tweak, and a select-all would make the
+                      // first keystroke wipe the whole task.
+                      onVisibleChanged: if (visible) {
+                        text = root.editTaskText
+                        cursorPosition = length
+                        forceActiveFocus()
+                      }
+                      onTextChanged: if (visible) root.editTaskText = text
+                      Keys.onReturnPressed: root.commitEditTask(index)
+                      Keys.onEnterPressed: root.commitEditTask(index)
+                      Keys.onEscapePressed: root.cancelEditTask()
+
+                      Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.bottom
+                        height: Theme.hairlineWidth
+                        color: Theme.accentColor
+                      }
+                    }
+
+                    Item {
+                      visible: modelData.estimate !== undefined && !taskRow.editing
+                      Layout.preferredWidth: taskEstimate.implicitWidth
+                      Layout.preferredHeight: taskRow.lineH
+                      Layout.alignment: Qt.AlignTop
+
+                      Text {
+                        id: taskEstimate
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.estimate !== undefined ? ("≈" + modelData.estimate) : ""
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.bodySmallSize
+                        color: Theme.dim
+                      }
+                    }
+
+                    // A pencil, shown only while the pointer is over the
+                    // row. Faded with opacity rather than toggled with
+                    // `visible`, so its slot is always reserved: hovering
+                    // must never re-wrap the task text or grow the row.
+                    // Centred on the whole row, unlike the checkbox: it
+                    // belongs to the row, not to the first line of text.
+                    Item {
+                      Layout.preferredWidth: taskPencil.implicitWidth
+                      Layout.fillHeight: true
+                      opacity: taskRowHover.hovered && !taskRow.editing ? 1 : 0
+                      enabled: opacity > 0
+
+                      PencilIcon {
+                        id: taskPencil
+                        anchors.centerIn: parent
+                      }
+
+                      MouseArea {
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.startEditTask(index, modelData.text)
+                      }
+                    }
+                  }
+                }
+
+                Text {
+                  visible: taskRow.editing && root.editTaskError.length > 0
+                  width: parent.width
+                  wrapMode: Text.WordWrap
+                  text: root.editTaskError
+                  font.family: Theme.fontFamily
+                  font.pixelSize: Theme.captionSize
+                  color: Theme.red
                 }
               }
             }
@@ -752,6 +898,27 @@ Item {
                   onClicked: { root.cancelError = ""; root.cancelDialogOpen = true }
                 }
               }
+            }
+          }
+
+          // A done goal can be taken back up: closing one by mistake, or
+          // finding there is more to do, shouldn't mean editing the file by
+          // hand. Cancelled goals aren't offered this -- their "## Cancelled"
+          // note would stay in the file and a second cancel would append
+          // another beside it.
+          ColumnLayout {
+            Layout.fillWidth: true
+            visible: !!root.meta && root.meta.status === "done"
+            spacing: Theme.spaceSm
+
+            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.hairline }
+
+            Button {
+              label: "Reopen goal"
+              inert: false
+              Layout.preferredWidth: implicitWidth
+              Layout.preferredHeight: Theme.controlHeight
+              onActivated: root.reopenGoal()
             }
           }
 

@@ -200,6 +200,17 @@ ShellRoot {
     })
   }
 
+  function handleEditTask(slug, index, text, resultFn) {
+    root.queueGoalWrite(slug, function(raw) {
+      var eol = Writer.detectEol(raw)
+      var out = Writer.editTask(Writer.splitLines(raw), index, text)
+      return out ? Writer.joinLines(out, eol) : null
+    }, function(ok, message) {
+      if (!ok) root.showWriteError("Couldn't update the task" + (message ? " (" + message + ")" : "") + ".")
+      if (resultFn) resultFn(ok, message)
+    })
+  }
+
   function handleCloseGoal(slug) {
     root.queueGoalWrite(slug, function(raw) {
       var eol = Writer.detectEol(raw)
@@ -207,6 +218,16 @@ ShellRoot {
       return out ? Writer.joinLines(out, eol) : null
     }, function(ok, message) {
       if (!ok) root.showWriteError("Couldn't close the goal" + (message ? " (" + message + ")" : "") + ".")
+    })
+  }
+
+  function handleReopenGoal(slug) {
+    root.queueGoalWrite(slug, function(raw) {
+      var eol = Writer.detectEol(raw)
+      var out = Writer.setStatus(Writer.splitLines(raw), "active")
+      return out ? Writer.joinLines(out, eol) : null
+    }, function(ok, message) {
+      if (!ok) root.showWriteError("Couldn't reopen the goal" + (message ? " (" + message + ")" : "") + ".")
     })
   }
 
@@ -274,11 +295,32 @@ ShellRoot {
 
   function openNewGoalDialog() {
     root.newGoalError = ""
+    root.editGoalSlug = ""
     root.newGoalDialogOpen = true
+  }
+
+  // The New goal dialog doubles as Edit goal: same fields, pre-filled,
+  // saved in place instead of creating a file.
+  function openEditGoalDialog(slug) {
+    if (!root.goalsData[slug] || !root.goalsData[slug].meta) return
+    root.newGoalError = ""
+    root.editGoalSlug = slug
+    root.newGoalDialogOpen = true
+  }
+
+  function handleEditGoal(slug, fields, resultFn) {
+    root.queueGoalWrite(slug, function(raw) {
+      var eol = Writer.detectEol(raw)
+      var out = Writer.updateGoalFields(Writer.splitLines(raw), fields)
+      return out ? Writer.joinLines(out, eol) : null
+    }, function(ok, message) {
+      if (resultFn) resultFn(ok, message)
+    })
   }
 
   property bool newGoalDialogOpen: false
   property string newGoalError: ""
+  property string editGoalSlug: ""
 
   // ---- write path: creating a new goal (<slug>.md), goal-files.md §3 -----
   // One goalCreateFile FileView, reused across the whole collision-probe
@@ -777,6 +819,7 @@ ShellRoot {
           }
           onAddEventRequested: root.openEventDialog("")
           onNewGoalRequested: root.openNewGoalDialog()
+          onEditGoalRequested: function(slug) { root.openEditGoalDialog(slug) }
         }
 
         GoalDetailScreen {
@@ -794,7 +837,13 @@ ShellRoot {
               goalDetailScreen.onAddTaskResult(ok, message)
             })
           }
+          onEditTask: function(index, text) {
+            root.handleEditTask(root.openGoalSlug, index, text, function(ok, message) {
+              goalDetailScreen.onEditTaskResult(ok, message)
+            })
+          }
           onCloseGoal: root.handleCloseGoal(root.openGoalSlug)
+          onReopenGoal: root.handleReopenGoal(root.openGoalSlug)
           onCancelGoal: function(reason, takeaway) {
             root.handleCancelGoal(root.openGoalSlug, reason, takeaway, function(ok, message) {
               goalDetailScreen.onCancelResult(ok, message)
@@ -885,9 +934,19 @@ ShellRoot {
         visible: root.newGoalDialogOpen
         z: 900
         errorMessage: root.newGoalError
+        editSlug: root.editGoalSlug
+        initial: root.editGoalSlug !== "" && root.goalsData[root.editGoalSlug]
+          ? root.goalsData[root.editGoalSlug].meta : null
         onDismissed: root.newGoalDialogOpen = false
         onSubmitted: function(fields) {
           root.newGoalError = ""
+          if (root.editGoalSlug !== "") {
+            root.handleEditGoal(root.editGoalSlug, fields, function(ok, message) {
+              if (ok) root.newGoalDialogOpen = false
+              else root.newGoalError = "Couldn't save the goal" + (message ? " (" + message + ")" : "") + "."
+            })
+            return
+          }
           root.handleCreateGoal(fields, function(ok, message, slug) {
             if (ok) root.newGoalDialogOpen = false
             else root.newGoalError = message || "Couldn't create the goal."

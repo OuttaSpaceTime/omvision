@@ -77,6 +77,43 @@ function setStatus(lines, newStatus) {
   return out
 }
 
+// Sets `key: value` in the front matter, inserting it before the closing
+// fence if absent; an empty value removes the key (estimate and done_by
+// are optional, and "absent" is how §6 spells "not set"). A line whose
+// value already equals `value` -- as written, or ignoring a trailing
+// "# comment" -- is left untouched, so saving the Edit goal dialog without
+// changing the estimate keeps the coach's "estimate: 6   # was 9" note.
+function setFrontMatterValue(lines, key, value) {
+  var fm = findFrontMatter(lines)
+  if (!fm) return null
+  var out = lines.slice()
+  var v = (value === undefined || value === null) ? "" : String(value).replace(/[\r\n]+/g, " ").trim()
+  var re = new RegExp("^" + key + ":\\s?(.*)$")
+  for (var i = fm.open + 1; i < fm.close; i++) {
+    var m = rtrim(out[i]).match(re)
+    if (!m) continue
+    if (v === "") { out.splice(i, 1); return out }
+    var current = m[1].trim()
+    if (current === v || current.replace(/\s*#.*$/, "") === v) return out
+    out[i] = key + ": " + v
+    return out
+  }
+  if (v !== "") out.splice(fm.close, 0, key + ": " + v)
+  return out
+}
+
+// The Edit goal dialog's fields, applied one key at a time. The slug (and
+// so the file name) never changes: <slug>.log.md and the engine's active
+// goal both point at it.
+function updateGoalFields(lines, fields) {
+  if (String(fields.title || "").trim() === "") return null
+  var out = setFrontMatterValue(lines, "title", fields.title)
+  if (out) out = setFrontMatterValue(out, "why", fields.why)
+  if (out) out = setFrontMatterValue(out, "estimate", fields.estimate)
+  if (out) out = setFrontMatterValue(out, "done_by", fields.doneBy)
+  return out
+}
+
 // ---- tasks -------------------------------------------------------------
 function findTasksSection(lines) {
   for (var i = 0; i < lines.length; i++) {
@@ -148,6 +185,36 @@ function addTask(lines, taskText) {
   }
   out.splice(anchor, 0, "## Tasks", "- [ ] " + text)
   return out
+}
+
+// Replaces the Nth task line's text (same 0-indexed order as toggleTask),
+// keeping its "[ ]"/"[x]" marker and any trailing "≈N" estimate untouched
+// -- Parser.parseTasks() strips the estimate into its own field, so an
+// edit driven from that field's .text must not clobber it. Blank text
+// deletes the task line: emptying a task and saving it means "remove it".
+// Returns null (do not write) for an out-of-range index, same as
+// toggleTask.
+function editTask(lines, taskIndex, newText) {
+  var text = String(newText || "").replace(/[\r\n]+/g, " ").trim()
+
+  var sec = findTasksSection(lines)
+  if (!sec) return null
+  var out = lines.slice()
+  var seen = -1
+  for (var i = sec.start; i < sec.end; i++) {
+    var m = out[i].match(/^(-\s*\[)( |x|X)(\]\s*)(.*)$/)
+    if (!m) continue
+    seen++
+    if (seen === taskIndex) {
+      if (text === "") { out.splice(i, 1); return out }
+      var body = m[4].replace(/\s+$/, "")
+      var em = body.match(/\s*≈\d+\s*$/)
+      var suffix = em ? em[0].replace(/^\s+/, " ") : ""
+      out[i] = m[1] + m[2] + m[3] + text + suffix
+      return out
+    }
+  }
+  return null
 }
 
 // ---- cancel note ----------------------------------------------------------

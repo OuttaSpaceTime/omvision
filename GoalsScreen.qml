@@ -16,6 +16,7 @@ Item {
   signal openGoal(string slug)
   signal addEventRequested()
   signal newGoalRequested()
+  signal editGoalRequested(string slug)
 
   property string filterStatus: "active"
 
@@ -126,7 +127,7 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
           spacing: Theme.spaceMd
           Repeater {
-            model: ["active", "paused", "done", "cancelled"]
+            model: ["active", "done", "cancelled"]
             delegate: Text {
               required property string modelData
               readonly property bool isSelected: root.filterStatus === modelData
@@ -181,7 +182,10 @@ Item {
 
             readonly property var g: modelData
             readonly property bool isSelected: root.selectedSlug === g.slug
-            property bool hovered: false
+            // Passive, so the row stays hovered while the pointer is over
+            // the edit pencil's own MouseArea.
+            HoverHandler { id: rowHover }
+            readonly property bool hovered: rowHover.hovered
             readonly property bool highlighted: hovered || isSelected
 
             // Full width of the (already bled) scroller, so the hover and
@@ -302,15 +306,36 @@ Item {
                   color: Theme.faint
                 }
               }
+
+              Item {
+                id: goalPencilSlot
+                Layout.preferredWidth: goalPencil.implicitWidth
+              }
             }
 
             MouseArea {
               anchors.fill: parent
-              hoverEnabled: true
               cursorShape: Qt.PointingHandCursor
-              onEntered: rowItem.hovered = true
-              onExited: rowItem.hovered = false
               onClicked: root.openGoal(rowItem.g.slug)
+            }
+
+            // Overlaid rather than inside rowContent, and declared after the
+            // row's MouseArea, so its click wins over "open goal". Its width
+            // is held open in rowContent by goalPencilSlot, so the why and
+            // caption lines elide short of it and hovering shifts nothing.
+            PencilIcon {
+              id: goalPencil
+              visible: rowItem.hovered
+              anchors.right: parent.right
+              anchors.rightMargin: Theme.panelPadding
+              anchors.verticalCenter: parent.verticalCenter
+
+              MouseArea {
+                anchors.fill: parent
+                anchors.margins: -6
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.editGoalRequested(rowItem.g.slug)
+              }
             }
           }
         }

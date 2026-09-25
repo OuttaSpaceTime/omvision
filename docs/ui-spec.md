@@ -64,8 +64,14 @@ write and brings it back from its own control — see **Screen: Journal**.
 
 Header row: `Goals` at heading size bold, then `Add event` and `New goal` buttons pushed
 right. Under it, a band between two hairlines holding the filter chips (`active N`,
-`paused N`, `done N`, `cancelled N`, caption — the selected one underlined in accent), at the
-same left edge as the goal titles.
+`done N`, `cancelled N`, caption — the selected one underlined in accent), at the same left
+edge as the goal titles. There is no paused status.
+
+Hovering a goal row shows the pencil (`PencilIcon.qml`: Font Awesome U+F040 at its own diagonal, 16px, dim) at its right end, centred vertically;
+its width is always reserved, so it shifts nothing. Clicking it opens the New goal dialog as `Edit goal`, pre-filled, with `Save`. Saving
+rewrites only the front-matter keys that changed (a coach's `# was 9` note on an untouched
+estimate survives); clearing estimate or done-by removes the key. The slug and file name
+never change.
 
 One row per goal, hairline-separated, sized to its text. Each row bleeds a page margin past
 the column on both sides, padding restored inside, so a fill runs past the text. Selected or
@@ -98,10 +104,17 @@ size, and the `done:`/`left:`/`else:` lines beneath at bodySmall in dim, all wra
 
 **Right rail** — caption heading `Tasks` with `N of M done` beside it and a small `+ task`
 button; then one row per task, hairline-separated, each a checkbox (checked and struck through
-when done) with the task text and an optional `≈N` estimate at the right. When there are no
+when done) with the task text and an optional `≈N` estimate at the right. Long task text wraps
+onto more lines (the row grows; it never elides); checkbox and estimate line up with
+the first line. Hovering a row shows the pencil at its end, centred on the whole row;
+its slot is always reserved, so hovering never re-wraps the text. Clicking it turns the text
+into an inline wrapping field with the cursor at the end, nothing selected (Enter saves,
+Escape cancels, the `≈N` estimate is kept; saving it empty deletes the task). Clicking anywhere
+else on the row ticks it. When there are no
 tasks yet, this line at caption size in faint: "Tasks belong to the goal, not to a pomodoro. A
 finished pom never ticks one off — you do, or the coach does." At the bottom, while the goal is open,
-`Close goal · done` and a red `Cancel`. The coaching hand-off lives on the Coaching screen
+`Close goal · done` and a red `Cancel`; on a done goal, `Reopen goal` instead, which sets it
+back to active. The coaching hand-off lives on the Coaching screen
 only.
 
 ## Screen: Journal
