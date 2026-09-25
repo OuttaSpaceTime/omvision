@@ -31,7 +31,7 @@ Item {
   // reuses the exact same icon rather than a different shape, distinguished
   // only by color.
   readonly property url iconSource: paused ? Qt.resolvedUrl("icons/pause.svg")
-    : Qt.resolvedUrl("icons/pomodoro.svg")
+    : Qt.resolvedUrl("icons/omvision-mark.svg")
 
   implicitWidth: Math.max(Style.space(52), row.implicitWidth + Style.space(16))
   implicitHeight: barSize
@@ -102,13 +102,15 @@ Item {
     anchors.centerIn: parent
     spacing: Style.space(6)
 
-    // The main icon: the tomato normally (dimmed when off), swapped for the
-    // pause glyph only while paused — not a second icon added alongside it.
+    // The main icon: the Omvision mark normally (dimmed when off), swapped for
+    // the pause glyph only while paused — not a second icon added alongside it.
+    // Title size (14px): at body size (12px) the mark's gate ticks vanish, and
+    // heading size (16px) looked too big beside the countdown.
     Item {
       id: icon
       anchors.verticalCenter: parent.verticalCenter
-      width: Style.font.body
-      height: Style.font.body
+      width: Style.font.title
+      height: Style.font.title
 
       Image {
         id: iconSvg

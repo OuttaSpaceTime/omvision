@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Omvision mark: tight double seal with four gates. The lambda is the U+03BB outline
+       from Noto Serif Display Black (SIL Open Font License 1.1), thickened by a 2-unit stroke. -->
+  <g fill="none" stroke="#000">
+    <rect x="4" y="4" width="92" height="92" stroke-width="4.5"/>
+    <rect x="11" y="11" width="78" height="78" stroke-width="1.8"/>
+    <path d="M50 4V11M50 89V96M4 50H11M89 50H96" stroke-width="2.4"/>
+  </g>
+  <path fill="#000" stroke="#000" stroke-width="2" stroke-linejoin="round" d="M21.78 88 46.78 32.8Q44.88 28.6 42.33 26.9Q39.78 25.2 35.88 24.85Q31.98 24.5 25.98 24.5Q25.98 17.4 28.03 14.2Q30.08 11 33.98 11Q35.98 11 37.63 11.7Q39.28 12.4 40.83 14.5Q42.38 16.6 44.18 20.55Q45.98 24.5 48.38 31.1L64.78 76.7Q66.68 82 69.08 84.25Q71.48 86.5 74.88 86.5Q77.78 86.5 79.48 85.45Q81.18 84.4 82.18 83.5L82.68 84.4Q81.38 86 78.73 87.5Q76.08 89 73.48 89Q71.08 89 69.18 88.15Q67.28 87.3 65.73 84.9Q64.18 82.5 62.58 77.9L53.78 52.7H53.18L41.98 88Z"/>
+</svg>
