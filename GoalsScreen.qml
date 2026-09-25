@@ -7,6 +7,9 @@ import "Parser.js" as Parser
 Item {
   id: root
 
+  // How far this screen's left edge sits from the window's; see Theme.pageX.
+  property int leftInset: 0
+
   property var goalsData: ({})
   property var todaySummary: ({ poms: 0, minutes: 0 })
   property string selectedSlug: ""
@@ -58,8 +61,11 @@ Item {
   }
 
   Column {
-    anchors.fill: parent
-    anchors.margins: Theme.panelPadding
+    // The journal's column, on the journal's line (Theme.pageX).
+    x: Theme.pageX(root.width, root.leftInset)
+    y: Theme.panelPadding
+    width: Theme.pageWidth(root.width)
+    height: root.height - Theme.panelPadding * 2
     spacing: Theme.sectionGap
 
     // Header. The title and the buttons own the first row and never move.
@@ -98,12 +104,12 @@ Item {
       // is also why the chips sit at the same left edge as the goal titles.
       Item {
         width: parent.width
-        height: 14
+        height: Theme.spaceLg
       }
 
       Rectangle {
         width: parent.width
-        height: filters.implicitHeight + 20
+        height: filters.implicitHeight + Theme.spaceXl
         color: "transparent"
 
         Rectangle {
@@ -151,10 +157,10 @@ Item {
     }
 
     // ---- goal rows -----------------------------------------------------
-    // The list spans the full content area, wider than the padded column it
-    // sits in, so a row's fill can run edge to edge. It clips, so a row
-    // cannot bleed by drawing at negative x -- the scroller itself has to be
-    // the wide thing. The row content is inset back to the text's left edge.
+    // The list is wider than the column it sits in, by a page margin on each
+    // side, so a row's fill runs past the text into the margin. It clips, so
+    // a row cannot bleed by drawing at negative x -- the scroller itself has
+    // to be the wide thing. The row content is inset back to the column.
     Flickable {
       x: -Theme.panelPadding
       width: parent.width + Theme.panelPadding * 2
@@ -183,8 +189,11 @@ Item {
             // back to the same left edge as the title and the filter chips.
             // That inset is what gives the fill breathing room around the
             // text without indenting the text itself.
+            // Sized to its text, not a fixed height: a fixed 78px row was
+            // only ever right for one type size and clipped the caption line
+            // as soon as the type grew.
             width: rowsColumn.width
-            height: 78
+            height: rowContent.implicitHeight + Theme.rowPadding * 2
             color: highlighted ? Theme.fill : "transparent"
 
             Rectangle {
@@ -211,6 +220,7 @@ Item {
             // Undoes the bleed for the content: the text lines up with the
             // header above, the fill around it does not.
             RowLayout {
+              id: rowContent
               anchors.fill: parent
               anchors.leftMargin: Theme.panelPadding
               anchors.rightMargin: Theme.panelPadding
@@ -238,7 +248,6 @@ Item {
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.captionSize
                     font.bold: true
-                    font.capitalization: Font.AllUppercase
                     color: Theme.accentColor
                   }
                   Text {
@@ -247,7 +256,6 @@ Item {
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.captionSize
                     font.bold: true
-                    font.capitalization: Font.AllUppercase
                     color: Theme.red
                   }
                 }
@@ -276,17 +284,17 @@ Item {
                   Layout.fillWidth: true
                   elide: Text.ElideRight
                   text: {
-                    var parts = [doneCount + " OF " + rowItem.g.meta.tasks.length + " TASKS DONE"]
+                    var parts = [doneCount + " of " + rowItem.g.meta.tasks.length + " tasks done"]
                     // `estimate:` is poms REMAINING, not the goal's total
                     // (goal-files.md: the coach rewrites it down each
                     // session, it doesn't start high and get subtracted
                     // from) -- so this is a direct read, never poms - est.
-                    // Spelled out as "POMS LEFT", not just "LEFT": sitting
-                    // right after "N OF M TASKS DONE" in the same caption,
+                    // Spelled out as "poms left", not just "left": sitting
+                    // right after "N of M tasks done" in the same caption,
                     // a bare number reads as a second fraction over the
                     // same M -- it isn't, it's a different unit entirely.
-                    if (est !== undefined) parts.push("≈ " + est + " POMS LEFT")
-                    parts.push("LAST SESSION " + root.lastSessionLabel(rowItem.g.logEntries).toUpperCase())
+                    if (est !== undefined) parts.push("≈ " + est + " poms left")
+                    parts.push("last session " + root.lastSessionLabel(rowItem.g.logEntries))
                     return parts.join(" · ")
                   }
                   font.family: Theme.fontFamily

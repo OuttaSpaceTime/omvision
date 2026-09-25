@@ -92,8 +92,8 @@ FocusScope {
   Rectangle {
     id: card
     anchors.centerIn: parent
-    width: Math.min(440, parent.width - 40)
-    height: content.height + 36
+    width: Math.min(Theme.dialogWidth, parent.width - Theme.space2xl * 2)
+    height: content.height + Theme.spaceXl * 2
     color: Theme.paper
     border.color: Theme.border
     border.width: 2
@@ -107,8 +107,8 @@ FocusScope {
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.top: parent.top
-      anchors.margins: Theme.spaceLg
-      spacing: Theme.spaceMd
+      anchors.margins: Theme.spaceXl
+      spacing: Theme.spaceLg
 
       Text {
         text: "New goal"
@@ -126,11 +126,10 @@ FocusScope {
         spacing: Theme.spaceXs
         Text {
           // The only required field; "*" marks it instead of a header caption.
-          text: "TITLE *"
+          text: "Title *"
           font.family: Theme.fontFamily
           font.pixelSize: Theme.captionSize
           font.bold: true
-          font.letterSpacing: 1.2
           color: Theme.dim
         }
         Rectangle {
@@ -163,11 +162,10 @@ FocusScope {
         Layout.fillWidth: true
         spacing: Theme.spaceXs
         Text {
-          text: "WHY"
+          text: "Why"
           font.family: Theme.fontFamily
           font.pixelSize: Theme.captionSize
           font.bold: true
-          font.letterSpacing: 1.2
           color: Theme.dim
         }
         Rectangle {
@@ -200,14 +198,16 @@ FocusScope {
         Layout.fillWidth: true
         spacing: Theme.spaceSm
         ColumnLayout {
+          // Fixed, explicitly: its field's fillWidth would otherwise make
+          // this whole column fill too, and it squeezed its neighbour.
           Layout.preferredWidth: 120
+          Layout.fillWidth: false
           spacing: Theme.spaceXs
           Text {
-            text: "ESTIMATE (POMS)"
+            text: "Estimate (poms)"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.captionSize
             font.bold: true
-            font.letterSpacing: 1.2
             color: Theme.dim
           }
           Rectangle {
@@ -237,11 +237,10 @@ FocusScope {
           Layout.fillWidth: true
           spacing: Theme.spaceXs
           Text {
-            text: "DONE BY (YYYY-MM-DD)"
+            text: "Done by (YYYY-MM-DD)"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.captionSize
             font.bold: true
-            font.letterSpacing: 1.2
             color: Theme.dim
           }
           Rectangle {

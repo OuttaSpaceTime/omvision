@@ -14,6 +14,76 @@ Milestones 2, 3 and 4 are in: it reads and writes `~/Notes/Omvision/goals/*.md`,
 `~/.claude/skills/ompom-coach/SKILL.md`. The UI spec is `docs/ui-spec.md`, the layout rules are
 `docs/layout-rules.md`, and the file contract is `~/Code/ompom-engine/docs/goal-files.md`.
 
+## Landed 2026-09-24 (ompom-engine, deployed, not committed)
+
+- **Overlay buttons match Omvision's `Button.qml`**: square, 1px border at 40% foreground,
+  transparent with an 8% hover fill, 28px tall; `primary` is Omvision's `filled`.
+- **Break notes**: order is now What's done? → What's left? → **What else?** (renamed from
+  "Anything else?", still saved as `else:`). The header is a slim 22px `←` and a
+  `BREAK NOTES` caption, 32px from the top edge with 32px before the first heading.
+- **Esc after collapsing a section works.** A hidden TextEdit drops keyboard focus, so
+  collapsing the section with the caret left nothing focused and Esc did nothing (verified
+  offscreen). `notesPage.toggleSection()` now hands focus to the next open section, or to
+  the page, which also takes Esc.
+- Deployed by copying `Service.qml`, `OverlayButton.qml` and `notes-helper.py` into
+  `~/.config/omarchy/plugins/ompom.engine/` (a plain copy, not chezmoi-managed); the shell
+  reloads the plugin on save, which resets the running pomodoro.
+
+- **Live demo**: `~/Code/ompom-engine/bin/ompom-demo` (skill `/ompom-demo`, chezmoi-managed
+  in `~/Code/system`) runs the real `Service.qml` with `demo: true` in its own `qs`: 5s
+  timers, no writes, IPC target `ompom-demo`, Ctrl+Q quits. Verified live: the real engine
+  kept its own timer and nothing under `~/Notes/Omvision` or `~/.local/state/omvision`
+  changed. `qs` offscreen can't load it (no PanelWindow backend). The demo flag is in the
+  repo only; the deployed copy predates it, so `--live` refuses until the next deploy.
+
+- **Overlay writing = journal writing.** The intent line and all three break-note fields
+  load omvision's `MarkdownHighlight` (via ompom's `NoteHighlighterHost.qml`) with
+  `JournalHighlight.qml`'s settings: 15pt, 135% line height, markers solved at 2:1 contrast,
+  quotes at 4.5:1, 4% code fill, accent selection. Checked offscreen with markdown in every
+  field. ompom's own `Ompom.Highlight` is no longer imported (its sources are still there).
+- **`highlighter/build.sh` builds with hidden visibility and renames into place.** Both
+  libraries export a C++ class named `MarkdownHighlighter`; loaded into one process they
+  could bind to each other's symbols. Now only `qt_plugin_*` is exported (checked with
+  `nm -D`), and the journal still styles (`bin/shot -s journal`).
+- **Deployed 22:22** (with omvision-25's cycleMode() logging change): `MarkdownHighlight/`
+  installed-then-renamed into `~/.config/omarchy/plugins/ompom.engine/native/`, QML the
+  same way, then `omarchy restart shell`. Checked in `/proc/<pid>/maps`: the new shell
+  maps only `native/MarkdownHighlight/libmarkdownhighlight.so`, not `libompomhighlight`.
+  The engine came back in a fresh focus run. Deploy the omvision highlighter again after
+  any change to `highlighter/`.
+
+Open from this round: the intent screen ("What's your focus?") still has the old large
+header, and its goal line and every `NORMAL` mode label use `Color.muted`, which is
+barely readable on light themes.
+
+## Landed 2026-09-24
+
+- **The whole app is set like the journal's page** (the user picked "Journal page" from
+  three variants, each screenshotted from a throwaway copy of the repo). Type went up to
+  caption 12 / body 15 / title 17 / heading 24, page margins 32 → 64, section gaps 24 → 32,
+  controls 28 → 32 and small controls 20 → 24. Labels are in sentence case throughout,
+  dialogs included, and wrapped prose gets 1.4 leading (`Theme.proseLineHeight`).
+- **One page column.** Every screen's text sits in the journal's 70-character column on the
+  journal's own vertical line (`Theme.pageMeasure`, `Theme.pageX`, `Theme.pageWidth`).
+  It's centred on the window, so the journal's text no longer shifts 32px when the sidebar
+  slides in. Measured across the animation frames with `bin/shot -a sidebar`.
+- **Bugs this surfaced, all fixed:** the timeline node was a 1px sliver (two horizontal
+  anchors); the timeline's day summary drifted to mid-row (no fill item); the event
+  dialog's `When` field was squeezed until it clipped (inherited `fillWidth`); the fixed
+  312px task rail left the timeline ~15 characters a line at 720px, then overflowed the
+  window once made proportional (floored at its control rows now); goal rows had a fixed
+  78px height.
+- **Everything mouse-driven has now been clicked**, by the user, closing the old open item
+  that no agent could (there is no click-simulation tool on this machine). That covers
+  ticking a task, the back control, the filter chips and every dialog, including New goal
+  and `Coach this goal`.
+- `bin/shot -a event|newgoal|cancel` opens a dialog for a screenshot. Fixture data goes
+  through `HOME=<scratch dir>` (docs/layout-rules.md, "Screenshotting"), which is how the
+  timeline was checked: the real notes have no goal with log entries.
+- Not checked by eye: a done/cancelled goal's detail rail, a coaching screen with past
+  sessions, and a Goals row while hovered or selected. Nothing in them changed except
+  tokens.
+
 ## Landed 2026-09-23
 
 - **The journal is off goals.** An entry is a day, not a goal:
@@ -55,21 +125,15 @@ Milestones 2, 3 and 4 are in: it reads and writes `~/Notes/Omvision/goals/*.md`,
 
 ## Open
 
-1. **Nothing mouse-driven has ever been clicked.** There is no click-simulation tool on this
-   machine (no ydotool/wlrctl/xdotool, and installing one needs sudo), so every agent has
-   verified its work by calling the same functions a click would — over IPC, from a test
-   harness, or by keyboard. The wiring is there in each case. A pass with an actual mouse over
-   ticking a task, the back control, the filter chips and every dialog (including the newer
-   New goal modal and `Coach this goal`) would close this out.
-2. **`~/.claude/skills/ompom-coach/SKILL.md` is still not chezmoi-managed.** It was edited
+1. **`~/.claude/skills/ompom-coach/SKILL.md` is still not chezmoi-managed.** It was edited
    in place (journal path, and the new `else:` line), so that edit lives only on this
    machine. Adding it to `~/Code/system` is still open.
-3. **`~/Code/ompom-engine/docs/goal-files.md` is untracked** in that repo (`?? docs/`), so
+2. **`~/Code/ompom-engine/docs/goal-files.md` is untracked** in that repo (`?? docs/`), so
    the `else:` documentation is not under version control there either.
-4. **Two write-failure paths have never been seen to fire**: the journal's `Theme.red` line on
+3. **Two write-failure paths have never been seen to fire**: the journal's `Theme.red` line on
    `saveFailed`, and the goal-file queue's failure branch. Forcing them needs a read-only
    directory, which the sandbox blocked.
-5. **A journal opened before its files have loaded stays blank over a non-empty day.** Found
+4. **A journal opened before its files have loaded stays blank over a non-empty day.** Found
    2026-09-24 with `bin/shot`, which then switched to the journal at startup. The page showed
    empty with "0 words" while today's file held 20 bytes. Logged state: `syncBufferFromDisk()`
    does run when `journalContents` changes, but (a) at that moment `entries` hasn't been

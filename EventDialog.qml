@@ -109,8 +109,8 @@ FocusScope {
   Rectangle {
     id: card
     anchors.centerIn: parent
-    width: Math.min(520, parent.width - 40)
-    height: content.height + 36
+    width: Math.min(Theme.dialogWidth, parent.width - Theme.space2xl * 2)
+    height: content.height + Theme.spaceXl * 2
     color: Theme.paper
     border.color: Theme.border
     border.width: 2
@@ -124,8 +124,8 @@ FocusScope {
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.top: parent.top
-      anchors.margins: Theme.spaceLg
-      spacing: Theme.spaceMd
+      anchors.margins: Theme.spaceXl
+      spacing: Theme.spaceLg
 
       RowLayout {
         Layout.fillWidth: true
@@ -143,8 +143,6 @@ FocusScope {
           text: "time that wasn't a pomodoro"
           font.family: Theme.fontFamily
           font.pixelSize: Theme.captionSize
-          font.capitalization: Font.AllUppercase
-          font.letterSpacing: 1.2
           color: Theme.dim
         }
       }
@@ -161,8 +159,8 @@ FocusScope {
             required property string modelData
             required property int index
             readonly property bool selected: root.kindIndex === index
-            height: 22
-            width: chipLabel.implicitWidth + 16
+            height: Theme.smallControlHeight
+            width: chipLabel.implicitWidth + Theme.spaceLg
             color: selected ? Theme.accentFill : "transparent"
             border.color: selected ? Theme.accentColor : Theme.hairline
             border.width: 1
@@ -188,11 +186,10 @@ FocusScope {
         Layout.fillWidth: true
         spacing: Theme.spaceXs
         Text {
-          text: "WHAT"
+          text: "What"
           font.family: Theme.fontFamily
           font.pixelSize: Theme.captionSize
           font.bold: true
-          font.letterSpacing: 1.2
           color: Theme.dim
         }
         Rectangle {
@@ -228,11 +225,10 @@ FocusScope {
           Layout.fillWidth: true
           spacing: Theme.spaceXs
           Text {
-            text: "WHEN"
+            text: "When"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.captionSize
             font.bold: true
-            font.letterSpacing: 1.2
             color: Theme.dim
           }
           Rectangle {
@@ -259,14 +255,16 @@ FocusScope {
           }
         }
         ColumnLayout {
+          // Fixed, explicitly: its field's fillWidth would otherwise make
+          // this whole column fill too, and it squeezed its neighbour.
           Layout.preferredWidth: 120
+          Layout.fillWidth: false
           spacing: Theme.spaceXs
           Text {
-            text: "HOW LONG"
+            text: "How long"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.captionSize
             font.bold: true
-            font.letterSpacing: 1.2
             color: Theme.dim
           }
           Rectangle {
@@ -299,11 +297,10 @@ FocusScope {
         Layout.fillWidth: true
         spacing: Theme.spaceXs
         Text {
-          text: "GOAL"
+          text: "Goal"
           font.family: Theme.fontFamily
           font.pixelSize: Theme.captionSize
           font.bold: true
-          font.letterSpacing: 1.2
           color: Theme.dim
         }
         Flow {
@@ -312,8 +309,8 @@ FocusScope {
 
           Rectangle {
             readonly property bool selected: root.selectedSlug === ""
-            height: 22
-            width: noGoalLabel.implicitWidth + 16
+            height: Theme.smallControlHeight
+            width: noGoalLabel.implicitWidth + Theme.spaceLg
             color: selected ? Theme.accentFill : "transparent"
             border.color: selected ? Theme.accentColor : Theme.hairline
             border.width: 1
@@ -333,8 +330,8 @@ FocusScope {
             delegate: Rectangle {
               required property var modelData
               readonly property bool selected: root.selectedSlug === modelData.slug
-              height: 22
-              width: goalLabel.implicitWidth + 16
+              height: Theme.smallControlHeight
+              width: goalLabel.implicitWidth + Theme.spaceLg
               color: selected ? Theme.accentFill : "transparent"
               border.color: selected ? Theme.accentColor : Theme.hairline
               border.width: 1
@@ -354,7 +351,7 @@ FocusScope {
 
       Item {
         Layout.fillWidth: true
-        Layout.preferredHeight: 20
+        Layout.preferredHeight: Theme.smallControlHeight
         RowLayout {
           anchors.fill: parent
           spacing: Theme.spaceSm

@@ -112,14 +112,20 @@ QtObject {
   readonly property color red: redColor
 
   // ---- type scale (spec §Tokens) -------------------------------------------
+  // Sized against the journal, not against a toolbar. The app used to set its
+  // text at 10-12px, which read as UI chrome next to the journal's 15pt page:
+  // the screens around the writing felt like a different, busier app. Body
+  // text is now 15px -- a notch under the journal's 20px so the writing stays
+  // the largest text in the app -- and a screen's title is the one large thing
+  // on it, the way a page has one heading.
   readonly property string fontFamily: "monospace"
-  readonly property int captionSize: 10
-  readonly property int bodySmallSize: 11
-  readonly property int bodySize: 12
-  readonly property int subtitleSize: 13
-  readonly property int titleSize: 14
-  readonly property int headingSize: 16
-  readonly property int displaySize: 24
+  readonly property int captionSize: 12
+  readonly property int bodySmallSize: 14
+  readonly property int bodySize: 15
+  readonly property int subtitleSize: 16
+  readonly property int titleSize: 17
+  readonly property int headingSize: 24
+  readonly property int displaySize: 32
 
   // ---- spacing scale -------------------------------------------------------
   // One scale, 4px based, and every margin and gap in the app comes from it.
@@ -141,14 +147,32 @@ QtObject {
   // Named for what they are, defined by the scale. These are the ones a
   // screen should reach for; the raw steps above are for the gaps inside a
   // component that has no name of its own.
-  readonly property int panelPadding: space2xl // every screen's page margin
-  readonly property int sectionGap: spaceXl    // between a header and its content
+  // Every screen's page margin, the journal's included. It was the
+  // journal's own gutter first: at 40px the column sat too close to the
+  // window edge to read as a page, and 32 did the same to the other screens
+  // once their text grew toward the journal's.
+  readonly property int panelPadding: space4xl
+  readonly property int sectionGap: space2xl   // between a header and its content
   readonly property int rowGap: spaceMd        // between list rows' contents
   readonly property int rowPadding: spaceXl    // a list row's text to its hairline
 
+  // Wrapped prose -- a break note, a coaching summary -- is read, not
+  // scanned, so it gets leading closer to the journal's. Single-line labels
+  // keep the font's own line height: extra leading there only pushes a label
+  // off the control or marker it sits beside.
+  readonly property real proseLineHeight: 1.4
+
   // ---- geometry -------------------------------------------------------------
   readonly property int radius: 0
-  readonly property int controlHeight: 28
+  // 32, not 28: at 15px a label in a 28px box touched its border top and
+  // bottom. Still quiet -- 1px hairline, no fill (layout-rules §9).
+  readonly property int controlHeight: 32
+  // Small secondary actions (`+ task`, `copy`) and the inline field they
+  // open. Was a typed 20 in each place, which a 15px label no longer fits.
+  readonly property int smallControlHeight: 24
+  // Every modal card. The dialogs were 440 and 520 and padded 16px, which
+  // read as a cramped form once their text grew to match the pages behind.
+  readonly property int dialogWidth: 560
   readonly property int hairlineWidth: 1
   readonly property int borderWidth: 1
 
@@ -169,10 +193,42 @@ QtObject {
   // writing size or font: the column is as wide as this many monospace
   // characters, and the screen only decides whether it fits.
   readonly property int writingColumns: 70
-  // The page's own margins, sized against the 15pt text rather than against
-  // the 12px UI elsewhere in the app: at 40px the column sat too close to the
-  // window edge to read as a page.
-  readonly property int writingGutter: space4xl
+
+  // ---- the page column -----------------------------------------------------
+  // Every screen sets its text in the journal's column: the same measure, on
+  // the same vertical line in the window. Moving between Journal and Goals
+  // then changes what is on the page, not where the page is, and the other
+  // screens read as pages of the same notebook instead of a dashboard around
+  // it. Full-width screens were rejected because a 1300px line of break notes
+  // is not something anyone reads, and a column pinned to the rail because
+  // it would put the journal's left edge and everyone else's in two places.
+  //
+  // The measure comes off the writing font, as the journal's always did, so
+  // it follows the writing size instead of being a pixel number that
+  // silently drifts from it.
+  property FontMetrics writingMetrics: FontMetrics {
+    font.family: root.fontFamily
+    font.pointSize: root.writingPointSize
+  }
+  readonly property int pageMeasure: Math.round(writingMetrics.advanceWidth("0") * writingColumns)
+  readonly property int railWidth: 64
+
+  // The column's width inside an area `areaWidth` wide: the measure, or less
+  // when the area can't hold it plus a margin on each side.
+  function pageWidth(areaWidth) {
+    return Math.max(0, Math.min(pageMeasure, areaWidth - panelPadding * 2))
+  }
+
+  // The column's x inside that area, given how far the area's left edge
+  // sits from the window's (the rail, or 0 when the rail is hidden). Centred
+  // on the *window*, not the area, so the column does not move when the rail
+  // slides in or out -- only the area around it changes. At narrow widths it
+  // stops at the area's own margin rather than sliding under the rail.
+  function pageX(areaWidth, leftInset) {
+    var w = pageWidth(areaWidth)
+    var centred = Math.round((areaWidth + leftInset - w) / 2) - leftInset
+    return Math.max(panelPadding, centred)
+  }
 
   function parseToml(text) {
     var out = {}

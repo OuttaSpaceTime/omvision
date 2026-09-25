@@ -22,6 +22,7 @@ Rectangle {
   property var app: null         // the ShellRoot: currentScreen, openGoalSlug, toggleSidebar()
   property Item target: null     // what to grab: the window's content
   property var journal: null     // JournalScreen, for its day list
+  property var goalDetail: null  // GoalDetailScreen, which owns the cancel dialog's state
 
   readonly property string outDir: Quickshell.env("OMVISION_SHOT_DIR")
   readonly property string screen: Quickshell.env("OMVISION_SHOT_SCREEN") || "goals"
@@ -56,6 +57,11 @@ Rectangle {
   function runAction() {
     if (driver.action === "sidebar") driver.app.toggleSidebar()
     else if (driver.action === "days" && driver.journal) driver.journal.openList(!driver.journal.listOpen)
+    // The dialogs only open -- nothing is typed or submitted, so nothing is
+    // written. Opening one is the same call its button makes.
+    else if (driver.action === "event") driver.app.openEventDialog(driver.app.currentScreen === "goalDetail" ? driver.app.openGoalSlug : "")
+    else if (driver.action === "newgoal") driver.app.openNewGoalDialog()
+    else if (driver.action === "cancel" && driver.goalDetail) driver.goalDetail.cancelDialogOpen = true
     else if (driver.action !== "") console.warn("shot: unknown action", driver.action)
   }
 

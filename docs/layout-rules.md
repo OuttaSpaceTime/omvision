@@ -11,11 +11,17 @@ Layout written without looking at the result has been wrong every single time in
 this repo. After any visual change, screenshot it and **read the image**, at both a
 wide and a narrow window. See "Screenshotting" below: `bin/shot`, offscreen.
 
-## 2. Text aligns at one left edge, per screen
+## 2. Text aligns at one left edge — across the whole app
 
 The screen title, any filter chips and every list row's first character share one
 left edge. Do not indent row content to make room for a selection marker — that is
-what broke it before.
+what broke it before. A control whose label is inset in its own box (`← Goals`) is
+pulled left so the *label* sits on the edge and its hover fill hangs in the margin.
+
+That edge is the same on every screen: each one sets its text in the journal's
+column with `Theme.pageX` / `Theme.pageWidth`, centred on the window rather than on
+the area beside the rail. Don't position a screen's content with `anchors.margins`
+on the full area; the text would jump when you switch to or from the journal.
 
 ## 3. Fills bleed, text does not
 
@@ -42,10 +48,19 @@ A button beside a text field must have its width reserved in the layout, with th
 text taking the remainder and eliding. Letting both size to their content is how the
 `copy` button ended up drawn outside its own container's border.
 
-## 5. `Layout.*` only works inside a `Layout`
+## 5. `Layout.*` only works inside a `Layout`, and spreads upward inside one
 
 `Layout.fillWidth` on a child of a plain `Item`, `Column` or `Row` silently does
 nothing. If you need it, the parent must be a `RowLayout`/`ColumnLayout`/`GridLayout`.
+
+Inside one, a nested layout inherits `fillWidth` from any child that has it. The
+event dialog's 120px `How long` column had a `fillWidth` field in it, so the whole
+column filled too and squeezed `When` until it clipped its own value. A column meant
+to stay fixed says `Layout.fillWidth: false`.
+
+A layout's child must not size itself from that layout's `width` either: the width
+feeds back into the layout's own sizing. Size it from something outside the layout
+(the goal detail rail uses `Theme.pageWidth(root.width)`).
 
 ## 6. Never switch which anchor *lines* are bound between states
 
@@ -54,6 +69,11 @@ item silently fail to lay out at all — this is why the sidebar toggle was invi
 Vary margins, sizes, `x`, `visible` and `parent`; keep the anchor set constant. To
 place one item differently in two containers, bind `parent` and use an `x`
 expression that is correct in both.
+
+Also never bind two anchors on the same axis *and* a size: `left` plus
+`horizontalCenter` makes Qt fit the item between them and ignore its `width`. The
+timeline's 7px node was anchored both ways and rendered as a 1px sliver, unnoticed
+until a screenshot with log entries was read.
 
 ## 7. Degrade by design, never by clipping
 
@@ -71,12 +91,14 @@ far apart that theme's foreground and background happen to be.
 
 `Theme.secondaryInk`, `Theme.dim` and `Theme.faint` are solved for at runtime:
 each is the lightest blend of foreground toward background that still meets a
-contrast target (7, 5.5, 4.5). Every one of them is used at 10–13px, so none may go
+contrast target (7, 5.5, 4.5). Every one of them is used at 12–15px, so none may go
 below the 4.5:1 AA floor for small text. Use those tokens; do not invent a new grey.
 
 ## 9. Controls are quiet
 
-Control height 28, small secondary actions 20. A control must not be the loudest
+Control height 32, small secondary actions 24 (`Theme.controlHeight`,
+`Theme.smallControlHeight`; they were 28 and 20 until the type grew to 15px, when
+labels touched their borders). A control must not be the loudest
 thing on its screen: `+ task` at twice its height and a solid accent checkbox both
 had to be pulled back. Square corners, 1px hairlines, no shadows.
 
@@ -93,6 +115,7 @@ bin/shot -w 720                            # narrow (720 is the window's minimum
 bin/shot -s goal:<slug>                    # a goal's detail screen
 bin/shot -s journal -a sidebar -f 0,40,200 # toggle the sidebar, grab 3 frames
 bin/shot -s journal -a days    -f 0,40,200 # open the day list, grab 3 frames
+bin/shot -a event                          # a dialog: event | newgoal | cancel (on goal:<slug>)
 bin/shot -o <dir>                          # default dir: $TMPDIR/omvision-shots
 ```
 
@@ -112,10 +135,18 @@ Things to know:
   takes about 50–80ms, so a 40ms frame may really land at 80ms. The driver logs the
   actual time next to each file.
 - **Switch screens late, never at startup.** A journal opened before its files have
-  loaded stays blank (TODO.md, Open 5). The driver switches only after `-t` for this
+  loaded stays blank (TODO.md, Open 4). The driver switches only after `-t` for this
   reason. If a screen looks empty, suspect that before suspecting the layout.
 - **It only reads.** It never types, so nothing under `~/Notes` changes. Keep it that way
-  if you add actions: the data is the user's real data.
+  if you add actions: the data is the user's real data. The dialog actions only open a
+  dialog, the way its button does.
+- **Your notes may not exercise a screen.** The real data has, for instance, no goal
+  with log entries, so the timeline never appears in a real-data shot. The notes live
+  under `$HOME`, so point `HOME` at a fixture instead of adding test data to `~/Notes`:
+  copy `~/Notes/Omvision` into a scratch dir, add the files you need (the worked
+  example in `goal-files.md` covers tasks, pomodoros, an event and coaching), and
+  symlink `.local/state/omarchy/current` so the live theme still loads. Then run
+  `HOME=<scratch> bin/shot …`.
 - **Mouse input can't be simulated offscreen either.** Drive state through the same
   functions a click would call (see `runAction()` in `ShotDriver.qml`).
 

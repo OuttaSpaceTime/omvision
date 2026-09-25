@@ -82,8 +82,8 @@ FocusScope {
   Rectangle {
     id: card
     anchors.centerIn: parent
-    width: Math.min(440, parent.width - 40)
-    height: content.height + 36
+    width: Math.min(Theme.dialogWidth, parent.width - Theme.space2xl * 2)
+    height: content.height + Theme.spaceXl * 2
     color: Theme.paper
     border.color: Theme.border
     border.width: 2
@@ -96,8 +96,8 @@ FocusScope {
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.top: parent.top
-      anchors.margins: Theme.spaceLg
-      spacing: Theme.spaceMd
+      anchors.margins: Theme.spaceXl
+      spacing: Theme.spaceLg
 
       ColumnLayout {
         Layout.fillWidth: true
@@ -127,11 +127,10 @@ FocusScope {
         Layout.fillWidth: true
         spacing: Theme.spaceSm
         Text {
-          text: "WHY"
+          text: "Why"
           font.family: Theme.fontFamily
           font.pixelSize: Theme.captionSize
           font.bold: true
-          font.letterSpacing: 1.2
           color: Theme.dim
         }
         Repeater {
@@ -142,7 +141,7 @@ FocusScope {
             required property int index
             readonly property bool selected: root.reasonIndex === index
             Layout.fillWidth: true
-            implicitHeight: 20
+            implicitHeight: Theme.smallControlHeight
 
             RowLayout {
               anchors.fill: parent
@@ -185,11 +184,10 @@ FocusScope {
         Layout.fillWidth: true
         spacing: Theme.spaceXs
         Text {
-          text: "WHAT DO YOU TAKE FROM IT?"
+          text: "What do you take from it?"
           font.family: Theme.fontFamily
           font.pixelSize: Theme.captionSize
           font.bold: true
-          font.letterSpacing: 1.2
           color: Theme.dim
         }
         Rectangle {
@@ -244,7 +242,7 @@ FocusScope {
           onActivated: root.dismissed()
         }
         Rectangle {
-          Layout.preferredWidth: endLabel.implicitWidth + 24
+          Layout.preferredWidth: endLabel.implicitWidth + Theme.spaceXl
           Layout.preferredHeight: Theme.controlHeight
           color: "transparent"
           border.color: Theme.red

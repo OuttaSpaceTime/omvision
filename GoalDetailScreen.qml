@@ -7,6 +7,9 @@ import "Parser.js" as Parser
 Item {
   id: root
 
+  // How far this screen's left edge sits from the window's; see Theme.pageX.
+  property int leftInset: 0
+
   property string slug: ""
   property var meta: null
   property var logEntries: []
@@ -105,15 +108,25 @@ Item {
   }
 
   function entryLabel(e) {
-    if (e.type === "pomodoro") return e.minutes + " MIN"
-    if (e.type === "coaching") return "COACHING"
-    if (e.type === "event") return "EVENT · " + String(e.kind || "").toUpperCase() + " · " + Parser.formatHCaption(e.minutes)
+    if (e.type === "pomodoro") return e.minutes + " min"
+    if (e.type === "coaching") return "coaching"
+    if (e.type === "event") return "event · " + String(e.kind || "") + " · " + Parser.formatHCaption(e.minutes)
     return ""
   }
 
+  TextMetrics {
+    id: timeMetrics
+    font.family: Theme.fontFamily
+    font.pixelSize: Theme.captionSize
+    text: "00:00"
+  }
+
   ColumnLayout {
-    anchors.fill: parent
-    anchors.margins: Theme.panelPadding
+    // The journal's column, on the journal's line (Theme.pageX).
+    x: Theme.pageX(root.width, root.leftInset)
+    y: Theme.panelPadding
+    width: Theme.pageWidth(root.width)
+    height: root.height - Theme.panelPadding * 2
     spacing: Theme.sectionGap
 
     // ---- header ---------------------------------------------------------
@@ -145,11 +158,11 @@ Item {
         Button { label: "Coach this goal"; filled: true; inert: false; onActivated: root.coachRequested() }
       }
 
-      Item { Layout.preferredHeight: 14; Layout.fillWidth: true }
+      Item { Layout.preferredHeight: Theme.spaceLg; Layout.fillWidth: true }
 
       Rectangle {
         Layout.fillWidth: true
-        Layout.preferredHeight: subHeaderRow.implicitHeight + 20
+        Layout.preferredHeight: subHeaderRow.implicitHeight + Theme.spaceXl
         color: "transparent"
 
         Rectangle {
@@ -167,14 +180,18 @@ Item {
           spacing: Theme.spaceMd
 
           // A real control, not a bare Text + MouseArea: sized
-          // deterministically (28px hit target, like the sidebar toggle)
+          // deterministically (a full control's height as its hit target)
           // so the click always lands, with a hover fill so it reads as a
           // control rather than as receding dim text.
           Rectangle {
             id: backControl
             objectName: "backControl"
-            implicitWidth: backLabel.implicitWidth + 12
-            implicitHeight: 28
+            // Its label sits on the column's left edge and the hover fill
+            // spills into the margin, not the other way round (layout-rules
+            // §2, §3).
+            Layout.leftMargin: -Math.round((implicitWidth - backLabel.implicitWidth) / 2)
+            implicitWidth: backLabel.implicitWidth + Theme.spaceMd
+            implicitHeight: Theme.controlHeight
             color: backArea.containsMouse ? Theme.hoverFill : "transparent"
 
             Text {
@@ -201,7 +218,6 @@ Item {
             font.family: Theme.fontFamily
             font.pixelSize: Theme.captionSize
             font.bold: true
-            font.capitalization: Font.AllUppercase
             color: Theme.accentColor
           }
         }
@@ -280,16 +296,16 @@ Item {
 
         Column {
           id: timelineColumn
-          width: parent.width
+          // Clear of the rail's hairline by the same gap the rail keeps on
+          // its side of it; wrapped lines used to run right up to the rule.
+          width: parent.width - Theme.spaceLg
           spacing: Theme.spaceSm
 
           Text {
-            text: "WHAT HAPPENED"
+            text: "What happened"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.captionSize
             font.bold: true
-            font.capitalization: Font.AllUppercase
-            font.letterSpacing: 1.2
             color: Theme.dim
           }
 
@@ -325,6 +341,10 @@ Item {
                   font.pixelSize: Theme.bodySmallSize
                   color: Theme.dim
                 }
+                // Holds the row's surplus width. Without it the layout spread
+                // that width between the two labels and the day's summary
+                // drifted to the middle of the column.
+                Item { Layout.fillWidth: true }
               }
 
               Repeater {
@@ -333,19 +353,24 @@ Item {
                   id: entryRow
                   required property var modelData
                   width: dayBlock.width
-                  height: contentCol.height + 10
+                  height: contentCol.height + Theme.spaceMd
 
                   readonly property var e: modelData
 
                   Text {
                     id: timeText
                     text: entryRow.e.heading.split(" ").pop()
-                    width: 40
+                    // Wide enough for any HH:MM at this size, so every
+                    // entry's rule and node sit on one vertical line. A
+                    // typed 40 fitted 11px digits and clipped larger ones.
+                    width: Math.ceil(timeMetrics.advanceWidth)
                     horizontalAlignment: Text.AlignRight
                     anchors.top: parent.top
                     anchors.left: parent.left
+                    // The entry label's size, so the two top-aligned lines
+                    // also share a baseline across the rule.
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.bodySmallSize
+                    font.pixelSize: Theme.captionSize
                     color: Theme.faint
                   }
 
@@ -361,9 +386,11 @@ Item {
 
                   Rectangle {
                     id: node
+                    // Centred on the rule only. It was also anchored to the
+                    // rule's left edge, and with both set Qt sized it to fit
+                    // between them: the square came out a 1px sliver.
                     width: 7
                     height: 7
-                    anchors.left: rule.left
                     anchors.horizontalCenter: rule.horizontalCenter
                     anchors.top: parent.top
                     anchors.topMargin: Theme.spaceXs
@@ -402,7 +429,6 @@ Item {
                       font.family: Theme.fontFamily
                       font.pixelSize: Theme.captionSize
                       font.bold: true
-                      font.letterSpacing: 1
                       color: Theme.dim
                     }
                     Text {
@@ -410,6 +436,7 @@ Item {
                       width: contentCol.width
                       text: "focus: " + entryRow.e.focus
                       wrapMode: Text.WordWrap
+                      lineHeight: Theme.proseLineHeight
                       font.family: Theme.fontFamily
                       font.pixelSize: Theme.bodySize
                       color: Theme.ink
@@ -419,6 +446,7 @@ Item {
                       width: contentCol.width
                       text: entryRow.e.title ? entryRow.e.title : ""
                       wrapMode: Text.WordWrap
+                      lineHeight: Theme.proseLineHeight
                       font.family: Theme.fontFamily
                       font.pixelSize: Theme.bodySize
                       color: Theme.ink
@@ -428,6 +456,7 @@ Item {
                       width: contentCol.width
                       text: "done: " + entryRow.e.done
                       wrapMode: Text.WordWrap
+                      lineHeight: Theme.proseLineHeight
                       font.family: Theme.fontFamily
                       font.pixelSize: Theme.bodySmallSize
                       color: Theme.dim
@@ -437,6 +466,7 @@ Item {
                       width: contentCol.width
                       text: "left: " + entryRow.e.left
                       wrapMode: Text.WordWrap
+                      lineHeight: Theme.proseLineHeight
                       font.family: Theme.fontFamily
                       font.pixelSize: Theme.bodySmallSize
                       color: Theme.dim
@@ -448,6 +478,7 @@ Item {
                       width: contentCol.width
                       text: "else: " + entryRow.e.other
                       wrapMode: Text.WordWrap
+                      lineHeight: Theme.proseLineHeight
                       font.family: Theme.fontFamily
                       font.pixelSize: Theme.bodySmallSize
                       color: Theme.dim
@@ -467,9 +498,21 @@ Item {
         color: Theme.hairline
       }
 
-      // Right rail
+      // Right rail. A share of the column rather than a fixed 312px: at full
+      // measure that share is the same ~310px, but at the window's minimum
+      // a fixed rail left the timeline -- the screen's actual content --
+      // about fifteen characters a line. Task names elide instead. Never
+      // narrower than its two rows of controls, though, which can't elide
+      // and would otherwise draw past the window edge (layout-rules §7).
+      //
+      // Off the page column's width, not this layout's: a layout reading
+      // its own width to size its children feeds back into itself. And off
+      // those two rows' implicit widths rather than the whole rail's, whose
+      // wrapped hint text reports its unwrapped, full-sentence width.
       Item {
-        Layout.preferredWidth: 312
+        Layout.preferredWidth: Math.max(Math.round(Theme.pageWidth(root.width) * 3 / 8),
+                                        Math.ceil(Math.max(tasksHeader.implicitWidth, closeRow.implicitWidth))
+                                        + Theme.spaceLg * 2)
         Layout.fillHeight: true
 
         ColumnLayout {
@@ -483,14 +526,14 @@ Item {
           spacing: Theme.spaceSm
 
           RowLayout {
+            id: tasksHeader
             Layout.fillWidth: true
             spacing: Theme.spaceSm
             Text {
-              text: "TASKS"
+              text: "Tasks"
               font.family: Theme.fontFamily
               font.pixelSize: Theme.captionSize
               font.bold: true
-              font.letterSpacing: 1.2
               color: Theme.dim
             }
             Text {
@@ -505,7 +548,7 @@ Item {
               inert: false
               visible: !root.addingTask
               Layout.preferredWidth: implicitWidth
-              Layout.preferredHeight: 20
+              Layout.preferredHeight: Theme.smallControlHeight
               Layout.alignment: Qt.AlignVCenter
               onActivated: { root.addTaskError = ""; root.addingTask = true }
             }
@@ -514,7 +557,7 @@ Item {
           // Minimal inline input, not a dialog: Enter commits to "## Tasks",
           // Escape cancels. Stays open with whatever was typed if the write
           // fails, so a rejected add is never silently lost (layout-rules
-          // §8: this is a small secondary control, 20px, not a modal).
+          // §9: this is a small secondary control, not a modal).
           Column {
             Layout.fillWidth: true
             visible: root.addingTask
@@ -522,7 +565,7 @@ Item {
 
             Rectangle {
               width: parent.width
-              height: 20
+              height: Theme.smallControlHeight
               color: "transparent"
               border.color: Theme.border
               border.width: Theme.borderWidth
@@ -551,6 +594,7 @@ Item {
               visible: root.addTaskError.length > 0
               width: parent.width
               wrapMode: Text.WordWrap
+              lineHeight: Theme.proseLineHeight
               text: root.addTaskError
               font.family: Theme.fontFamily
               font.pixelSize: Theme.captionSize
@@ -656,14 +700,16 @@ Item {
 
           Text {
             Layout.fillWidth: true
+            visible: root.tasks.length === 0
             wrapMode: Text.WordWrap
+            lineHeight: Theme.proseLineHeight
             text: "Tasks belong to the goal, not to a pomodoro. A finished pom never ticks one off — you do, or the coach does."
             font.family: Theme.fontFamily
             font.pixelSize: Theme.captionSize
             color: Theme.faint
           }
 
-          Item { Layout.preferredHeight: 8 }
+          Item { Layout.preferredHeight: Theme.spaceSm }
 
           // "NEXT SESSION" (the claude /ompom-coach command + copy button)
           // used to live here too. Removed: CoachingScreen already carries
@@ -683,6 +729,7 @@ Item {
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.hairline }
 
             RowLayout {
+              id: closeRow
               Layout.fillWidth: true
               spacing: Theme.spaceSm
               Button {
@@ -717,16 +764,16 @@ Item {
             spacing: Theme.spaceXs
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.hairline }
             Text {
-              text: "CANCELLED"
+              text: "Cancelled"
               font.family: Theme.fontFamily
               font.pixelSize: Theme.captionSize
               font.bold: true
-              font.letterSpacing: 1.2
               color: Theme.red
             }
             Text {
               Layout.fillWidth: true
               wrapMode: Text.WordWrap
+              lineHeight: Theme.proseLineHeight
               visible: !!root.meta && !!root.meta.cancelled && root.meta.cancelled.reason.length > 0
               text: root.meta && root.meta.cancelled ? root.meta.cancelled.reason : ""
               font.family: Theme.fontFamily
@@ -736,6 +783,7 @@ Item {
             Text {
               Layout.fillWidth: true
               wrapMode: Text.WordWrap
+              lineHeight: Theme.proseLineHeight
               visible: !!root.meta && !!root.meta.cancelled && root.meta.cancelled.takeaway.length > 0
               text: root.meta && root.meta.cancelled ? root.meta.cancelled.takeaway : ""
               font.family: Theme.fontFamily

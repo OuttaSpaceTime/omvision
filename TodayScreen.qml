@@ -10,6 +10,9 @@ import "Parser.js" as Parser
 Item {
   id: root
 
+  // How far this screen's left edge sits from the window's; see Theme.pageX.
+  property int leftInset: 0
+
   property var goalsData: ({})
   property var dayEntries: []
   // slug -> entries, for `<slug>.log.md` files whose goal file is gone. They
@@ -19,10 +22,10 @@ Item {
   property var orphanLogs: ({})
 
   function typeLabel(e) {
-    if (e.type === "pomodoro") return "POMODORO"
-    if (e.type === "coaching") return "COACHING"
-    if (e.type === "event") return "EVENT" + (e.kind ? (" · " + String(e.kind).toUpperCase()) : "")
-    return String(e.type || "").toUpperCase()
+    if (e.type === "pomodoro") return "pomodoro"
+    if (e.type === "coaching") return "coaching"
+    if (e.type === "event") return "event" + (e.kind ? (" · " + String(e.kind)) : "")
+    return String(e.type || "")
   }
 
   // Every log entry (goal logs + the day file) whose timestamp is today,
@@ -91,8 +94,11 @@ Item {
   readonly property int todayMinutesTotal: totalMinutes(todayList)
 
   Column {
-    anchors.fill: parent
-    anchors.margins: Theme.panelPadding
+    // The journal's column, on the journal's line (Theme.pageX).
+    x: Theme.pageX(root.width, root.leftInset)
+    y: Theme.panelPadding
+    width: Theme.pageWidth(root.width)
+    height: root.height - Theme.panelPadding * 2
     spacing: Theme.sectionGap
 
     // Header. Title + the count/time summary share the first row, per the
@@ -118,7 +124,7 @@ Item {
         Text {
           Layout.fillWidth: true
           elide: Text.ElideRight
-          text: root.todayCount + (root.todayCount === 1 ? " ENTRY · " : " ENTRIES · ") + Parser.formatHCaption(root.todayMinutesTotal)
+          text: root.todayCount + (root.todayCount === 1 ? " entry · " : " entries · ") + Parser.formatHCaption(root.todayMinutesTotal)
           font.family: Theme.fontFamily
           font.pixelSize: Theme.captionSize
           color: Theme.dim
@@ -194,7 +200,6 @@ Item {
                   font.family: Theme.fontFamily
                   font.pixelSize: Theme.captionSize
                   font.bold: true
-                  font.letterSpacing: 1
                   color: Theme.dim
                 }
                 // The surplus width needs an explicit home. Without this
@@ -223,6 +228,7 @@ Item {
                 width: parent.width
                 text: "focus: " + rowItem.modelData.focus
                 wrapMode: Text.WordWrap
+                lineHeight: Theme.proseLineHeight
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.bodySize
                 color: Theme.ink
@@ -232,6 +238,7 @@ Item {
                 width: parent.width
                 text: rowItem.modelData.title2
                 wrapMode: Text.WordWrap
+                lineHeight: Theme.proseLineHeight
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.bodySize
                 color: Theme.ink
@@ -245,6 +252,7 @@ Item {
                 width: parent.width
                 text: "done: " + rowItem.modelData.done
                 wrapMode: Text.WordWrap
+                lineHeight: Theme.proseLineHeight
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.bodySmallSize
                 color: Theme.dim
@@ -254,6 +262,7 @@ Item {
                 width: parent.width
                 text: "left: " + rowItem.modelData.left
                 wrapMode: Text.WordWrap
+                lineHeight: Theme.proseLineHeight
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.bodySmallSize
                 color: Theme.dim
@@ -263,6 +272,7 @@ Item {
                 width: parent.width
                 text: "else: " + rowItem.modelData.other
                 wrapMode: Text.WordWrap
+                lineHeight: Theme.proseLineHeight
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.bodySmallSize
                 color: Theme.dim

@@ -27,7 +27,8 @@ Rectangle {
   property string currentScreen: "goals"
   signal navigate(string screen)
 
-  readonly property int railWidth: 64
+  // Theme's, because the page column is centred around it (Theme.pageX).
+  readonly property int railWidth: Theme.railWidth
 
   readonly property var navItems: [
     { id: "today", label: "Today", glyph: "" },

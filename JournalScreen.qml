@@ -66,6 +66,10 @@ Item {
   property bool sidebarShown: false
   signal toggleSidebar()
 
+  // How far this screen's left edge sits from the window's -- the rail's
+  // animated width while it is out; see Theme.pageX.
+  property int leftInset: 0
+
   function openList(open) {
     root.listOpen = open
   }
@@ -469,12 +473,6 @@ Item {
   }
   Component.onCompleted: if (root.visible && root.selectedPath === "") root.openDay(root.todayPath)
 
-  FontMetrics {
-    id: writingMetrics
-    font.family: Theme.fontFamily
-    font.pointSize: Theme.writingPointSize
-  }
-
   // ---- the canvas -----------------------------------------------------------
   Flickable {
     id: canvas
@@ -506,19 +504,19 @@ Item {
       }
     }
 
-    // One centred column at a fixed measure -- the window can be any width,
-    // the line length does not change. Measured in characters off the actual
-    // font rather than in pixels, so changing the writing size moves the
-    // column with it instead of silently making lines longer.
+    // One column at a fixed measure -- the window can be any width, the line
+    // length does not change. It is Theme's page column, the one every other
+    // screen sets its text in, measured in characters off the writing font
+    // (Theme.pageMeasure). Centred on the window rather than on this canvas,
+    // so the text stays still while the sidebar slides in beside it.
     TextEdit {
       id: editor
-      x: Math.round((canvas.width - width) / 2)
+      x: Theme.pageX(canvas.width, root.leftInset)
       // Clears the sticky header (which floats over this Flickable rather
       // than sitting in it) and then some: the first line of the day starts
       // well down the page, the way a page of writing does.
       y: stickyHeader.height + Theme.space3xl
-      width: Math.min(Math.round(writingMetrics.advanceWidth("0") * Theme.writingColumns),
-                      canvas.width - Theme.writingGutter * 2)
+      width: Theme.pageWidth(canvas.width)
       wrapMode: TextEdit.Wrap
       font.family: Theme.fontFamily
       // Points, not pixels -- see Theme.writingPointSize for why the
@@ -645,7 +643,6 @@ Item {
         text: root.displayEntry ? root.displayEntry.dateLabel : ""
         font.family: Theme.fontFamily
         font.pixelSize: Theme.captionSize
-        font.letterSpacing: 1
         color: Theme.faint
       }
     }
@@ -743,10 +740,9 @@ Item {
       anchors.top: parent.top
       anchors.leftMargin: Theme.panelPadding
       anchors.topMargin: Theme.spaceLg
-      text: "DAYS"
+      text: "Days"
       font.family: Theme.fontFamily
       font.pixelSize: Theme.captionSize
-      font.letterSpacing: 1
       color: Theme.faint
     }
 

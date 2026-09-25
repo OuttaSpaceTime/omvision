@@ -8,7 +8,6 @@
 
 var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-var WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
 var WEEKDAYS_TITLE = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 // "2026-09-24" -> "Thu 24 Sep". Anything that doesn't parse as YYYY-MM-DD is
@@ -338,7 +337,7 @@ function dayKey(date) {
 }
 
 function dayHeaderLabel(date) {
-  return WEEKDAYS[date.getDay()] + " " + date.getDate() + " " + MONTHS[date.getMonth()].toUpperCase()
+  return WEEKDAYS_TITLE[date.getDay()] + " " + date.getDate() + " " + MONTHS[date.getMonth()]
 }
 
 function formatHm(totalMinutes) {
@@ -349,13 +348,13 @@ function formatHm(totalMinutes) {
   return h + "h " + m + "m"
 }
 
-// "1 H 15"-style caption used in the Goals header summary.
+// "1 h 15"-style caption: Today's summary line and a timeline event's label.
 function formatHCaption(totalMinutes) {
   var h = Math.floor(totalMinutes / 60)
   var m = totalMinutes % 60
-  if (h === 0) return m + " MIN"
-  if (m === 0) return h + " H"
-  return h + " H " + m
+  if (h === 0) return m + " min"
+  if (m === 0) return h + " h"
+  return h + " h " + m
 }
 
 // ---- Journal --------------------------------------------------------------

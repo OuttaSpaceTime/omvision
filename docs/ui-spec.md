@@ -15,19 +15,34 @@ file is missing or unparseable. Never crash on a missing theme.
 
 - Corners: **0 radius everywhere.** Hyprland's `decoration:rounding` is 0 on this machine.
 - Font: `monospace` (resolves to JetBrainsMono Nerd Font). One family for the whole app.
-- Type scale, exactly: caption 10, bodySmall 11, body 12, subtitle 13, title 14, heading 16,
-  display 24. Section labels are caption, **bold, uppercase, letterSpacing 1.2**, dimmed.
+- Type scale, exactly: caption 12, bodySmall 14, body 15, subtitle 16, title 17, heading 24,
+  display 32. Sized against the journal's 15pt (≈20px) page, not against a toolbar: body is a
+  notch under the journal so the writing stays the largest text in the app, and a screen's
+  title is the one large thing on it. Section labels are caption, **bold, sentence case**
+  (`What happened`, not `WHAT HAPPENED`), dimmed; captions built from data are lower case too
+  (`0 of 3 tasks done`, `event · training · 1 h 30`). Nothing is set in capitals.
+- Wrapped prose (break notes, coaching summaries, hints) takes `Theme.proseLineHeight`, 1.4.
+  Single-line labels keep the font's own line height, so they stay on the marker or control
+  they sit beside.
 - Surfaces: fills are the foreground colour at 4% alpha (8% hover, 18% selected); borders are
   1px at 40% alpha. No drop shadows, no gradients.
 - **Spacing is a scale, and nothing outside it is allowed.** 4px based, nine steps:
   `spaceXxs` 2, `spaceXs` 4, `spaceSm` 8, `spaceMd` 12, `spaceLg` 16, `spaceXl` 24,
   `space2xl` 32, `space3xl` 48, `space4xl` 64. Four named tokens sit on top of it and are
-  what a screen should reach for: `panelPadding` (32, every page's margin), `sectionGap`
-  (24, a header to its content), `rowGap` (12), `rowPadding` (24, a list row's text to its
-  hairline). If a value looks wrong somewhere, take the neighbouring step — do not type a
+  what a screen should reach for: `panelPadding` (64, every page's margin, the journal's
+  included), `sectionGap` (32, a header to its content and between a page's sections),
+  `rowGap` (12), `rowPadding` (24, a list row's text to its hairline). If a value looks wrong somewhere, take the neighbouring step — do not type a
   number. Before the scale the same decision was spelled 2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
   24 and 28 across ten files, which is why rows meant to match sat a pixel or two apart and
-  why none of it could be tuned globally. Control height stays 28, small actions 20.
+  why none of it could be tuned globally. Control height 32, small secondary actions and the
+  fields they open 24 (`smallControlHeight`); every dialog card is `dialogWidth` (560) wide,
+  padded `spaceXl`.
+- **One page column.** Every screen sets its text in the journal's column: `pageMeasure`
+  wide (70 characters of the writing font, ≈840px) and on the journal's own vertical line —
+  centred on the *window*, not on the area beside the rail (`Theme.pageX`), so switching
+  screens changes what is on the page, never where the page is, and the column holds still
+  while the rail slides in or out. At narrow widths it shrinks to leave a `panelPadding`
+  margin each side. Hairlines stop at the column; hover fills bleed a margin past it.
 - Fallback palette (Flexoki Light): paper `#FFFCF0`, ink `#100F0F`, secondary ink `#403E3C`,
   dim `#6F6E69`, faint `#878580`, hairline `#DAD8CC`, border `#B7B5AC`, fill `#F6F3E8`,
   accent `#205EA6`, accent fill `#E8EDF4`, red `#AF3029`.
@@ -47,48 +62,47 @@ write and brings it back from its own control — see **Screen: Journal**.
 
 ## Screen: Goals
 
-Header row: `Goals` at heading size bold, then a caption-styled summary
-(`TODAY · 3 POMS · 1 H 15`) computed from today's entries across all logs, then filter chips
-pushed right (`active N`, `paused N`, `done N`, `cancelled N` — the selected one underlined in
-accent), then `Add event` and `New goal` buttons (28px, 1px border; inert in M2).
+Header row: `Goals` at heading size bold, then `Add event` and `New goal` buttons pushed
+right. Under it, a band between two hairlines holding the filter chips (`active N`,
+`paused N`, `done N`, `cancelled N`, caption — the selected one underlined in accent), at the
+same left edge as the goal titles.
 
-One row per goal, hairline-separated, each row bleeding to both panel edges (negative side
-margins, padding restored inside) so the rules run full width. Selected/hovered row: 4% fill
-plus a 3px accent bar that is the row's own left edge, with the text inset 30px from it —
-the bar must touch the fill, never float in the padding.
+One row per goal, hairline-separated, sized to its text. Each row bleeds a page margin past
+the column on both sides, padding restored inside, so a fill runs past the text. Selected or
+hovered row: 4% fill plus a 3px accent bar at the fill's own left edge, in the margin.
 
-Row contents, left column: the title at title size bold, an optional status chip
-(caption, bold, uppercase — `running` in accent, a deadline in red), the `why` line at
-bodySmall in dim, and a caption line reading `N OF M TASKS DONE · LAST SESSION <when>`.
-Right column, 240px: `<poms> / ≈<estimate>` at title size beside `≈ N left · <done_by>` in
-dim, and under them a 2px progress rule — accent for the selected goal, border colour
-otherwise.
+Row contents: the title at title size bold, an optional status chip (caption, bold —
+`running` in accent, a deadline in red), the `why` line at bodySmall in dim, and one caption
+line in faint: `N of M tasks done · ≈ N poms left · last session <when>`, eliding. There is
+no right-hand column; see TODO.md for why.
 
 ## Screen: Goal detail
 
-Header: `← Goals` (caption, dim, navigates back), the title at heading bold, a `running`
-chip, then `Add event` and `Coach this goal` buttons pushed right (the second one accent-
-filled; both inert in M2). Below, a single row of figures separated by 28px:
-`<N> poms · <H> h in`, `≈ <N> left`, `<done> of <total> tasks`, `done by <date>`, then a 2px
-progress rule taking the remaining width.
+Header: the title at heading bold (eliding), then `Add event` and `Coach this goal` buttons
+pushed right (the second one accent-filled). Under it, a hairline band like the Goals filter
+row holding `← Goals` (caption, dim, navigates back; its text on the column edge, its hover
+fill in the margin) and a `running` chip. Below, a `Flow` of figures at body size:
+`<N> poms · <H>m in`, `≈ <N> poms left`, `<done> of <total> tasks`. No progress rule.
 
-Body splits into the timeline (flexible) and a 312px right rail with a 1px hairline between.
+Body splits into the timeline (flexible) and a right rail with a 1px hairline between. The
+rail is 3/8 of the page column (≈315px at full measure), but never narrower than its two rows
+of controls; task names elide instead.
 
-**Timeline** — caption heading `WHAT HAPPENED`, then entries newest first, grouped under day
-headers (`SUN 20 SEP` caption + a dim `3 poms · 1 h 15` summary). Each entry is a row of:
-a 40px right-aligned time in faint, a 7px square node centred in a 1px vertical rule that runs
-through the whole column, then the content. Node styles: 1px bordered square for a pomodoro,
-filled accent for a coaching session, 1px **dashed** for an event. Content is a caption type
-label (`25 MIN`, `COACHING`, `EVENT · TRAINING · 1 H 30`), the `focus:` line at body size, and
-the `done:`/`left:` lines beneath at bodySmall in dim.
+**Timeline** — caption heading `What happened`, then entries newest first, grouped under day
+headers (`Sun 20 Sep` caption bold + a dim `3 poms · 1 h 15` summary beside it). Each entry
+is a row of: a right-aligned time in faint caption, as wide as `00:00`, a 7px square node
+centred on a 1px vertical rule, then the content. Node styles: 1px bordered square for a
+pomodoro, filled accent for a coaching session, 1px **dashed** for an event. Content is a
+caption label (`25 min`, `coaching`, `event · training · 1 h 30`), the `focus:` line at body
+size, and the `done:`/`left:`/`else:` lines beneath at bodySmall in dim, all wrapped prose.
 
-**Right rail** — caption heading `TASKS` with `N of M done` beside it and an inert `+ task`
+**Right rail** — caption heading `Tasks` with `N of M done` beside it and a small `+ task`
 button; then one row per task, hairline-separated, each a checkbox (checked and struck through
-when done) with the task text and an optional `≈N` estimate at the right. Under the list, this
-line at caption size in faint: "Tasks belong to the goal, not to a pomodoro. A finished pom
-never ticks one off — you do, or the coach does." Then a caption heading `NEXT SESSION` over a
-bordered box holding `claude /ompom-coach <slug>` with a small `copy` button, and under it, in
-faint: "Runs in your own terminal. It reads all of this and rewrites what's next."
+when done) with the task text and an optional `≈N` estimate at the right. When there are no
+tasks yet, this line at caption size in faint: "Tasks belong to the goal, not to a pomodoro. A
+finished pom never ticks one off — you do, or the coach does." At the bottom, while the goal is open,
+`Close goal · done` and a red `Cancel`. The coaching hand-off lives on the Coaching screen
+only.
 
 ## Screen: Journal
 
@@ -110,8 +124,9 @@ Entering the Journal **is** entering writing mode:
   days, Ctrl+N jumps to today, Ctrl+B toggles the sidebar (handled here because the editor
   would otherwise swallow it).
 
-The text column is centred and `Theme.writingColumns` (70) monospace characters wide,
-measured off the live font, regardless of window width. Type is `Theme.writingPointSize`
+The text column is the app's page column (see Tokens): `Theme.writingColumns` (70)
+monospace characters wide, measured off the live font, on the same vertical line as every
+other screen's text, and still while the sidebar slides in beside it. Type is `Theme.writingPointSize`
 (15pt ≈ 20px) — the only *point* size in the app, because the highlighter's character formats
 are point-sized (see README) — on a 185% line height. A sticky 44px header floats over the
 text, opaque in `paper`, holding both controls and the day's label (`Today`, else

@@ -722,6 +722,7 @@ ShellRoot {
         onLoaded: {
           item.app = root
           item.journal = journalScreen
+          item.goalDetail = goalDetailScreen
           item.target = contentRoot
         }
       }
@@ -755,12 +756,17 @@ ShellRoot {
           }
         }
 
+        // The screens. Each is told how far this area sits from the window's
+        // left edge -- the rail's width, animated -- so it can centre its
+        // text column on the window rather than on this area (Theme.pageX),
+        // and the column stays put while the rail slides in or out.
         Item {
           width: parent.width - sidebarSlot.width
           height: parent.height
 
           GoalsScreen {
           anchors.fill: parent
+          leftInset: sidebarSlot.width
           visible: root.currentScreen === "goals"
           goalsData: root.goalsData
           todaySummary: root.todaySummary
@@ -776,6 +782,7 @@ ShellRoot {
         GoalDetailScreen {
           id: goalDetailScreen
           anchors.fill: parent
+          leftInset: sidebarSlot.width
           visible: root.currentScreen === "goalDetail"
           slug: root.openGoalSlug
           meta: root.goalsData[root.openGoalSlug] ? root.goalsData[root.openGoalSlug].meta : null
@@ -802,6 +809,7 @@ ShellRoot {
 
         TodayScreen {
           anchors.fill: parent
+          leftInset: sidebarSlot.width
           visible: root.currentScreen === "today"
           goalsData: root.goalsData
           dayEntries: root.dayEntries
@@ -811,6 +819,7 @@ ShellRoot {
         CoachingScreen {
           id: coachingScreen
           anchors.fill: parent
+          leftInset: sidebarSlot.width
           visible: root.currentScreen === "coaching"
           goalsData: root.goalsData
         }
@@ -818,6 +827,7 @@ ShellRoot {
         JournalScreen {
           id: journalScreen
           anchors.fill: parent
+          leftInset: sidebarSlot.width
           visible: root.currentScreen === "journal"
           journalFiles: root.journalFiles
           journalContents: root.journalContents

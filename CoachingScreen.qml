@@ -12,6 +12,9 @@ import "Parser.js" as Parser
 Item {
   id: root
 
+  // How far this screen's left edge sits from the window's; see Theme.pageX.
+  property int leftInset: 0
+
   property var goalsData: ({})
   property string selectedSlug: ""
   property string selectedMethod: ""
@@ -92,8 +95,11 @@ Item {
   }
 
   Column {
-    anchors.fill: parent
-    anchors.margins: Theme.panelPadding
+    // The journal's column, on the journal's line (Theme.pageX).
+    x: Theme.pageX(root.width, root.leftInset)
+    y: Theme.panelPadding
+    width: Theme.pageWidth(root.width)
+    height: root.height - Theme.panelPadding * 2
     spacing: Theme.sectionGap
 
     Text {
@@ -122,7 +128,9 @@ Item {
       Column {
         id: bodyColumn
         width: parent.width
-        spacing: Theme.spaceLg
+        // The same gap as the title's to the first section: one rhythm down
+        // the whole page instead of a roomy top over a tight stack.
+        spacing: Theme.sectionGap
 
         // ---- goal chips -----------------------------------------------
         Column {
@@ -130,12 +138,10 @@ Item {
           spacing: Theme.spaceSm
 
           Text {
-            text: "GOAL"
+            text: "Goal"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.captionSize
             font.bold: true
-            font.capitalization: Font.AllUppercase
-            font.letterSpacing: 1.2
             color: Theme.dim
           }
 
@@ -170,12 +176,10 @@ Item {
           spacing: Theme.spaceSm
 
           Text {
-            text: "METHOD"
+            text: "Method"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.captionSize
             font.bold: true
-            font.capitalization: Font.AllUppercase
-            font.letterSpacing: 1.2
             color: Theme.dim
           }
 
@@ -210,18 +214,16 @@ Item {
           spacing: Theme.spaceSm
 
           Text {
-            text: "COMMAND"
+            text: "Command"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.captionSize
             font.bold: true
-            font.capitalization: Font.AllUppercase
-            font.letterSpacing: 1.2
             color: Theme.dim
           }
 
           Rectangle {
             width: parent.width
-            height: 36
+            height: Theme.smallControlHeight + Theme.spaceSm * 2
             border.color: Theme.border
             border.width: 1
             color: "transparent"
@@ -242,16 +244,16 @@ Item {
               // Reserve this control's own width and height rather than
               // letting it size to content alongside the text (layout-rules
               // §4) -- unreserved, it drew past the box's border and
-              // stretched to the box's full height instead of the 20px a
-              // secondary control gets (§8).
+              // stretched to the box's full height instead of the small
+              // height a secondary control gets (§9).
               Button {
                 id: copyBtn
                 label: "copy"
                 inert: false
                 // Reserved from the WIDER of the two labels it can show, so
                 // the box doesn't twitch when it flips to "copied!".
-                Layout.preferredWidth: Math.round(copiedMetrics.width) + 24
-                Layout.preferredHeight: 20
+                Layout.preferredWidth: Math.round(copiedMetrics.width) + Theme.spaceXl
+                Layout.preferredHeight: Theme.smallControlHeight
                 Layout.alignment: Qt.AlignVCenter
                 onActivated: {
                   root.copyToClipboard(root.command)
@@ -269,12 +271,10 @@ Item {
           spacing: Theme.spaceSm
 
           Text {
-            text: "THIS SESSION READS"
+            text: "This session reads"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.captionSize
             font.bold: true
-            font.capitalization: Font.AllUppercase
-            font.letterSpacing: 1.2
             color: Theme.dim
           }
 
@@ -312,12 +312,10 @@ Item {
           spacing: Theme.spaceSm
 
           Text {
-            text: "PAST SESSIONS"
+            text: "Past sessions"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.captionSize
             font.bold: true
-            font.capitalization: Font.AllUppercase
-            font.letterSpacing: 1.2
             color: Theme.dim
           }
 
@@ -347,7 +345,7 @@ Item {
                   visible: index > 0
                 }
 
-                Item { width: 1; height: index > 0 ? 8 : 0 }
+                Item { width: 1; height: index > 0 ? Theme.spaceSm : 0 }
 
                 RowLayout {
                   width: parent.width
@@ -373,6 +371,7 @@ Item {
                   visible: !!modelData.summary
                   text: modelData.summary
                   wrapMode: Text.WordWrap
+                  lineHeight: Theme.proseLineHeight
                   elide: Text.ElideRight
                   maximumLineCount: 2
                   font.family: Theme.fontFamily
@@ -380,7 +379,7 @@ Item {
                   color: Theme.dim
                 }
 
-                Item { width: 1; height: 8 }
+                Item { width: 1; height: Theme.spaceSm }
               }
             }
           }
