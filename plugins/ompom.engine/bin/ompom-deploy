@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Deploys this repo (ompom-engine) and ompom-bar to the plugin copies
+# omarchy-shell loads, without resetting the pomodoro that is running.
+#
+#   ompom-deploy              deploy whatever differs in either repo
+#   ompom-deploy --dry-run    list what differs, change nothing
+#
+# The bar and the engine behave differently, which is the whole reason this
+# script exists. Any write under ~/.config/omarchy/plugins makes the shell
+# hot-reload its plugins, and a bar widget is simply rebuilt. The engine's
+# manifest says keepLoaded, so that reload leaves the running engine and its
+# timer alone. That is why a bar-only deploy needs nothing more than the copy,
+# and also why a new Service.qml only loads when the whole shell restarts. For
+# an engine change this script therefore takes a snapshot of the engine's
+# state, restarts the shell, and restores the snapshot into the new engine.
+# The snapshot is also kept at $XDG_RUNTIME_DIR/ompom-handoff.json, so a
+# failed restore can be retried by hand while the engine still accepts it
+# (see handoffMaxAgeMs in Service.qml):
+#   omarchy-shell ompom restore "$(cat "$XDG_RUNTIME_DIR/ompom-handoff.json")"
+#
+# Every file is replaced atomically (temp file, then rename), never with a
+# plain cp over the live path: a running process can have the old file mapped,
+# and overwriting it in place crashed the whole shell once. See
+# native/README.md, "The crash".
+set -euo pipefail
+
+usage() { sed -n '2,6s/^# \{0,1\}//p' "$0"; }
+
+dry_run=0
+case "${1:-}" in
+  "") ;;
+  --dry-run) dry_run=1 ;;
+  -h|--help) usage; exit 0 ;;
+  *) echo "ompom-deploy: unknown option $1" >&2; usage >&2; exit 2 ;;
+esac
+
+engine_src="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+bar_src="${OMPOM_BAR_DIR:-$HOME/Code/ompom-bar}"
+plugins="$HOME/.config/omarchy/plugins"
+engine_dst="$plugins/ompom.engine"
+bar_dst="$plugins/ompom.bar"
+handoff="${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR is not set}/ompom-handoff.json"
+
+# What each plugin ships, taken from git (tracked or new, not ignored) so a
+# new QML file or icon is deployed without editing a list here. The patterns
+# are the decision: top-level QML and Python, the manifest, and the bar's
+# icons. native/ is left out on purpose: the MarkdownHighlight library there
+# needs its own build and deploy (see native/README.md).
+shipped() {  # <repo> <pathspec...>
+  local repo="$1"; shift
+  git -C "$repo" ls-files --cached --others --exclude-standard -- "$@"
+}
+mapfile -t engine_files < <(shipped "$engine_src" manifest.json ':(glob)*.qml' ':(glob)*.py')
+mapfile -t bar_files < <(shipped "$bar_src" manifest.json ':(glob)*.qml' ':(glob)icons/*')
+
+changed() {  # <src dir> <dst dir> <files...>: print the files that differ
+  local src="$1" dst="$2"; shift 2
+  local f
+  for f in "$@"; do
+    cmp -s -- "$src/$f" "$dst/$f" || echo "$f"
+  done
+}
+
+put() {  # <src> <dst>: atomic replace, keeping the source's mode
+  local src="$1" dst="$2"
+  local tmp="${dst%/*}/.${dst##*/}.deploy.$$"
+  mkdir -p -- "${dst%/*}"
+  cp -- "$src" "$tmp"
+  chmod --reference="$src" -- "$tmp"
+  mv -f -- "$tmp" "$dst"
+}
+
+status() { omarchy-shell ompom status 2>/dev/null; }
+
+mapfile -t engine_changed < <(changed "$engine_src" "$engine_dst" "${engine_files[@]}")
+mapfile -t bar_changed < <(changed "$bar_src" "$bar_dst" "${bar_files[@]}")
+
+if (( ${#engine_changed[@]} == 0 && ${#bar_changed[@]} == 0 )); then
+  echo "ompom-deploy: nothing differs, nothing to do."
+  exit 0
+fi
+(( ${#engine_changed[@]} )) && echo "engine: ${engine_changed[*]}"
+(( ${#bar_changed[@]} )) && echo "bar:    ${bar_changed[*]}"
+(( dry_run )) && exit 0
+
+before="$(status)" || { echo "ompom-deploy: the engine isn't answering (omarchy-shell ompom status)" >&2; exit 1; }
+echo "before: $before"
+
+if (( ${#engine_changed[@]} )); then
+  snap="$(omarchy-shell ompom snapshot)" || { echo "ompom-deploy: the engine gave no snapshot" >&2; exit 1; }
+  (umask 077; printf '%s\n' "$snap" > "$handoff")
+fi
+
+for f in "${bar_changed[@]}"; do put "$bar_src/$f" "$bar_dst/$f"; done
+for f in "${engine_changed[@]}"; do put "$engine_src/$f" "$engine_dst/$f"; done
+
+if (( ${#engine_changed[@]} == 0 )); then
+  # Give the hot reload a moment, then show that the timer went on untouched.
+  sleep 1
+  echo "after:  $(status || echo 'no answer')"
+  exit 0
+fi
+
+omarchy-restart-shell
+
+# omarchy-restart-shell returns once the shell answers ping, but third-party
+# services such as the engine load only after the plugin scan that follows.
+tries=0
+until status >/dev/null; do
+  (( ++tries < 100 )) || { echo "ompom-deploy: the engine didn't come back; the snapshot is in $handoff" >&2; exit 1; }
+  sleep 0.2
+done
+
+result="$(omarchy-shell ompom restore "$snap" 2>&1)" || true
+if [[ $result != \{* ]]; then
+  echo "ompom-deploy: restore failed: $result" >&2
+  echo "retry soon: omarchy-shell ompom restore \"\$(cat $handoff)\"" >&2
+  exit 1
+fi
+echo "after:  $result"

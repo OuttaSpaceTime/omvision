@@ -190,7 +190,32 @@ Item {
   // prompt overlay. break is the mirror case: overlay stays up, and
   // togglePause/cycleMode both refuse to act, so there's no way to pause or
   // mode-switch your way out of it early either — it only ends on its own.
-  readonly property bool overlayVisible: mode !== "off" && (phase === "intent" || phase === "prompt" || phase === "break")
+  //
+  // A running modeSettleTimer holds the overlay back after a mode switch:
+  // see its own comment.
+  readonly property bool overlayVisible: mode !== "off" && !modeSettleTimer.running
+    && (phase === "intent" || phase === "prompt" || phase === "break")
+
+  // Right-clicking through the modes on the bar used to raise the intent
+  // screen on every click, so passing through Long Focus on the way to Off
+  // flashed a blocking overlay you then had to get out of. A mode now only
+  // counts as chosen once it has stayed put this long; every click restarts
+  // the wait. The run itself is still reset on each click, only the overlay
+  // waits -- deferring the reset too would leave a focus countdown running
+  // on the bar in a mode you've already left. Long enough for a few
+  // deliberate clicks at the bar's pace, short enough that stopping on a
+  // mode still feels immediate.
+  Timer {
+    id: modeSettleTimer
+    interval: 1500
+  }
+
+  // Whether tick() counts remaining down. Intent time is not focus time:
+  // nothing decrements while you're composing your intent, however long
+  // that takes -- remaining is primed for the focus run to come in
+  // startFocus(), not here. restore() asks the same question to take the
+  // restart's seconds off a countdown.
+  readonly property bool countdownRunning: mode !== "off" && !paused && phase !== "intent"
 
   function fmt(totalSeconds) {
     var s = Math.max(0, totalSeconds)
@@ -199,12 +224,17 @@ Item {
     return (m < 10 ? "0" : "") + m + ":" + (r < 10 ? "0" : "") + r
   }
 
+  // During intent, remaining is whatever the last run left behind (it is
+  // only primed on the way out, in startFocus()), so status reports the
+  // length of the run about to start instead: while clicking through the
+  // modes the bar shows 25:00, 50:00, rather than a stale number.
   function statusJson() {
+    var shown = root.phase === "intent" ? root.focusSecFor : root.remaining
     return JSON.stringify({
       mode: root.mode,
       phase: root.phase,
-      remaining: root.remaining,
-      remainingLabel: root.fmt(root.remaining),
+      remaining: shown,
+      remainingLabel: root.fmt(shown),
       paused: root.paused,
       extensionsUsed: root.extensionsUsed,
       maxExtensions: root.maxExtensions,
@@ -212,13 +242,98 @@ Item {
     })
   }
 
+  // --- hand-off across a shell restart ---
+  // The manifest's keepLoaded keeps this engine alive through plugin
+  // hot-reloads, which is what lets the bar widget be redeployed without
+  // touching the timer. The price is that a new Service.qml only loads on
+  // a whole-shell restart, which would start every deploy on a fresh 25
+  // minutes. bin/ompom-deploy bridges that: snapshot() before the restart,
+  // restore() into the new engine after it. PersistentProperties was the
+  // obvious alternative and doesn't apply: it carries state across a
+  // Quickshell reload, but a restart is a new process, and even a plugin
+  // reload destroys and recreates this object rather than reloading it.
+  //
+  // Only the cycle is carried, never an in-flight save: a note write in
+  // progress at snapshot time either landed (the log has it) or didn't
+  // (it was never going to be retried by a new process anyway).
+  readonly property int handoffMaxAgeMs: 5 * 60 * 1000
+
+  // The typed text that belongs to a cycle, by snapshot field.
+  function cycleTextEdits() {
+    return { focusText: focusEdit, doneText: doneEdit, leftText: leftEdit, elseText: elseEdit }
+  }
+
+  function snapshotJson() {
+    var s = {
+      takenAtMs: Date.now(),
+      mode: root.mode,
+      phase: root.phase,
+      paused: root.paused,
+      remaining: root.remaining,
+      extensionsUsed: root.extensionsUsed,
+      focusStartedIso: root.focusStartedIso,
+      goalAttributionRemaining: root.goalAttributionRemaining,
+      cycleLogged: root.cycleLogged,
+      notesOpen: root.notesOpen
+    }
+    var edits = root.cycleTextEdits()
+    for (var field in edits) s[field] = String(edits[field].text || "")
+    return JSON.stringify(s)
+  }
+
+  // Takes exactly what snapshotJson() gives, every field required. Every
+  // field is checked before anything is assigned, so a bad hand-off leaves
+  // the fresh engine exactly as it started rather than half-restored.
+  function restore(json) {
+    var s
+    try { s = JSON.parse(String(json || "")) } catch (e) { return "error: not JSON" }
+    if (!Util.isPlainObject(s)) return "error: not an object"
+    function int(v, lo, hi) { return Number.isInteger(v) && v >= lo && v <= hi }
+    var age = Date.now() - s.takenAtMs
+    if (!(age >= 0 && age <= root.handoffMaxAgeMs))
+      return "error: snapshot missing takenAtMs or older than " + (root.handoffMaxAgeMs / 60000) + " minutes"
+    if (["normal", "long", "off"].indexOf(s.mode) === -1) return "error: bad mode"
+    if (["intent", "focus", "prompt", "extend", "break"].indexOf(s.phase) === -1) return "error: bad phase"
+    if (!int(s.remaining, 0, 4 * 3600)) return "error: bad remaining"
+    if (!int(s.extensionsUsed, 0, root.maxExtensions)) return "error: bad extensionsUsed"
+    if (!int(s.goalAttributionRemaining, -1, 4 * 3600)) return "error: bad goalAttributionRemaining"
+    if (typeof s.focusStartedIso !== "string"
+        || !/^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)?$/.test(s.focusStartedIso)) return "error: bad focusStartedIso"
+    for (var b of ["paused", "cycleLogged", "notesOpen"])
+      if (typeof s[b] !== "boolean") return "error: bad " + b
+    var edits = root.cycleTextEdits()
+    for (var t in edits)
+      if (typeof s[t] !== "string") return "error: bad " + t
+
+    // From the baseline every new cycle starts from, then the snapshot on
+    // top of it.
+    modeSettleTimer.stop()
+    root.resetRun()
+    root.mode = s.mode
+    root.phase = s.phase
+    root.paused = s.paused
+    root.extensionsUsed = s.extensionsUsed
+    root.goalAttributionRemaining = s.goalAttributionRemaining
+    root.focusStartedIso = s.focusStartedIso
+    root.cycleLogged = s.cycleLogged
+    root.notesOpen = s.notesOpen
+    for (var field in edits) edits[field].text = s[field].slice(0, root.maxNoteInputChars)
+    // The countdown kept running in the old process until the restart,
+    // so the time since the snapshot is taken off it. A countdown that
+    // runs out this way is left at 0 for the next tick() to move on from,
+    // exactly as if it had run out here.
+    root.remaining = root.countdownRunning ? Math.max(0, s.remaining - Math.round(age / 1000)) : s.remaining
+    return root.statusJson()
+  }
+
   // Single owner of "a note-taking cycle just ended" cleanup, called from
   // every path that can end one: an explicit mode switch (resetRun), a new
   // break starting (startBreak), a break timing out on its own with
-  // nothing to save (tick(), when notesOpen was already false), and --
-  // once the write actually lands -- a break that timed out WITH notes
-  // open (noteLogProc.onExited's deferred cycle-end wipe; see tick()'s
-  // break branch for why that one specifically can't call this directly).
+  // nothing to save (tick(), when the cycle was already logged), and --
+  // once the write actually lands -- a break that timed out before its
+  // pomodoro was saved (noteLogProc.onExited's deferred cycle-end wipe;
+  // see tick()'s break branch for why that one specifically can't call
+  // this directly).
   // Without this, notesOpen could survive into the next prompt and the
   // block view would open straight into the notes screen instead of the
   // normal +1-minute/Start-break buttons. Deliberately break-notes-only:
@@ -274,6 +389,7 @@ Item {
     // it described that run, not the next one.
     root.resetRun()
     if (loggedOnTheWayOut) focusEdit.text = ""
+    modeSettleTimer.restart()
     return root.statusJson()
   }
 
@@ -347,11 +463,7 @@ Item {
   }
 
   function tick() {
-    if (root.mode === "off" || root.paused) return
-    // Intent time is not focus time: nothing here decrements while you're
-    // composing your intent, however long that takes. remaining is primed
-    // for the focus run to come in startFocus(), not here.
-    if (root.phase === "intent") return
+    if (!root.countdownRunning) return
     if (root.remaining > 0) {
       root.remaining -= 1
       return
@@ -361,11 +473,14 @@ Item {
     } else if (root.phase === "extend") {
       root.phase = "prompt"
     } else if (root.phase === "break") {
-      // A break that runs out with the notes view still open (never
-      // explicitly saved via ← or Escape) still logs the pomodoro rather
-      // than discarding it -- started/minutes/focus are real information
-      // regardless of whether done/left were ever filled in (see
-      // saveNote()'s own comment).
+      // A break that runs out before its pomodoro was saved via ← or
+      // Escape still logs it rather than discarding it -- started/minutes/
+      // focus are real information regardless of whether done/left were
+      // ever filled in (see saveNote()'s own comment). That includes a
+      // break whose notes were never opened at all, now that the break
+      // starts on its countdown (see startBreak()). Asking "was the notes
+      // view open?" instead, as this once did, would drop exactly those
+      // runs from the log.
       //
       // Saving this here IS starting an async write, though, and the whole
       // point of the "refused write keeps what's on screen" guarantee is
@@ -374,7 +489,7 @@ Item {
       // goalAttributionRemaining, doneEdit/leftEdit/focusEdit,
       // notesOpen) is deferred to noteLogProc.onExited instead of
       // happening here -- on success there, and never on a refusal, where
-      // the notes view stays open (over this new "intent" phase
+      // the notes view stays or comes up (over this new "intent" phase
       // underneath -- see focusEdit's own focus binding for why that
       // doesn't fight it for keyboard focus) with "Not saved -- try
       // again" up, and ← still works there to retry -- saveNote() keeps
@@ -383,7 +498,7 @@ Item {
       // from state that, by the time a refusal can happen, already
       // belongs to this new phase) while still rebuilding the text fresh
       // each time, so a too-long note can actually be trimmed and retried.
-      var savingThisCycle = root.notesOpen
+      var savingThisCycle = !root.cycleLogged
       if (savingThisCycle) {
         root.notesSaveIsCycleEnd = true
         root.saveNote()
@@ -425,10 +540,12 @@ Item {
     // also need this (an explicit mode switch, or a break timing out
     // while notes were still open).
     root.clearNotes()
-    // Two-section break notes open automatically now, rather than waiting
-    // for an explicit "Take notes" click — see openNotes() for what it
-    // focuses.
-    root.openNotes()
+    // The break opens on its ticking countdown, never on the notes view.
+    // It used to open the notes straight away, which turned every break
+    // into a writing prompt and hid the one thing a break is for: time
+    // away, counting down. Writing is one "Take notes" click away. The
+    // pomodoro is logged whether or not you ever write -- see tick()'s
+    // break branch.
   }
 
   function openNotes() {
@@ -436,8 +553,7 @@ Item {
     // Notes during the same break should show whatever was last written
     // (saveNote() no longer clears it either) -- see clearNotes() for
     // where it does get cleared, at the start of the next cycle. Caret
-    // always starts in "What's done?", never "What's left?", both on the
-    // automatic open from startBreak() and a manual reopen via Take Notes.
+    // always starts in "What's done?", never "What's left?".
     root.notesOpen = true
     root.notesSaveFailed = false
     root.doneSectionOpen = true
@@ -587,6 +703,10 @@ Item {
         // pinning branch, which only sets them once per cycle and skips
         // it entirely while notesSaveFailed is already true.
         root.notesSaveFailed = true
+        // A break that ran out with its notes never opened still gets its
+        // refusal on screen, where ← can retry it. Left closed, the run
+        // would sit unsaved behind the intent screen with no sign of it.
+        root.notesOpen = true
       }
     }
   }
@@ -830,6 +950,9 @@ Item {
     function status(): string { return root.statusJson() }
     function togglePause(): string { return root.togglePause() }
     function cycleMode(): string { return root.cycleMode() }
+    // For bin/ompom-deploy only -- see snapshotJson().
+    function snapshot(): string { return root.snapshotJson() }
+    function restore(json: string): string { return root.restore(json) }
   }
 
   PanelWindow {
