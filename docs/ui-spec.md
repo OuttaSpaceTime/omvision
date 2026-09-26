@@ -143,7 +143,9 @@ other screen's text, and still while the sidebar slides in beside it. Type is `T
 (15pt ≈ 20px) — the only *point* size in the app, because the highlighter's character formats
 are point-sized (see README) — on a 185% line height. A sticky 44px header floats over the
 text, opaque in `paper`, holding both controls and the day's label (`Today`, else
-`Tue 23 Sep`) on one line; the text scrolls behind it. Bottom right, on its own opaque patch
+`Tue 23 Sep`) on one line; the text scrolls behind it. A trackpad scroll follows the fingers
+and then glides on when they lift, faster swipes going further, the way other apps on the
+desktop do; resting the fingers before lifting stops it dead. Bottom right, on its own opaque patch
 for the same reason, the word count in caption faint, and above it in red the one write error
 this screen can raise.
 

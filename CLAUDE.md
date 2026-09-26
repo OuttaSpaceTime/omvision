@@ -39,6 +39,9 @@ first, and when you stop, record what landed and what is still open.
   - Goal files are re-read right before each change and written one at a time through a
     queue.
   - The journal is written only by this app.
+- The ompom engine and bar (`~/Code/ompom-engine`, `~/Code/ompom-bar`) run the user's live
+  pomodoro. Deploy them only with `~/Code/ompom-engine/bin/ompom-deploy` (the `ompom-deploy`
+  skill): it keeps the running timer. See `~/Code/ompom-engine/CLAUDE.md`.
 - Quickshell's `FileView` fails silently in four ways: see TODO.md, "Four silent-failure bugs
   in this Quickshell build".
 - Comments explain *why*, in prose, including alternatives that were rejected. Match that

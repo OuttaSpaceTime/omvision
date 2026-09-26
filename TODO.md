@@ -16,6 +16,15 @@ Milestones 2, 3 and 4 are in: it reads and writes `~/Notes/Omvision/goals/*.md`,
 
 ## Landed 2026-09-25
 
+- **Journal trackpad glide** (`JournalScreen.qml`, the `trackpadGlide` WheelHandler). Qt Quick
+  on Wayland has no kinetic trackpad scrolling: the compositor sends ScrollEnd, no momentum,
+  and Flickable stops dead. A passive (`blocking: false`) WheelHandler measures finger speed
+  over the last 80 ms and flicks on at 1.5× that on ScrollEnd; friction is
+  `flickDeceleration: 1250`. It must list `PointerDevice.TouchPad`: Qt's Wayland backend marks
+  trackpad scrolls synthesized, and a default WheelHandler ignores them. (An earlier attempt
+  missed that and never saw a trackpad event.) Mouse wheel is stock Qt. **Open:** the tuning
+  (`boost`, `flickDeceleration`) was never felt on hardware. Real scroll input can't be
+  produced here. Sign and glide distance were checked with a standalone `qml` test.
 - **Tasks wrap** instead of eliding; checkbox and `≈N` sit on the first line.
 - **Edit a task**: hover pencil (always-reserved slot, so no reflow), inline wrapping field,
   cursor at the end. `Writer.editTask` keeps `[x]` and `≈N`; saving it empty deletes the task.
