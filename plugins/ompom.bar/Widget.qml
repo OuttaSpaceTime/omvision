@@ -93,7 +93,10 @@ Item {
 
   function labelText() {
     if (root.mode === "off") return ""
-    if (root.phase !== "focus") return "break " + root.remainingLabel
+    // intent reports the length of the run about to start (the engine's
+    // statusJson()), shown plain: it is visible while clicking through the
+    // modes, before the engine raises its "What's your focus?" overlay.
+    if (root.phase !== "focus" && root.phase !== "intent") return "break " + root.remainingLabel
     return root.remainingLabel
   }
 
