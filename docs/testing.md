@@ -126,9 +126,11 @@ and a refactor must keep them:
 
 The goal names sit in `GoalsScreen.qml`, and in `GoalDetailScreen.qml` and its parts
 (`GoalHeader.qml`, `TaskRow.qml`, `GoalEndActions.qml`), and `journalEditor` on the
-journal's TextEdit in `JournalScreen.qml`. `OmvisionTest.locate()`, which finds an item by
-its label or its delegate's properties, predates the names and is now only a fallback:
-every test finds its items by objectName.
+journal's TextEdit in `JournalScreen.qml`. There is no other way to find a control: a
+fallback that looked items up by their label predated the names and was removed, because
+it let a test pass after the objectName it asked for had been renamed away. A renamed
+control now fails its tests with `no visible item named …`, and the table above is what
+to update.
 
 ### The `qtest_results` workaround
 

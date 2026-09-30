@@ -12,16 +12,17 @@
 //
 // What it looks like on screen (from a side-by-side of the same file in both
 // apps) is the part worth copying exactly:
-//   - syntax markers stay *visible*, in a faint colour: `#`, `##`, `-`, `>`,
-//     the backticks around code and the fence lines are all still there. Only
-//     a link's `[`, `](url)` disappear, leaving the label -- that is where the
-//     1pt trick earns its keep.
-//   - headings are bold and barely larger than body text (h1 a step, h2 a
-//     hair); a page of writing must still read as a page of writing.
+//   - the markers that shape a block stay *visible*, in a faint colour: `#`,
+//     `##`, `-`, `>`. Only the ones inside a sentence disappear -- `**`, `*`,
+//     `_`, and a link's `[`, `](url)`, leaving the label -- and that is where
+//     the 1pt trick earns its keep.
+//   - headings are bold and no larger than body text, at every level; a page
+//     of writing must still read as a page of writing.
 //   - blocks are set on a generous line height, which is what
 //     mergeBlockFormat is for.
-//   - inline code carries a soft fill *including* its backticks; a fenced
-//     block does not -- its fences are dimmed and its lines left alone.
+//   - inline code carries a soft fill *including* its backticks, which are
+//     not dimmed. A fenced block gets nothing: there is no fence rule, so a
+//     ``` line and the lines between are ordinary text.
 // Nothing is ever deleted or rewritten, so the file on disk stays
 // byte-for-byte what was typed.
 //
@@ -61,7 +62,11 @@ class QTextDocument;
 struct MarkdownStyle {
   qreal basePointSize = 11.0;
   // Percent, QTextBlockFormat::ProportionalHeight. 100 is single-spaced.
-  int lineHeight = 175;
+  // The default is the 135 both users set explicitly (omvision's
+  // JournalHighlight.qml and ompom's NoteHighlighterHost.qml). It used to
+  // say 175, a value neither of them used, so a new user that left it unset
+  // would have got a page spaced unlike either.
+  int lineHeight = 135;
   QColor body;
   QColor marker;
   QColor accent;

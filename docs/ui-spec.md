@@ -35,9 +35,12 @@ file is missing or unparseable. Never crash on a missing theme.
   `rowGap` (12), `rowPadding` (24, a list row's text to its hairline). If a value looks wrong somewhere, take the neighbouring step — do not type a
   number. Before the scale the same decision was spelled 2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
   24 and 28 across ten files, which is why rows meant to match sat a pixel or two apart and
-  why none of it could be tuned globally. Control height 32, small secondary actions and the
+  why none of it could be tuned globally. The scale covers spacing: padding, margins, gaps,
+  insets and hit slop. The size of a thing (a row's height, a mark, a panel's width, a
+  bar's thickness) isn't spacing; it is a named size in `Theme.qml` at whatever value it
+  needs. Control height 32, small secondary actions and the
   fields they open 24 (`smallControlHeight`); every dialog card is `dialogWidth` (560) wide,
-  padded `spaceXl`.
+  padded `spaceXl`, over a scrim of black at 45% (`scrim`).
 - **One page column.** Every screen sets its text in the journal's column: `pageMeasure`
   wide (70 characters of the writing font, ≈840px) and on the journal's own vertical line —
   centred on the *window*, not on the area beside the rail (`Theme.pageX`), so switching

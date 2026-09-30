@@ -53,8 +53,15 @@ FocusScope {
     titleInput.forceActiveFocus()
   }
 
-  // The raw front-matter value, not meta.estimate: the coach writes
-  // "estimate: 6   # was 9", which meta.estimate reads as not-a-number.
+  // The leading digits of the raw front-matter value, not meta.estimate.
+  // The two agree on every estimate the app writes or the coach does: a
+  // whole number, with or without the coach's "# was 9" note (Parser now
+  // strips it, so both give 6), and a missing one (both empty). They part
+  // only on a hand-typed value Parser can't read as a number, such as
+  // "estimate: 6 poms". meta.estimate has none there, so the field would
+  // open empty, and saving the dialog to fix a typo in the title would then
+  // delete the estimate line, since an empty field removes the key. Read
+  // this way the field opens on 6 and the number survives.
   function leadingNumber(raw) {
     var m = String(raw || "").match(/^\s*(\d+)/)
     return m ? m[1] : ""
@@ -94,7 +101,7 @@ FocusScope {
   Rectangle {
     id: scrim
     anchors.fill: parent
-    color: Qt.rgba(0, 0, 0, 0.45)
+    color: Theme.scrim
     MouseArea {
       anchors.fill: parent
       hoverEnabled: true

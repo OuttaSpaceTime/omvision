@@ -134,6 +134,12 @@ QtObject {
   // to match ended up a pixel or two apart and why nothing could be adjusted
   // globally. The steps are deliberately few: if a value here looks wrong for
   // a place, the fix is to pick the neighbouring step, not to type a number.
+  //
+  // The scale is for spacing: padding, margins, gaps, insets and hit slop,
+  // the room between and around things. The size of a thing -- a row's
+  // height, a mark, a panel's width, a line's thickness -- is not spacing.
+  // It is named for what it is further down, at whatever value it needs,
+  // and the scale has no say in it.
   readonly property int spaceXxs: 2   // hairline gaps inside a single line of text
   readonly property int spaceXs: 4    // between a label and the value under it
   readonly property int spaceSm: 8    // inside a control, between chips
@@ -176,7 +182,7 @@ QtObject {
   readonly property int hairlineWidth: 1
   readonly property int borderWidth: 1
   // The accent bar on a selected row: a Goals row, the journal's day list
-  // and its `@` list. Off the scale (between spaceXxs and spaceXs).
+  // and its `@` list. A size (the bar's thickness), not spacing.
   readonly property int selectionBarWidth: 3
   // How long the pointer rests on a control before its tooltip shows (the
   // rail's icons).
@@ -189,24 +195,10 @@ QtObject {
   readonly property int windowMinWidth: 720
   readonly property int windowMinHeight: 560
 
-  // ---- notices ---------------------------------------------------------------
-  // The write-error banner, a one-line notice at the top of the window.
-  // Vertically it is padded one scale step a side. Its horizontal padding
-  // and its margin from the window's edges (14 and 20 a side) predate the
-  // spacing scale and are off it; they are named here as they were rather
-  // than snapped to the neighbouring steps (12 or 16, 16 or 24), so moving
-  // them out of omvision.qml left the banner exactly as it was. Snapping
-  // them is a visual change and its own decision.
-  readonly property int noticePaddingX: 14
-  readonly property int noticePaddingY: spaceSm
-  readonly property int noticeWindowMargin: 20
-
   // ---- small marks and fixed sizes ------------------------------------------
   // Sizes that used to be typed into the screens and dialogs as bare numbers.
-  // Most are the size of a mark, not a gap, and sit off the spacing scale;
-  // they are named here exactly as they were, not snapped to a neighbouring
-  // step, so moving them out left every screen pixel-identical. Snapping any
-  // of them is a visual change and its own decision.
+  // Each is the size of a mark or a band, not a gap, so the spacing scale
+  // does not apply to them, and they keep the values they were drawn at.
   //
   // The icon rail (Sidebar.qml): the mark at its top, one screen's row, and
   // the accent bar on the selected row. The bar is 2, not the 3 of
@@ -231,21 +223,36 @@ QtObject {
   readonly property int emptyRowHeight: 60
 
   // ---- hit targets -----------------------------------------------------------
-  // How far past its text a text-only control takes clicks. The filter and
-  // choice chips (Goals, Coaching) reach one scale step out. The goal
-  // detail's red `Cancel` reaches 6, which is off the scale.
+  // How far past its text a text-only control takes clicks. Named rather
+  // than written as the step at the control, because there the step would
+  // read as a layout margin, and this one moves no pixel: it only widens
+  // the MouseArea. The filter and choice chips (Goals, Coaching) sit in a
+  // row with each other, so they reach one small step out. The goal
+  // detail's red `Cancel` sits alone beside the 32px `Close goal · done`
+  // button, and reaching spaceSm out gives its 14px line about that button's
+  // height to land on. It was 6, which was off the scale; 4 and 8 were the
+  // neighbours, and 4 would have left a destructive action with half the
+  // target of the button next to it.
   readonly property int chipHitSlop: spaceXs
-  readonly property int linkHitSlop: 6
+  readonly property int linkHitSlop: spaceSm
 
   // ---- dialogs -----------------------------------------------------------------
+  // The scrim every modal dialog lays over the window behind its card. Black
+  // at a fixed alpha, not a tint of the theme's foreground like the fills
+  // above: a scrim has to push the page back, and on a dark theme the
+  // foreground is light, so a foreground tint would brighten the page it is
+  // meant to dim. 45% takes the page clearly behind the card while its text
+  // stays recognisable, so you can still see what the dialog acts on. It
+  // was typed out in each of the three dialogs until they shared it here.
+  readonly property color scrim: Qt.rgba(0, 0, 0, 0.45)
   // The card's own border, twice a hairline so the card holds its edge
   // against the scrim.
   readonly property int dialogBorderWidth: 2
   // A field that holds a short value (`How long`, `Estimate`), kept at this
-  // width beside a field that fills the row. Off the scale.
+  // width beside a field that fills the row. A size, not spacing.
   readonly property int dialogShortFieldWidth: 120
-  // The cancel dialog's multi-line `What do you take from it?` box. Off the
-  // scale (between space3xl 48 and space4xl 64).
+  // The cancel dialog's multi-line `What do you take from it?` box. A size,
+  // not spacing.
   readonly property int dialogTextAreaHeight: 56
 
   // ---- motion ----------------------------------------------------------------
@@ -280,26 +287,24 @@ QtObject {
 
   // ---- journal screen geometry ---------------------------------------------
   // The journal's own chrome sizes, which used to be typed into
-  // JournalScreen.qml as bare numbers. Most of them predate the spacing
-  // scale and sit between its steps; they are named here exactly as they
-  // were, not snapped to a neighbouring step, so moving them out of the
-  // screen left it pixel-identical. Snapping any of them is a visual change
-  // and its own decision. Where a value already had a token (the 24px
-  // corner controls are smallControlHeight, the 1px rules hairlineWidth,
-  // the cursor's scroll margin spaceXl), the screen uses that instead.
+  // JournalScreen.qml as bare numbers. They are sizes, not spacing, so they
+  // keep the values they were drawn at. Where a value is spacing (the gap
+  // before the day's label) or already had a token (the 24px corner
+  // controls are smallControlHeight, the 1px rules hairlineWidth, the
+  // cursor's scroll margin spaceXl), the screen uses the scale instead.
   //
-  // The sticky row holding the corner controls and the day's label. Off the
-  // scale (between space3xl 48 and space4xl 64).
+  // The sticky row holding the corner controls and the day's label.
   readonly property int journalHeaderHeight: 56
-  // The gap between the `≡` control and the day's label, on top of the
-  // row's own spaceXs either side. Off the scale (between spaceSm and spaceMd).
-  readonly property int journalDateGap: 10
-  // The day list overlay, and one day's row in it. Off the scale: panel and
-  // row sizes, not spacing, and no step is near either.
+  // The day list overlay's width.
   readonly property int journalDayListWidth: 260
+  // One day's row in the list.
   readonly property int journalDayRowHeight: 60
   // Empty page under the last line, so the line being written sits up in
-  // the window instead of on its bottom edge. Off the scale.
+  // the window instead of on its bottom edge. Counted as a size, not
+  // spacing: it is how far the page scrolls past its text, measured against
+  // the window's height rather than as room between two things, and the
+  // nearest step (space4xl, 64) would put the line being written back near
+  // the bottom edge this exists to keep it off.
   readonly property int journalBottomSlack: 260
 
   // ---- the page column -----------------------------------------------------

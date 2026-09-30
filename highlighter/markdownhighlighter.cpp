@@ -16,10 +16,6 @@ namespace {
 // spaces CommonMark allows, and none of them is allowed to fail loudly: a line
 // that matches nothing is simply body text, which is the common case in a
 // journal.
-const QRegularExpression& fenceRe() {
-  static const QRegularExpression re(QStringLiteral("^\\s{0,3}(```|~~~)"));
-  return re;
-}
 const QRegularExpression& headingRe() {
   static const QRegularExpression re(QStringLiteral("^(#{1,6})([ \\t]+)(.*)$"));
   return re;
@@ -148,10 +144,13 @@ void MarkdownBlockHighlighter::rebuildFormats() {
 
   // Two different treatments, and which marker gets which is the whole look:
   //
-  //   dim    -- `#`, `-`, `>`, the backticks around code, the fence lines.
-  //             These hold the left edge of the text. Hiding them would pull
-  //             every heading and every bullet a few characters leftward as
-  //             you typed, so they stay, faintly.
+  //   dim    -- a heading's `#`s, a list's `-` or `1.`, a quote's `>`, and
+  //             a `---` rule. These hold the left edge of the text. Hiding
+  //             them would pull every heading and every bullet a few
+  //             characters leftward as you typed, so they stay, faintly.
+  //             Inline code's backticks are not among them: they take the
+  //             code's own format, undimmed (see the Code rule below), and
+  //             a ``` line has no rule at all (see styleBlock).
   //   hidden -- `**`, `*`, `_`, and a link's `[` and `](url)`. These sit
   //             inside a sentence, where they are noise rather than
   //             structure. 1pt and transparent: still in the document, still
@@ -181,8 +180,9 @@ void MarkdownBlockHighlighter::rebuildFormats() {
   m_quote.setFontItalic(true);
   if (m_style.quote.isValid()) m_quote.setForeground(m_style.quote);
 
-  // Inline code only. A fenced block gets no fill -- its fences are dimmed
-  // and its lines left as ordinary text, which is what omawrite shows.
+  // Inline code only. A fenced block gets no fill: there is no fence rule,
+  // so its ``` lines and everything between them are ordinary text, which
+  // is what omawrite shows.
   m_code = QTextCharFormat();
   if (m_style.code.isValid()) m_code.setForeground(m_style.code);
   if (m_style.codeBackground.isValid()) m_code.setBackground(m_style.codeBackground);
@@ -337,9 +337,10 @@ MarkdownBlockHighlighter::PendingMentions MarkdownBlockHighlighter::styleBlock(c
     setFormat(quote.capturedStart(1), quote.capturedLength(1), m_marker);
     bodyStart = quote.capturedStart(2);
   } else {
-    // List markers stay visible, only dimmed. Hiding them the way `#` is
-    // hidden would leave a list looking like loose lines -- the bullet is
-    // structure you are meant to see, not syntax you are meant to forget.
+    // List markers stay visible, only dimmed, like a heading's `#`. Hiding
+    // them the way `**` is hidden would leave a list looking like loose
+    // lines -- the bullet is structure you are meant to see, not syntax you
+    // are meant to forget.
     const QRegularExpressionMatch bullet = bulletRe().match(text);
     const QRegularExpressionMatch ordered = orderedRe().match(text);
     if (bullet.hasMatch()) {

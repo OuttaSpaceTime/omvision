@@ -93,7 +93,7 @@ FocusScope {
   Rectangle {
     id: scrim
     anchors.fill: parent
-    color: Qt.rgba(0, 0, 0, 0.45)
+    color: Theme.scrim
     MouseArea {
       anchors.fill: parent
       hoverEnabled: true

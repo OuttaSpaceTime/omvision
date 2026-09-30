@@ -431,75 +431,15 @@ TestCase {
     return null
   }
 
-  function findWhere(root, pred) {
-    if (!root || !root.visible) return null
-    if (pred(root)) return root
-    var kids = root.children
-    for (var i = 0; kids && i < kids.length; i++) {
-      var r = findWhere(kids[i], pred)
-      if (r) return r
-    }
-    return null
-  }
-
-  // Stand-ins for the objectNames the tests use, found by what the item is
-  // instead: its label, or the public properties of the delegate it sits in.
-  // They were written before the objectNames landed in the app. findNamed()
-  // is always tried first and every name now resolves, so this is only a
-  // fallback, and an unwelcome one: it would find an item whose objectName
-  // was renamed by other means, so the rename goes unnoticed. Due for
-  // deletion.
-  function locate(name) {
-    var gd = base.goalDetail
-    var m
-    var isPencil = function(it) { return it.hasOwnProperty("small") && typeof it.clicked === "function" }
-    var labelled = function(root, label) {
-      return findWhere(root, function(it) { return it.label === label && typeof it.activated === "function" })
-    }
-    // A task row is the Item holding `editing` and `lineH`; its delegate
-    // (the parent) carries the Repeater's index.
-    var taskRow = function(i) {
-      return findWhere(gd, function(it) {
-        return it.hasOwnProperty("editing") && it.hasOwnProperty("lineH") && it.parent && it.parent.index === i
-      })
-    }
-    if ((m = name.match(/^goalRow:(.+)$/))) {
-      return findWhere(base.target, function(it) { return it.hasOwnProperty("isSelected") && it.g && it.g.slug === m[1] })
-    }
-    if ((m = name.match(/^goalEdit:(.+)$/))) {
-      var row = locate("goalRow:" + m[1])
-      return row ? findWhere(row, isPencil) : null
-    }
-    if ((m = name.match(/^taskRow:(\d+)$/))) return taskRow(Number(m[1]))
-    if ((m = name.match(/^taskEdit:(\d+)$/))) {
-      var tr = taskRow(Number(m[1]))
-      return tr ? findWhere(tr, function(it) { return isPencil(it) && it.small }) : null
-    }
-    if ((m = name.match(/^taskEditField:(\d+)$/))) {
-      var tr2 = taskRow(Number(m[1]))
-      return tr2 ? findWhere(tr2, function(it) { return it.hasOwnProperty("cursorPosition") && it.hasOwnProperty("textDocument") }) : null
-    }
-    if (name === "addTaskButton") return labelled(gd, "+ task")
-    if (name === "addTaskField") return findWhere(gd, function(it) { return it.hasOwnProperty("echoMode") })
-    if (name === "closeGoalButton") return labelled(gd, "Close goal · done")
-    if (name === "reopenGoalButton") return labelled(gd, "Reopen goal")
-    if (name === "addEventButton") return labelled(gd, "Add event")
-    if (name === "coachButton") return labelled(gd, "Coach this goal")
-    if (name === "cancelGoalButton") return findWhere(gd, function(it) { return it.text === "Cancel" && it.hasOwnProperty("wrapMode") })
-    if (name === "editGoalButton") return findWhere(gd, function(it) { return isPencil(it) && !it.small })
-    // The journal's page: its one TextEdit that keeps a selection when it
-    // loses focus.
-    if (name === "journalEditor") return findWhere(base.journal, function(it) {
-      return it.hasOwnProperty("textDocument") && it.persistentSelection === true
-    })
-    return null
-  }
-
-  // The visible item called `name`, waiting for it to appear.
+  // The visible item called `name`, waiting for it to appear. By objectName
+  // only. A fallback that found items by their label or their delegate's
+  // properties (locate(), from before the names were on the controls) was
+  // removed: it made a renamed or dropped objectName go unnoticed, because
+  // the test still found the control another way.
   function item(name, ms) {
     var found = null
     tryVerify(function() {
-      found = findNamed(base.target, name) || locate(name)
+      found = findNamed(base.target, name)
       return found !== null
     }, ms || base.timeout, "no visible item named " + name)
     return found

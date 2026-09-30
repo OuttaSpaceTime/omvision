@@ -732,14 +732,21 @@ ShellRoot {
       // for a few seconds on whichever screen is showing when it happens.
       // The New/Edit goal dialog's saves are the exception: the dialog stays
       // open and shows the failure itself (newGoalError).
+      //
+      // Padded like a Button's label, spaceMd a side and spaceSm above and
+      // below, and kept spaceLg in from the window's edges, close to the
+      // spaceMd it hangs below the top. Before the spacing scale these were
+      // 14 and 20. Their other neighbouring steps were rejected: 16 a side
+      // made the banner roomier than any button, and 24 from the edges would
+      // keep a long message twice as far from the sides as from the top.
       Rectangle {
         id: writeErrorBanner
         visible: root.writeError.length > 0
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.topMargin: Theme.spaceMd
-        width: Math.min(parent.width - Theme.noticeWindowMargin * 2, bannerText.implicitWidth + Theme.noticePaddingX * 2)
-        height: bannerText.implicitHeight + Theme.noticePaddingY * 2
+        width: Math.min(parent.width - Theme.spaceLg * 2, bannerText.implicitWidth + Theme.spaceMd * 2)
+        height: bannerText.implicitHeight + Theme.spaceSm * 2
         color: Theme.paper
         border.color: Theme.red
         border.width: Theme.borderWidth

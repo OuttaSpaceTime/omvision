@@ -802,8 +802,15 @@ Item {
       // The day you are in, on the same line as the controls. Vertically
       // centred against a corner control, so it takes the control's height
       // rather than the Row's baseline.
+      //
+      // Set off from `≡` by this spaceSm plus the Row's spaceXs either side:
+      // spaceLg in all, the step between controls in a row, where the two
+      // controls sit only spaceXs apart, and the same spaceLg the row keeps
+      // from the window's edge. It was 10 (18 in all) before the spacing
+      // scale. spaceMd, the other neighbour, gave 20 in all: more than the
+      // row's margin, for no reason a reader could see.
       Item {
-        width: Theme.journalDateGap
+        width: Theme.spaceSm
         height: Theme.smallControlHeight
       }
       Text {
