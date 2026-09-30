@@ -5,36 +5,36 @@ import Quickshell.Io
 
 import "Parser.js" as Parser
 import "Writer.js" as Writer
+import "Util.js" as Util
 
-// Omvision — goals/tasks viewer and, as of milestone 3, writer for the
-// ompom-engine file contract. Standalone Quickshell config, launched with:
-//   qs -p ~/Code/omvision/omvision.qml
-// Writes go through two different paths, chosen per goal-files.md §2:
-//   - <slug>.md (tasks, status, the cancel note) is read-modify-write:
-//     Quickshell's own FileView.setText(), atomicWrites: true (temp file
-//     + rename, same guarantee notes-helper.py's write_atomic() gives),
-//     and always re-read (goalWriter.reload()) immediately before the
-//     mutation is applied -- never from a copy taken when the screen
-//     opened, per the contract's own rule for this file.
-//   - <slug>.log.md and days/YYYY-MM-DD.md (events) are append-only:
-//     a Process running `tee -a <path>` with the entry written to its
-//     stdin. That's O_APPEND at the kernel level with no read step at
-//     all, the same discipline notes-helper.py's append_entry() uses and
-//     for the same reason (§2) -- a coaching session rewriting <slug>.md
-//     concurrently must never be able to cost an event its entry. `tee`
-//     is invoked directly (never through a shell), matching this
-//     project's existing Process usage for `find`/`wl-copy`.
+// Omvision -- goals, tasks, a daily journal and coaching, over the ompom
+// engine's file contract (~/Code/ompom-engine/docs/goal-files.md). A
+// standalone Quickshell config, launched with bin/omvision rather than
+// `qs -p` by hand: the launcher puts the journal's compiled markdown
+// highlighter on the import path (see bin/omvision for why it has to).
+//
+// This file owns the app's data. It lists and loads every goal, log, day and
+// journal file and hands the screens results that are already parsed, and it
+// makes every write except the journal's, which JournalScreen does itself.
+// Writes take one of two paths, chosen per goal-files.md §2:
+//   - <slug>.md (tasks, status, the cancel note, a new goal) is
+//     read-modify-write, through goalFiles (SerialFileWriter.qml): one job at
+//     a time, the file always re-read immediately before the change is
+//     applied -- never from a copy taken when the screen opened, per the
+//     contract's own rule for this file -- and written atomically (temp file
+//     + rename, the same guarantee notes-helper.py's write_atomic() gives).
+//   - <slug>.log.md and days/YYYY-MM-DD.md (events) are append-only, through
+//     appender (Appender.qml): `tee -a`, O_APPEND with no read step at all,
+//     the discipline notes-helper.py's append_entry() follows for the same
+//     reason -- a coaching session rewriting <slug>.md concurrently must
+//     never be able to cost an event its entry.
+// Where the files live is Paths.qml's business.
 ShellRoot {
   id: root
 
-  readonly property string home: Quickshell.env("HOME")
-  readonly property string goalsDir: home + "/Notes/Omvision/goals"
-  readonly property string daysDir: home + "/Notes/Omvision/days"
-  // The journal is not filed under a goal: one free-form file per calendar
-  // day, flat, about whatever was on your mind that day. A reader (the coach
-  // skill) takes the directory whole and decides for itself what is relevant.
-  readonly property string journalDir: home + "/Notes/Omvision/journal"
-  readonly property string todayPath: daysDir + "/" + Parser.dayKey(new Date()) + ".md"
+  // Evaluated once, at startup, like before Paths existed: the day file the
+  // Today screen reads does not roll over at midnight.
+  readonly property string todayPath: Paths.dayFile(Parser.dayKey(new Date()))
 
   property string currentScreen: "goals" // today | goals | coaching | journal | goalDetail
   property string openGoalSlug: ""
@@ -77,18 +77,14 @@ ShellRoot {
   property var orphanLogs: ({}) // slug -> entries
   property var dayEntries: []
 
+  // Each of these state objects is replaced whole, never edited in place:
+  // see Util.js for why.
   function syncGoal(slug, meta, entries) {
-    var d = {}
-    for (var k in root.goalsData) d[k] = root.goalsData[k]
-    d[slug] = { meta: meta, logEntries: entries || [] }
-    root.goalsData = d
+    root.goalsData = Util.withKey(root.goalsData, slug, { meta: meta, logEntries: entries || [] })
   }
 
   function syncOrphanLog(slug, entries) {
-    var d = {}
-    for (var k in root.orphanLogs) d[k] = root.orphanLogs[k]
-    d[slug] = entries || []
-    root.orphanLogs = d
+    root.orphanLogs = Util.withKey(root.orphanLogs, slug, entries || [])
   }
 
   function applyGoalsList(text) {
@@ -122,47 +118,24 @@ ShellRoot {
       if (!have[logStems[l]]) orphans.push(logStems[l])
     }
     orphans.sort()
-    var orphansChanged = orphans.length !== root.orphanLogSlugs.length
-    if (!orphansChanged) {
-      for (var o = 0; o < orphans.length; o++) {
-        if (orphans[o] !== root.orphanLogSlugs[o]) { orphansChanged = true; break }
-      }
-    }
-    if (orphansChanged) {
+    if (!Util.sameList(orphans, root.orphanLogSlugs)) {
       root.orphanLogSlugs = orphans
-      var keep = {}
-      for (var k = 0; k < orphans.length; k++) keep[orphans[k]] = true
-      var prunedOrphans = {}
-      for (var ko in root.orphanLogs) if (keep[ko]) prunedOrphans[ko] = root.orphanLogs[ko]
-      root.orphanLogs = prunedOrphans
+      root.orphanLogs = Util.pickKeys(root.orphanLogs, orphans)
     }
 
-    var changed = slugs.length !== root.goalSlugs.length
-    if (!changed) {
-      for (var j = 0; j < slugs.length; j++) {
-        if (slugs[j] !== root.goalSlugs[j]) { changed = true; break }
-      }
-    }
-    if (!changed) return
-
+    if (Util.sameList(slugs, root.goalSlugs)) return
     root.goalSlugs = slugs
-
     // Drop stale entries for goals whose files disappeared.
-    var set = {}
-    for (var s = 0; s < slugs.length; s++) set[slugs[s]] = true
-    var pruned = {}
-    for (var k2 in root.goalsData) if (set[k2]) pruned[k2] = root.goalsData[k2]
-    root.goalsData = pruned
+    root.goalsData = Util.pickKeys(root.goalsData, slugs)
   }
 
   readonly property var todaySummary: computeTodaySummary(goalsData, dayEntries)
 
   // ---- write path: <slug>.md (read-modify-write, re-read every time) -----
-  // One shared FileView, one job at a time (writeQueue), so two writes
-  // (e.g. ticking two tasks quickly) can never stomp each other's
-  // pendingMutate/pendingDone -- each job gets its own fresh reload().
-  property var writeQueue: []
-  property bool writeBusy: false
+  // Every change to a goal file, and every new one, goes through goalFiles
+  // (the SerialFileWriter at the bottom of this file), so two writes -- two
+  // tasks ticked quickly -- run one after the other, each on its own fresh
+  // read, and never stomp each other.
   property string writeError: ""
 
   function showWriteError(message) {
@@ -170,124 +143,50 @@ ShellRoot {
     writeErrorTimer.restart()
   }
 
-  function queueGoalWrite(slug, mutateFn, onDone) {
-    root.writeQueue.push({ slug: slug, mutate: mutateFn, onDone: onDone })
-    root.pumpWriteQueue()
+  // What a failed goal-file write is called in the messages the user sees,
+  // by SerialFileWriter's reason for it.
+  function goalWriteMessage(reason) {
+    if (reason === "declined") return "goal file changed unexpectedly"
+    if (reason === "readFailed") return "couldn't read the goal file"
+    if (reason === "saveFailed") return "couldn't save the goal file"
+    return ""
   }
 
-  function pumpWriteQueue() {
-    if (root.writeBusy || root.writeQueue.length === 0) return
-    var job = root.writeQueue.shift()
-    root.writeBusy = true
-    goalWriter.pendingMutate = job.mutate
-    goalWriter.pendingDone = function(ok, message) {
-      root.writeBusy = false
-      if (job.onDone) job.onDone(ok, message)
-      root.pumpWriteQueue()
-    }
-    goalWriter.path = root.goalsDir + "/" + job.slug + ".md"
-    goalWriter.reload()
-  }
-
-  function handleToggleTask(slug, index) {
-    root.queueGoalWrite(slug, function(text) {
-      var eol = Writer.detectEol(text)
-      var out = Writer.toggleTask(Writer.splitLines(text), index)
-      return out ? Writer.joinLines(out, eol) : null
-    }, function(ok, message) {
-      if (!ok) root.showWriteError("Couldn't update the task" + (message ? " (" + message + ")" : "") + ".")
-    })
-  }
-
-  function handleAddTask(slug, text, resultFn) {
-    root.queueGoalWrite(slug, function(raw) {
-      var eol = Writer.detectEol(raw)
-      var out = Writer.addTask(Writer.splitLines(raw), text)
-      return out ? Writer.joinLines(out, eol) : null
-    }, function(ok, message) {
-      if (!ok) root.showWriteError("Couldn't add the task" + (message ? " (" + message + ")" : "") + ".")
-      if (resultFn) resultFn(ok, message)
-    })
-  }
-
-  function handleEditTask(slug, index, text, resultFn) {
-    root.queueGoalWrite(slug, function(raw) {
-      var eol = Writer.detectEol(raw)
-      var out = Writer.editTask(Writer.splitLines(raw), index, text)
-      return out ? Writer.joinLines(out, eol) : null
-    }, function(ok, message) {
-      if (!ok) root.showWriteError("Couldn't update the task" + (message ? " (" + message + ")" : "") + ".")
-      if (resultFn) resultFn(ok, message)
-    })
-  }
-
-  function handleCloseGoal(slug) {
-    root.queueGoalWrite(slug, function(raw) {
-      var eol = Writer.detectEol(raw)
-      var out = Writer.setStatus(Writer.splitLines(raw), "done")
-      return out ? Writer.joinLines(out, eol) : null
-    }, function(ok, message) {
-      if (!ok) root.showWriteError("Couldn't close the goal" + (message ? " (" + message + ")" : "") + ".")
-    })
-  }
-
-  function handleReopenGoal(slug) {
-    root.queueGoalWrite(slug, function(raw) {
-      var eol = Writer.detectEol(raw)
-      var out = Writer.setStatus(Writer.splitLines(raw), "active")
-      return out ? Writer.joinLines(out, eol) : null
-    }, function(ok, message) {
-      if (!ok) root.showWriteError("Couldn't reopen the goal" + (message ? " (" + message + ")" : "") + ".")
-    })
-  }
-
-  function handleCancelGoal(slug, reason, takeaway, resultFn) {
-    root.queueGoalWrite(slug, function(raw) {
-      var eol = Writer.detectEol(raw)
-      var lines = Writer.setStatus(Writer.splitLines(raw), "cancelled")
-      if (!lines) return null
-      lines = Writer.appendCancelNote(lines, Writer.headingTimestamp(new Date()), reason, takeaway)
-      return Writer.joinLines(lines, eol)
-    }, function(ok, message) {
-      if (!ok) root.showWriteError("Couldn't cancel the goal" + (message ? " (" + message + ")" : "") + ".")
+  // Every edit of an existing goal: toggle, add and edit a task; close,
+  // reopen and cancel the goal; the Edit goal dialog. `editLines(lines)`
+  // gets the file freshly read and split into lines, and returns the new
+  // lines, or null to leave the file alone (Writer.js's functions have
+  // exactly that shape). The file's own line endings are kept.
+  //
+  // `verb` finishes the banner's "Couldn't <verb> (<why>)." on a failure,
+  // e.g. "update the task"; pass "" when the caller shows the failure itself
+  // (the Edit goal dialog does). resultFn(ok, message), if given, gets the
+  // same <why>, "" on success.
+  //
+  // One helper rather than a handler per action: the six handlers this
+  // replaced were the same ten lines with a different Writer call and verb.
+  function editGoalFile(slug, verb, editLines, resultFn) {
+    goalFiles.modify(Paths.goalFile(slug), function(text) {
+      var out = editLines(Writer.splitLines(text))
+      return out ? Writer.joinLines(out, Writer.detectEol(text)) : null
+    }, function(ok, reason) {
+      var message = ok ? "" : root.goalWriteMessage(reason)
+      if (!ok && verb !== "") root.showWriteError("Couldn't " + verb + (message ? " (" + message + ")" : "") + ".")
       if (resultFn) resultFn(ok, message)
     })
   }
 
   // ---- write path: <slug>.log.md / days/YYYY-MM-DD.md (append-only) ------
-  property var appendQueue: []
-  property bool appendBusy: false
-
-  function queueAppend(path, content, onDone) {
-    root.appendQueue.push({ path: path, content: content, onDone: onDone })
-    root.pumpAppendQueue()
-  }
-
-  function pumpAppendQueue() {
-    if (root.appendBusy || root.appendQueue.length === 0) return
-    var job = root.appendQueue.shift()
-    root.appendBusy = true
-    appendProc.pendingPayload = job.content
-    appendProc.pendingDone = function(ok) {
-      root.appendBusy = false
-      if (job.onDone) job.onDone(ok)
-      root.pumpAppendQueue()
-    }
-    appendProc.command = ["/usr/bin/tee", "-a", job.path]
-    appendProc.stdinEnabled = true
-    appendProc.running = true
-  }
-
   function handleAddEvent(payload, resultFn) {
     var entryText = Writer.formatEventEntry(payload.whenDate, payload.minutes, payload.kind, payload.what, payload.countsToward)
     var slug = String(payload.slug || "")
     var path
     if (slug.length > 0 && /^[a-z0-9][a-z0-9-]*$/.test(slug)) {
-      path = root.goalsDir + "/" + slug + ".log.md"
+      path = Paths.goalLog(slug)
     } else {
-      path = root.daysDir + "/" + Parser.dayKey(payload.whenDate) + ".md"
+      path = Paths.dayFile(Parser.dayKey(payload.whenDate))
     }
-    root.queueAppend(path, entryText, function(ok) {
+    appender.append(path, entryText, function(ok) {
       if (!ok) root.showWriteError("Couldn't log the event — nothing was saved. Copy your note before retrying.")
       if (resultFn) resultFn(ok)
     })
@@ -318,71 +217,52 @@ ShellRoot {
     root.newGoalDialogOpen = true
   }
 
-  function handleEditGoal(slug, fields, resultFn) {
-    root.queueGoalWrite(slug, function(raw) {
-      var eol = Writer.detectEol(raw)
-      var out = Writer.updateGoalFields(Writer.splitLines(raw), fields)
-      return out ? Writer.joinLines(out, eol) : null
-    }, function(ok, message) {
-      if (resultFn) resultFn(ok, message)
-    })
-  }
-
   property bool newGoalDialogOpen: false
   property string newGoalError: ""
   property string editGoalSlug: ""
 
   // ---- write path: creating a new goal (<slug>.md), goal-files.md §3 -----
-  // One goalCreateFile FileView, reused across the whole collision-probe
-  // sequence: reload() against a candidate slug's path either succeeds
-  // (something is already there -- read its title to decide "same goal,
-  // no-op" vs. "someone else's goal, try <base>-2, <base>-3, ...") or
-  // fails (the slug is free, write the new file there). Every candidate
-  // is a fresh read right before any decision is made about it, same
-  // "re-read immediately before mutating" discipline the rest of this
-  // file's writers follow for <slug>.md.
-  property var newGoalQueue: []
-  property bool newGoalBusy: false
-  property var newGoalJob: null
-  property string newGoalBaseSlug: ""
-  property string newGoalAttemptSlug: ""
-  property int newGoalAttemptN: 1
-
-  function queueNewGoal(fields, onDone) {
-    root.newGoalQueue.push({ fields: fields, onDone: onDone })
-    root.pumpNewGoalQueue()
-  }
-
-  function pumpNewGoalQueue() {
-    if (root.newGoalBusy || root.newGoalQueue.length === 0) return
-    var job = root.newGoalQueue.shift()
-    root.newGoalBusy = true
-    root.newGoalJob = job
-    root.newGoalBaseSlug = Writer.deriveSlug(job.fields.title)
-    root.newGoalAttemptSlug = root.newGoalBaseSlug
-    root.newGoalAttemptN = 1
-    root.tryCreateGoalSlug()
-  }
-
-  function tryCreateGoalSlug() {
-    goalCreateFile.path = root.goalsDir + "/" + root.newGoalAttemptSlug + ".md"
-    // Deferred through a zero-interval Timer rather than reload() called
-    // straight from here: this function is itself often invoked from
-    // inside goalCreateFile's own onSaved/onLoaded handlers (chained
-    // collision-probe attempts, or the next queued job starting up), and
-    // calling reload() synchronously from inside that same FileView's own
-    // signal handler reliably stalled the chain in testing -- the same
-    // class of dropped-completion-signal issue documented on setText()
-    // below, just triggered by reload() instead.
-    deferredCreateReload.start()
-  }
-
-  function finishNewGoal(ok, message, slug) {
-    var job = root.newGoalJob
-    root.newGoalJob = null
-    root.newGoalBusy = false
-    if (job && job.onDone) job.onDone(ok, message, slug)
-    root.pumpNewGoalQueue()
+  // A probe of each candidate slug's path either loads (something is
+  // already there -- read its title to decide "same goal, no-op" vs.
+  // "someone else's goal, try <base>-2, <base>-3, ...") or fails (the slug
+  // is free, write the new file there). Every candidate is a fresh read
+  // right before any decision is made about it, the same "re-read
+  // immediately before mutating" discipline goal edits follow.
+  //
+  // Each step after the first is queued `next`, straight from the previous
+  // step's result: the whole search-and-write runs as one uninterrupted
+  // stretch of the queue, so two goals with the same title created back to
+  // back can't both find the slug free and both write it.
+  function createGoalFile(fields, onDone) {
+    var base = Writer.deriveSlug(fields.title)
+    function attempt(n, options) {
+      var slug = n === 1 ? base : base + "-" + n
+      var path = Paths.goalFile(slug)
+      goalFiles.probe(path, function(exists, text) {
+        if (!exists) {
+          // Nothing at this slug -- free to create. Only reached when the
+          // read just failed, so this never writes over a goal.
+          goalFiles.write(path, Writer.buildNewGoalFile(fields), function(ok) {
+            if (ok) onDone(true, "", slug)
+            else onDone(false, "couldn't create the goal file", "")
+          }, { next: true })
+          return
+        }
+        var meta = Parser.parseGoalFile(text)
+        if (meta && meta.title === fields.title) {
+          // Same title at this slug -- same goal. Creating it again is a
+          // no-op, not an error (goal-files.md §3).
+          onDone(true, "", slug)
+          return
+        }
+        // Slug is taken by a different goal (or an unparseable file). A
+        // generous but finite cap keeps this from spinning forever if
+        // something truly pathological is going on.
+        if (n > 500) { onDone(false, "couldn't find a free slug", ""); return }
+        attempt(n + 1, { next: true })
+      }, options)
+    }
+    attempt(1)
   }
 
   function handleCreateGoal(fields, resultFn) {
@@ -394,7 +274,7 @@ ShellRoot {
       estimate: fields.estimate,
       doneBy: fields.doneBy
     }
-    root.queueNewGoal(clean, function(ok, message, slug) {
+    root.createGoalFile(clean, function(ok, message, slug) {
       // Don't wait on the 2s directory poll -- a goal just created should
       // show up in the list right away.
       if (ok) listProc.running = true
@@ -402,26 +282,24 @@ ShellRoot {
     })
   }
 
+  // Today's pomodoros across every goal log and the day file.
   function computeTodaySummary(data, entries) {
-    var now = new Date()
-    var todayKey = Parser.dayKey(now)
-    var poms = 0, minutes = 0
-    function scan(list) {
+    var todayKey = Parser.dayKey(new Date())
+    var today = []
+    function collect(list) {
       for (var i = 0; i < list.length; i++) {
-        var e = list[i]
-        if (Parser.dayKey(e.date) !== todayKey) continue
-        if (e.type === "pomodoro") { poms++; minutes += e.minutes }
+        if (Parser.dayKey(list[i].date) === todayKey) today.push(list[i])
       }
     }
-    for (var slug in data) scan(data[slug].logEntries || [])
-    scan(entries || [])
-    return { poms: poms, minutes: minutes }
+    for (var slug in data) collect(data[slug].logEntries || [])
+    collect(entries || [])
+    return { poms: Parser.pomodoroCount(today), minutes: Parser.pomodoroMinutes(today) }
   }
 
   // ---- directory listing: polled since Quickshell has no folder watcher --
   Process {
     id: listProc
-    command: ["/usr/bin/find", root.goalsDir, "-maxdepth", "1", "-type", "f", "-name", "*.md"]
+    command: ["/usr/bin/find", Paths.goalsDir, "-maxdepth", "1", "-type", "f", "-name", "*.md"]
     stdout: StdioCollector {
       id: listCollector
       onStreamFinished: root.applyGoalsList(text)
@@ -445,7 +323,7 @@ ShellRoot {
       required property string modelData
 
       property FileView logFile: FileView {
-        path: root.goalsDir + "/" + orphanLoader.modelData + ".log.md"
+        path: Paths.goalLog(orphanLoader.modelData)
         watchChanges: true
         printErrors: false
         onLoaded: root.syncOrphanLog(orphanLoader.modelData, Parser.parseLogEntries(text(), new Date()))
@@ -466,7 +344,7 @@ ShellRoot {
       property var entries: []
 
       property FileView mdFile: FileView {
-        path: root.goalsDir + "/" + loader.slug + ".md"
+        path: Paths.goalFile(loader.slug)
         watchChanges: true
         printErrors: false
         onLoaded: {
@@ -481,7 +359,7 @@ ShellRoot {
       }
 
       property FileView logFile: FileView {
-        path: root.goalsDir + "/" + loader.slug + ".log.md"
+        path: Paths.goalLog(loader.slug)
         watchChanges: true
         printErrors: false
         onLoaded: {
@@ -522,35 +400,19 @@ ShellRoot {
     for (var i = 0; i < lines.length; i++) {
       var p = lines[i].trim()
       if (p === "") continue
-      var base = p.replace(/^.*\//, "")
-      var m = base.match(/^(\d{4}-\d{2}-\d{2})\.md$/)
-      if (!m) continue
-      files.push({ path: p, dateIso: m[1] })
+      var dateIso = Paths.journalDateIso(p)
+      if (dateIso === "") continue
+      files.push({ path: p, dateIso: dateIso })
     }
     files.sort(function(a, b) { return a.path < b.path ? -1 : (a.path > b.path ? 1 : 0) })
 
-    var changed = files.length !== root.journalFiles.length
-    if (!changed) {
-      for (var j = 0; j < files.length; j++) {
-        if (files[j].path !== root.journalFiles[j].path) { changed = true; break }
-      }
-    }
-    if (!changed) return
-
+    if (Util.sameList(files, root.journalFiles, function(f) { return f.path })) return
     root.journalFiles = files
-
-    var set = {}
-    for (var s = 0; s < files.length; s++) set[files[s].path] = true
-    var pruned = {}
-    for (var k in root.journalContents) if (set[k]) pruned[k] = root.journalContents[k]
-    root.journalContents = pruned
+    root.journalContents = Util.pickKeys(root.journalContents, files.map(function(f) { return f.path }))
   }
 
   function setJournalContent(path, text) {
-    var d = {}
-    for (var k in root.journalContents) d[k] = root.journalContents[k]
-    d[path] = text
-    root.journalContents = d
+    root.journalContents = Util.withKey(root.journalContents, path, text)
   }
 
   Process {
@@ -558,7 +420,7 @@ ShellRoot {
     // Missing directory is not an error here: `find` writes to stderr, stdout
     // stays empty, and the screen shows today as the one (not-yet-created)
     // day -- which is exactly the state of a journal nobody has written in.
-    command: ["/usr/bin/find", root.journalDir, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "-name", "*.md"]
+    command: ["/usr/bin/find", Paths.journalDir, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "-name", "*.md"]
     stdout: StdioCollector {
       id: journalListCollector
       onStreamFinished: root.applyJournalList(text)
@@ -591,149 +453,12 @@ ShellRoot {
     }
   }
 
-  // <slug>.md writer: reload() forces a fresh read every time
-  // pumpWriteQueue() starts a job, so `text()` here is never the copy the
-  // screen opened with. atomicWrites: true is the same temp-file+rename
-  // guarantee write_atomic() gives on the Python side -- a crash or a
-  // killed process mid-write can never leave a half-written <slug>.md.
-  //
-  // setText() is deferred to the next event-loop turn (deferredSetText,
-  // a 0-interval Timer) rather than called straight from onLoaded:
-  // calling it synchronously, in-handler, reliably got its completion
-  // signal dropped on this Quickshell build (0.3.1) -- the write itself
-  // still landed on disk either way, but onSaved/onSaveFailed never
-  // fired, which stalled the write queue forever after the first job.
-  // Verified both ways against the real filesystem before landing this.
-  FileView {
-    id: goalWriter
-    property var pendingMutate: null
-    property var pendingDone: null
-    property string pendingText: ""
-    printErrors: false
-    watchChanges: false
-    atomicWrites: true
-    onLoaded: {
-      var mutate = goalWriter.pendingMutate
-      var done = goalWriter.pendingDone
-      if (!mutate) return
-      goalWriter.pendingMutate = null
-      var newText
-      try { newText = mutate(goalWriter.text()) } catch (e) { newText = null }
-      if (newText === null || newText === undefined) {
-        goalWriter.pendingDone = null
-        if (done) done(false, "goal file changed unexpectedly")
-        return
-      }
-      goalWriter.pendingText = newText
-      deferredSetText.start()
-    }
-    onLoadFailed: function(error) {
-      var done = goalWriter.pendingDone
-      goalWriter.pendingMutate = null
-      goalWriter.pendingDone = null
-      if (done) done(false, "couldn't read the goal file")
-    }
-    onSaved: {
-      var done = goalWriter.pendingDone
-      goalWriter.pendingMutate = null
-      goalWriter.pendingDone = null
-      if (done) done(true, "")
-    }
-    onSaveFailed: function(error) {
-      var done = goalWriter.pendingDone
-      goalWriter.pendingMutate = null
-      goalWriter.pendingDone = null
-      if (done) done(false, "couldn't save the goal file")
-    }
-  }
-
-  Timer {
-    id: deferredSetText
-    interval: 0
-    onTriggered: goalWriter.setText(goalWriter.pendingText)
-  }
-
-  // New-goal creation prober/writer, goal-files.md §3. reload() against a
-  // candidate <slug>.md either loads (occupied -- check its title) or
-  // fails to load (free -- write the new file there). setText() is
-  // deferred through a zero-interval Timer for the same reason
-  // goalWriter's is: calling it synchronously from inside a FileView
-  // signal handler on this Quickshell build reliably drops the
-  // completion signal (onSaved never fires), which would stall this
-  // dialog forever after the write actually landed on disk.
-  FileView {
-    id: goalCreateFile
-    property string pendingText: ""
-    property string pendingSlug: ""
-    printErrors: false
-    watchChanges: false
-    atomicWrites: true
-    onLoaded: {
-      if (!root.newGoalJob) return
-      var meta = Parser.parseGoalFile(text())
-      var title = meta ? meta.title : null
-      if (title !== null && title === root.newGoalJob.fields.title) {
-        // Same title at this slug -- same goal. Creating it again is a
-        // no-op, not an error (goal-files.md §3).
-        root.finishNewGoal(true, "", root.newGoalAttemptSlug)
-        return
-      }
-      // Slug is taken by a different goal (or an unparseable file):
-      // try <base>-2, <base>-3, ... A generous but finite cap keeps this
-      // from spinning forever if something truly pathological is going on.
-      if (root.newGoalAttemptN > 500) {
-        root.finishNewGoal(false, "couldn't find a free slug", "")
-        return
-      }
-      root.newGoalAttemptN += 1
-      root.newGoalAttemptSlug = root.newGoalBaseSlug + "-" + root.newGoalAttemptN
-      root.tryCreateGoalSlug()
-    }
-    onLoadFailed: function(error) {
-      if (!root.newGoalJob) return
-      // Nothing at this slug -- free to create. Never overwrites: this
-      // branch is only reached when the read above just failed.
-      goalCreateFile.pendingText = Writer.buildNewGoalFile(root.newGoalJob.fields)
-      goalCreateFile.pendingSlug = root.newGoalAttemptSlug
-      deferredNewGoalSetText.start()
-    }
-    onSaved: root.finishNewGoal(true, "", goalCreateFile.pendingSlug)
-    onSaveFailed: function(error) { root.finishNewGoal(false, "couldn't create the goal file", "") }
-  }
-
-  Timer {
-    id: deferredNewGoalSetText
-    interval: 0
-    onTriggered: goalCreateFile.setText(goalCreateFile.pendingText)
-  }
-
-  Timer {
-    id: deferredCreateReload
-    interval: 0
-    onTriggered: goalCreateFile.reload()
-  }
-
-  // <slug>.log.md / days/YYYY-MM-DD.md appender: `tee -a` opens O_APPEND
-  // and never reads the target first (§2) -- this can run concurrently
-  // with a coaching session rewriting the same goal's <slug>.md, or with
-  // ompom's own notes-helper.py appending to the same log file, and
-  // neither side can ever observe or clobber the other's already-written
-  // bytes.
-  Process {
-    id: appendProc
-    property string pendingPayload: ""
-    property var pendingDone: null
-    command: []
-    onStarted: {
-      appendProc.write(appendProc.pendingPayload)
-      appendProc.stdinEnabled = false
-    }
-    onExited: function(exitCode) {
-      var done = appendProc.pendingDone
-      appendProc.pendingDone = null
-      if (done) done(exitCode === 0)
-    }
-  }
+  // The writers. goalFiles serves both editing and creating goals, so a new
+  // goal's slug search and an edit can never interleave; appender serves the
+  // append-only logs. Both are serial -- see their files for the Quickshell
+  // bugs that makes them work around.
+  SerialFileWriter { id: goalFiles }
+  Appender { id: appender }
 
   Timer {
     id: writeErrorTimer
@@ -779,6 +504,30 @@ ShellRoot {
         }
       }
 
+      // Test hook: OMVISION_TEST names a .qml file (an absolute path, or one
+      // relative to this directory) that drives the real app from inside,
+      // the way ShotDriver does for screenshots. Qt's qmltestrunner can't
+      // load Quickshell's modules, so a test that needs the real screens,
+      // FileViews and write paths has to run inside `qs` like this. The file
+      // must declare every property set below. Unset or empty, nothing is
+      // loaded -- a normal launch never sees it. Behind everything for the
+      // same reason as the driver: anything it draws must not cover the app.
+      Loader {
+        anchors.fill: parent
+        z: -1
+        readonly property string testFile: Quickshell.env("OMVISION_TEST") || ""
+        active: testFile !== ""
+        source: testFile === "" ? "" : (testFile.charAt(0) === "/" ? "file://" + testFile : Qt.resolvedUrl(testFile))
+        onLoaded: {
+          item.app = root
+          item.journal = journalScreen
+          item.goalDetail = goalDetailScreen
+          item.coaching = coachingScreen
+          item.target = contentRoot
+          item.window = window
+        }
+      }
+
       Row {
         anchors.fill: parent
         spacing: 0
@@ -796,7 +545,7 @@ ShellRoot {
           clip: true
 
           Behavior on width {
-            NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Theme.slideDuration; easing.type: Theme.slideEasing }
           }
 
           Sidebar {
@@ -839,23 +588,33 @@ ShellRoot {
           logEntries: root.goalsData[root.openGoalSlug] ? root.goalsData[root.openGoalSlug].logEntries : []
           backLabel: root.goalBackScreen === "journal" ? "← Journal" : "← Goals"
           onBack: root.currentScreen = root.goalBackScreen
-          onToggleTask: function(index) { root.handleToggleTask(root.openGoalSlug, index) }
-          onAddTask: function(text) {
-            root.handleAddTask(root.openGoalSlug, text, function(ok, message) {
-              goalDetailScreen.onAddTaskResult(ok, message)
+          onToggleTask: function(index) {
+            root.editGoalFile(root.openGoalSlug, "update the task", function(lines) {
+              return Writer.toggleTask(lines, index)
             })
+          }
+          onAddTask: function(text) {
+            root.editGoalFile(root.openGoalSlug, "add the task", function(lines) {
+              return Writer.addTask(lines, text)
+            }, function(ok, message) { goalDetailScreen.onAddTaskResult(ok, message) })
           }
           onEditTask: function(index, text) {
-            root.handleEditTask(root.openGoalSlug, index, text, function(ok, message) {
-              goalDetailScreen.onEditTaskResult(ok, message)
-            })
+            root.editGoalFile(root.openGoalSlug, "update the task", function(lines) {
+              return Writer.editTask(lines, index, text)
+            }, function(ok, message) { goalDetailScreen.onEditTaskResult(ok, message) })
           }
-          onCloseGoal: root.handleCloseGoal(root.openGoalSlug)
-          onReopenGoal: root.handleReopenGoal(root.openGoalSlug)
+          onCloseGoal: root.editGoalFile(root.openGoalSlug, "close the goal", function(lines) {
+            return Writer.setStatus(lines, "done")
+          })
+          onReopenGoal: root.editGoalFile(root.openGoalSlug, "reopen the goal", function(lines) {
+            return Writer.setStatus(lines, "active")
+          })
           onCancelGoal: function(reason, takeaway) {
-            root.handleCancelGoal(root.openGoalSlug, reason, takeaway, function(ok, message) {
-              goalDetailScreen.onCancelResult(ok, message)
-            })
+            root.editGoalFile(root.openGoalSlug, "cancel the goal", function(lines) {
+              var out = Writer.setStatus(lines, "cancelled")
+              if (!out) return null
+              return Writer.appendCancelNote(out, Writer.headingTimestamp(new Date()), reason, takeaway)
+            }, function(ok, message) { goalDetailScreen.onCancelResult(ok, message) })
           }
           onAddEventRequested: root.openEventDialog(root.openGoalSlug)
           onEditGoalRequested: root.openEditGoalDialog(root.openGoalSlug)
@@ -916,9 +675,8 @@ ShellRoot {
 
       // Mounted at the window root, not nested inside GoalDetailScreen
       // (which only fills the content area to the right of the sidebar):
-      // a modal has to sit above everything, including the floating
-      // narrow-mode sidebar overlay below, so it lives at the same level
-      // EventDialog does. Driven entirely by goalDetailScreen's own
+      // a modal has to sit above everything, the sidebar included, so it
+      // lives at the same level EventDialog does. Driven entirely by goalDetailScreen's own
       // cancelDialogOpen/cancelError state and cancelGoal signal --
       // `goalDetailScreen.cancelGoal(reason, takeaway)` emits that
       // screen's signal exactly as if it had fired internally, so the
@@ -952,7 +710,10 @@ ShellRoot {
         onSubmitted: function(fields) {
           root.newGoalError = ""
           if (root.editGoalSlug !== "") {
-            root.handleEditGoal(root.editGoalSlug, fields, function(ok, message) {
+            // No banner (verb ""): the dialog shows the failure itself.
+            root.editGoalFile(root.editGoalSlug, "", function(lines) {
+              return Writer.updateGoalFields(lines, fields)
+            }, function(ok, message) {
               if (ok) root.newGoalDialogOpen = false
               else root.newGoalError = "Couldn't save the goal" + (message ? " (" + message + ")" : "") + "."
             })
@@ -965,18 +726,19 @@ ShellRoot {
         }
       }
 
-      // A failed write is never silent (layout-rules-equivalent rule for
-      // this milestone): every write path above funnels its failure
-      // message through showWriteError(), which surfaces here for a few
-      // seconds regardless of which screen is on screen when it happens.
+      // A failed write is never silent. Every goal edit and event append
+      // reports its failure through showWriteError(), which surfaces here
+      // for a few seconds on whichever screen is showing when it happens.
+      // The New/Edit goal dialog's saves are the exception: the dialog stays
+      // open and shows the failure itself (newGoalError).
       Rectangle {
         id: writeErrorBanner
         visible: root.writeError.length > 0
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.topMargin: Theme.spaceMd
-        width: Math.min(parent.width - 40, bannerText.implicitWidth + 28)
-        height: bannerText.implicitHeight + 16
+        width: Math.min(parent.width - Theme.noticeWindowMargin * 2, bannerText.implicitWidth + Theme.noticePaddingX * 2)
+        height: bannerText.implicitHeight + Theme.noticePaddingY * 2
         color: Theme.paper
         border.color: Theme.red
         border.width: Theme.borderWidth

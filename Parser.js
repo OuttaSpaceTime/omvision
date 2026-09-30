@@ -305,6 +305,23 @@ function investedMinutes(entries) {
   return n
 }
 
+// How many pomodoros `entries` holds, and how many minutes they ran. Events
+// count in neither, even ones marked to count toward the goal's time: these
+// two are the timer's own figures (a day's "3 poms · 1 h 15"), while
+// investedMinutes() above is the goal's total. Take a day's entries first to
+// get one day's figures.
+function pomodoroCount(entries) {
+  var n = 0
+  for (var i = 0; i < entries.length; i++) if (entries[i].type === "pomodoro") n++
+  return n
+}
+
+function pomodoroMinutes(entries) {
+  var n = 0
+  for (var i = 0; i < entries.length; i++) if (entries[i].type === "pomodoro") n += entries[i].minutes
+  return n
+}
+
 // ---- "## Cancelled" (Omvision's own section, see Writer.appendCancelNote) --
 // Takes the same already-normalized `rest` lines parseTasks()/
 // parseCoaching() do. Reads the *last* such section in the file (a goal

@@ -45,7 +45,7 @@ QtObject {
   // some pleasing-looking alpha. `muted` is omarchy's colour for muted UI
   // *elements* -- inactive marks, borders -- and on a light theme it is very
   // close to the background: Rosé Pine Dawn's is #cecacd on #faf4ed, which
-  // renders body text at about 1.3:1. A fixed alpha is no better, because how
+  // renders body text at about 1.5:1. A fixed alpha is no better, because how
   // much contrast 50% buys depends entirely on how far apart that theme's
   // foreground and background are.
   //
@@ -90,7 +90,7 @@ QtObject {
   readonly property color ink: foreground
   // Three steps of secondary text, each defined by the contrast it must keep
   // rather than by a colour. 4.5:1 is the AA floor for body text, and every
-  // one of these is used at 10-13px, so none of them may sit below it; the
+  // one of these is used at 12-15px, so none of them may sit below it; the
   // hierarchy comes from the gap between 7 and 5.5 and 4.5, not from letting
   // the quietest one become unreadable.
   readonly property color secondaryInk: textForContrast(foreground, background, 7.0)
@@ -176,11 +176,32 @@ QtObject {
   readonly property int hairlineWidth: 1
   readonly property int borderWidth: 1
 
+  // ---- notices ---------------------------------------------------------------
+  // The write-error banner, a one-line notice at the top of the window.
+  // Vertically it is padded one scale step a side. Its horizontal padding
+  // and its margin from the window's edges (14 and 20 a side) predate the
+  // spacing scale and are off it; they are named here as they were rather
+  // than snapped to the neighbouring steps (12 or 16, 16 or 24), so moving
+  // them out of omvision.qml left the banner exactly as it was. Snapping
+  // them is a visual change and its own decision.
+  readonly property int noticePaddingX: 14
+  readonly property int noticePaddingY: spaceSm
+  readonly property int noticeWindowMargin: 20
+
+  // ---- motion ----------------------------------------------------------------
+  // One duration and one curve for everything that slides: the sidebar
+  // opening and closing (omvision.qml) and the journal's day list. Short,
+  // because both answer a click and the next thing is to use what appeared;
+  // decelerating, so a panel arrives rather than stops.
+  readonly property int slideDuration: 130
+  readonly property int slideEasing: Easing.OutCubic
+
   // ---- writing surface (Journal) -------------------------------------------
   // The journal is a writing tool, not a list screen: it gets its own type
-  // size and its own measure rather than the 12px body size and full-width
-  // text the rest of the app uses. Sized against omawrite side by side --
-  // ~20px of text with a lot of air around it, not UI-sized type.
+  // size, larger than the 15px body size the rest of the app uses, so the
+  // writing stays the largest text in the app. Sized against omawrite side
+  // by side -- ~20px of text with a lot of air around it, not UI-sized type.
+  // Its measure is the page column every screen now shares (below).
   //
   // This one size is in *points*, not pixels, and it is the only place in the
   // app that is. The markdown highlighter's character formats are point-sized
