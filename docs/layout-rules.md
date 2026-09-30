@@ -137,9 +137,11 @@ Things to know:
 - **`-f` times are when the grab starts, not exact.** The first grab after a change
   takes about 50–80ms, so a 40ms frame may really land at 80ms. The driver logs the
   actual time next to each file.
-- **Switch screens late, never at startup.** A journal opened before its files have
-  loaded stays blank, and nothing refills it (an open bug). The driver switches only after `-t` for this
-  reason. If a screen looks empty, suspect that before suspecting the layout.
+- **Switch screens late, never at startup.** A screen drawn before its files have
+  loaded shows whatever had arrived by then. The driver switches only after `-t` for this
+  reason. If a screen looks empty, suspect that before suspecting the layout. (The journal
+  used to stay blank for good when opened that early; it now fills in when the day's text
+  arrives, see the ui-spec's Journal section.)
 - **It only reads.** It never types, so nothing under `~/Notes` changes. The one
   exception, `-a mention`, types into the journal's editor only after switching the
   journal's writes off (`writesDisabled`), so the day's file is never written. Keep it that way

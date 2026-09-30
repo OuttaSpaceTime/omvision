@@ -1,9 +1,7 @@
 import QtQuick
-import QtQuick.Controls
-import Quickshell
-import Quickshell.Io
 
 import "Parser.js" as Parser
+import "GoalMatch.js" as GoalMatch
 
 // Journal — a writing surface, not a list screen.
 //
@@ -31,22 +29,16 @@ import "Parser.js" as Parser
 //
 // File discovery/loading happens in omvision.qml (same idiom as the goal
 // loaders); this screen receives that already-read data as props. Writing is
-// this screen's own job: creating a day's file the first time it is typed
-// into (mkdir -p, then touch -- see the "write path" comment for why not a
-// FileView write), and debounced saves while the user types, which go through
-// a plain Quickshell.Io FileView.setText() (writeAdapter() is JsonAdapter-only
-// and not used here). The journal is Omvision's alone -- no second writer to
-// race against -- so an ordinary read-modify-write FileView (atomicWrites:
-// true, temp file + rename) is exactly the right tool, no O_APPEND trick like
-// the log file needs.
+// JournalStore's: it creates a day's file the first time it is typed into,
+// saves the debounced text through a SerialFileWriter, and never writes a day
+// whose disk text it does not know (see its header). This screen owns the
+// editor's buffer and decides when to save it.
 //
-// omvision.qml polls `find` for new journal files every 2s and only then
-// starts a per-file FileView for it, so a file this screen just created is
-// briefly known to disk but not yet to `journalFiles`/`journalContents`.
-// `written` (path -> last text this screen itself wrote) covers that gap so
-// the canvas never goes blank for the file it just made, and doubles as the
-// baseline every write is checked against -- see the "write path" comment
-// below for how writes are queued and dispatched one at a time.
+// The parts: JournalStore (the write path), DayList (the list of days),
+// MentionPopup (the `@` goal list), CornerButton (the two corner controls)
+// and GoalMatch.js (how a query matches a goal). The root keeps the API
+// omvision.qml, ShotDriver and the tests use; functions that moved keep a
+// delegate here under their old name.
 Item {
   id: root
   // The day list slides in from off the left edge. With the app sidebar out,
@@ -81,6 +73,9 @@ Item {
   // sets it.
   property bool writesDisabled: false
 
+  // The TextEdit, for a test that needs to type into it or read its cursor.
+  property alias editor: editor
+
   function openList(open) {
     root.listOpen = open
   }
@@ -94,8 +89,8 @@ Item {
     if (root.sidebarShown) root.toggleSidebar()
   }
 
-  readonly property string home: Quickshell.env("HOME")
-  readonly property string journalDir: home + "/Notes/Omvision/journal"
+  readonly property string home: Paths.home
+  readonly property string journalDir: Paths.journalDir
 
   // Re-evaluated on a timer so an app left open across midnight starts
   // offering the new day. It never moves the selection on its own -- that
@@ -103,7 +98,7 @@ Item {
   // of -- it only changes which day the list calls "Today" and which one a
   // fresh visit to the screen opens.
   property string todayIso: Parser.dayKey(new Date())
-  readonly property string todayPath: journalDir + "/" + todayIso + ".md"
+  readonly property string todayPath: Paths.journalFile(todayIso)
 
   Timer {
     interval: 60000
@@ -118,11 +113,7 @@ Item {
   property string selectedPath: ""
   property bool listOpen: false
 
-  function dateIsoFromPath(path) {
-    var base = String(path).replace(/^.*\//, "")
-    var m = base.match(/^(\d{4}-\d{2}-\d{2})\.md$/)
-    return m ? m[1] : ""
-  }
+  function dateIsoFromPath(path) { return Paths.journalDateIso(path) }
   function labelFor(dateIso) {
     return dateIso === root.todayIso ? "Today" : Parser.formatShortDate(dateIso)
   }
@@ -151,7 +142,7 @@ Item {
     // to be opened before there is anything on disk to list.
     if (!sawToday) {
       out.push({
-        path: root.journalDir + "/" + todayIso + ".md",
+        path: Paths.journalFile(todayIso),
         dateIso: todayIso,
         dateLabel: "Today",
         firstLine: "",
@@ -168,108 +159,55 @@ Item {
     return null
   }
 
-  // ---- write path ----------------------------------------------------------
-  // Every write (a debounced save while typing, or the empty file for a day
-  // written into for the first time) goes through one shared FileView, one at
-  // a time, off a queue -- never two writes in flight together, and never a
-  // second write started while the first is still out. That's what makes
-  // "switch days mid-write" safe: each queued job carries its own path and
-  // text captured at queue time, so a write already headed for day A still
-  // lands as day A's write even though `selectedPath` (and so `bufferText`)
-  // may have already moved on to B by the time it completes -- nothing here
-  // ever reads `writerFile.path` back out of the live property to find out
-  // what it just wrote, which is the shape that let one entry's text get filed
-  // under another's path.
+  // ---- the buffer and the write path ----------------------------------------
   property string bufferText: ""     // live TextEdit content
 
-  // path -> last text this screen knows is safely on disk for that path --
-  // either confirmed by a successful write, or (for a file not yet split out
-  // into journalFiles/journalContents by omvision.qml's 2s `find` poll) the
-  // text this screen itself just wrote. Serves both as the fallback content
-  // source for `displayEntry` and as the dirty-check/never-blank-over-content
-  // baseline in `flushWrite`, so the two can never disagree about what's on
-  // disk.
-  property var written: ({})
+  // Whether `bufferText` was derived from the open day's disk text (or from
+  // text of ours still on its way there). A day opened before its file has
+  // been read starts unbased with an empty buffer: its text is unknown, not
+  // empty. syncBufferFromDisk() bases it when the text arrives, and until
+  // then JournalStore will not write it -- see its header for why.
+  property bool bufferBased: false
+  // The disk text the buffer was based on or last saved as. The buffer has
+  // unsaved edits exactly when it differs from this.
+  property string bufferBase: ""
 
-  property var writeQueue: []        // [{path, text}], oldest first, not yet sent
-  property bool writeInFlight: false
-  property string inFlightPath: ""   // path/text of the job writerFile is
-  property string inFlightText: ""   // currently mid-write on, if any
+  // path -> the text last known to be on disk, from this screen's own writes
+  // and reads (JournalStore.written). It covers the gap until omvision.qml's
+  // 2s `find` poll lists a file this screen just created, so the canvas never
+  // goes blank for it.
+  property alias written: store.written
 
   property string writeError: ""
-  property string pendingPath: ""    // file being created (mkdir -> touch)
-  property string pendingKind: ""    // "" | "create"
 
-  function setWritten(path, text) {
-    var d = {}
-    for (var k in root.written) d[k] = root.written[k]
-    d[path] = text
-    root.written = d
-  }
-  function writtenFor(path) {
-    return root.written[path] !== undefined ? root.written[path] : ""
-  }
-  function hasQueued(path) {
-    for (var i = 0; i < root.writeQueue.length; i++) if (root.writeQueue[i].path === path) return true
-    return false
-  }
-  // The most recent not-yet-confirmed text queued or in flight for a path, if
-  // any -- checked so reopening a day this screen is still in the middle of
-  // writing shows that text, not a possibly-stale disk read.
-  function pendingTextFor(path) {
-    if (root.inFlightPath === path) return root.inFlightText
-    for (var i = root.writeQueue.length - 1; i >= 0; i--) {
-      if (root.writeQueue[i].path === path) return root.writeQueue[i].text
-    }
-    return undefined
-  }
-  function pruneWritten() {
-    var d = {}
-    var changed = false
-    for (var k in root.written) {
-      // Never drop the day currently open, mid-write, or queued -- only a path
-      // this screen has no live interest in any more.
-      if (k === root.selectedPath || root.inFlightPath === k || root.hasQueued(k)) { d[k] = root.written[k]; continue }
-      var e = findEntry(k)
-      if (e && e.content === root.written[k]) { changed = true; continue }
-      d[k] = root.written[k]
-    }
-    if (changed) root.written = d
-  }
+  // Delegates kept under the names the old hand-rolled write queue had.
+  function setWritten(path, text) { store.setWritten(path, text) }
+  function writtenFor(path) { return store.writtenFor(path) }
+  function hasQueued(path) { return store.hasPending(path) }
+  // The most recent not-yet-confirmed text queued or in flight for a path,
+  // if any -- checked so reopening a day this screen is still in the middle
+  // of writing shows that text, not a possibly-stale disk read. Newest
+  // first: the old queue checked the in-flight job before the queue, which
+  // returned older text when a newer write was already queued behind it.
+  function pendingTextFor(path) { return store.pendingTextFor(path) }
+  function pruneWritten() { store.prune() }
 
-  // Writes are dispatched from a zero-interval Timer rather than straight out
-  // of queueWrite()/onSaved -- on this Quickshell build, calling
-  // FileView.setText() synchronously from inside another FileView's own signal
-  // handler (the shape onSaved -> kickQueue -> dispatch would be) writes the
-  // file but silently drops the follow-up saved/saveFailed signal, which would
-  // wedge the queue forever on the next job. Deferring by one event-loop tick
-  // sidesteps it the same way omvision.qml's own writer already had to.
-  function queueWrite(path, text) {
-    var q = root.writeQueue.slice()
-    if (q.length > 0 && q[q.length - 1].path === path) {
-      q[q.length - 1] = { path: path, text: text } // supersede the not-yet-sent job for this path
-    } else {
-      q.push({ path: path, text: text })
+  JournalStore {
+    id: store
+    journalContents: root.journalContents
+    openPath: root.selectedPath
+    writesDisabled: root.writesDisabled
+    onSaved: function(path, text) {
+      if (path !== root.selectedPath) return
+      root.writeError = ""
+      if (root.bufferBased) root.bufferBase = text
     }
-    root.writeQueue = q
-    root.kickQueue()
-  }
-  function kickQueue() {
-    if (root.writeInFlight) return
-    if (root.writeQueue.length === 0) return
-    writeKickTimer.restart()
-  }
-  function dispatchNextWrite() {
-    if (root.writeInFlight) return
-    if (root.writeQueue.length === 0) return
-    var q = root.writeQueue.slice()
-    var job = q.shift()
-    root.writeQueue = q
-    root.writeInFlight = true
-    root.inFlightPath = job.path
-    root.inFlightText = job.text
-    writerFile.path = job.path
-    writerFile.setText(job.text) // writes the file directly; writeAdapter() is JsonAdapter-only
+    onFailed: function(path, message) {
+      if (path === root.selectedPath) root.writeError = message
+    }
+    onDiskTextKnown: function(path) {
+      if (path === root.selectedPath) root.syncBufferFromDisk()
+    }
   }
 
   // The entry the canvas shows: the disk-confirmed one once omvision.qml knows
@@ -279,9 +217,9 @@ Item {
     if (path === "") return null
     var e = findEntry(path)
     if (e) return e
-    var dateIso = root.dateIsoFromPath(path)
+    var dateIso = Paths.journalDateIso(path)
     if (dateIso === "") return null
-    var w = root.written[path]
+    var w = store.written[path]
     return {
       path: path,
       dateIso: dateIso,
@@ -297,8 +235,6 @@ Item {
     return t === "" ? 0 : t.split(/\s+/).length
   }
 
-  onEntriesChanged: pruneWritten()
-
   // ---- opening a day --------------------------------------------------------
   function openDay(path) {
     if (path === root.selectedPath) { editor.forceActiveFocus(); return }
@@ -309,14 +245,25 @@ Item {
     // path over what the list holds -- the list's copy can be a moment stale
     // if the user comes back to a day whose last edit is still on its way to
     // disk; this is what stops that visit from reverting text that is about to
-    // be written anyway.
-    var pending = root.pendingTextFor(path)
-    var e = root.entryForDisplay(path)
+    // be written anyway. Text typed into the day before its file was read
+    // comes back too, still unbased, to be merged when the file arrives.
+    var pending = store.pendingTextFor(path)
+    var waiting = store.waitingTextFor(path)
+    var known = store.knownText(path)
     root.selectedPath = path
-    root.bufferText = (pending !== undefined) ? pending : (e ? e.content : "")
+    if (pending !== undefined) root.setBuffer(pending, true)
+    else if (waiting !== undefined) root.setBuffer(waiting, false)
+    else if (known !== undefined) root.setBuffer(known, true)
+    else root.setBuffer("", false)
     root.writeError = ""
     editor.forceActiveFocus()
     editor.cursorPosition = editor.text.length
+  }
+
+  function setBuffer(text, based) {
+    root.bufferBased = based
+    root.bufferBase = based ? text : ""
+    root.bufferText = text
   }
 
   // Return inside a list item starts the next one, the way omawrite and
@@ -409,75 +356,12 @@ Item {
   property string mentionQuery: ""
   property int mentionIndex: 0    // the highlighted row
   readonly property bool mentionOpen: root.mentionStart >= 0
-  readonly property var mentionMatches: root.filterGoals(root.goals, root.mentionQuery)
+  readonly property var mentionMatches: GoalMatch.filterGoals(root.goals, root.mentionQuery)
 
-  // Fuzzy and case-blind: the query's letters have to appear in the slug or
-  // the title in order, not side by side, so `wsq` and `WallSq` both find
-  // Wall Squat. Plain substring matching missed those, and a query is typed
-  // fast and half-remembered. Tighter matches rank first -- see matchScore
-  // -- and ties keep the list's own order (active goals first).
-  function filterGoals(goals, query) {
-    var q = root.foldForMatch(query)
-    if (q === "") return goals
-    var scored = []
-    for (var i = 0; i < goals.length; i++) {
-      var g = goals[i]
-      var score = Math.min(root.matchScore(root.foldForMatch(g.slug), q),
-                           root.matchScore(root.foldForMatch(g.title), q))
-      if (score < Infinity) scored.push({ g: g, score: score, i: i })
-    }
-    scored.sort(function(a, b) { return a.score !== b.score ? a.score - b.score : a.i - b.i })
-    return scored.map(function(s) { return s.g })
-  }
-
-  // Lower case, accents dropped (a title's `Diät` has to answer to `dia`:
-  // the query is a would-be slug, so it can only hold ASCII), and every run
-  // of spaces or hyphens made one hyphen, so a slug and a title compare
-  // alike and a hyphen typed in the query matches a space in a title.
-  function foldForMatch(s) {
-    var t = String(s).toLowerCase()
-    if (typeof t.normalize === "function") t = t.normalize("NFD").replace(/[̀-ͯ]/g, "")
-    return t.replace(/[\s-]+/g, "-")
-  }
-
-  // How well the folded query q matches the folded text t, lower is better,
-  // Infinity for no match. In tiers: the start of the text, then the start
-  // of a word, then anywhere as one piece, then scattered in order. Hyphens
-  // in the query are ignored for the scattered tier, so `wall-sq` and
-  // `wallsq` rank alike there.
-  //
-  // A scattered match is scored the way initials are read: a letter that
-  // follows the previous one costs nothing, one that begins a word costs a
-  // little, one lost in the middle of a word costs most, and a hair more for
-  // every letter skipped breaks ties. The best placement is searched for,
-  // not the first: taking each letter where it first appears reads `sa` in
-  // Study Software Architecture as the `a` inside "software", and ranks it
-  // below Wall Squat, when the `a` of "architecture" is plainly meant.
-  function matchScore(t, q) {
-    if (t.indexOf(q) === 0) return 0
-    if (("-" + t).indexOf("-" + q) >= 0) return 1
-    if (t.indexOf(q) >= 0) return 2
-    var letters = q.replace(/-/g, "")
-    if (letters === "") return Infinity
-    // cost[j]: the cheapest placement of the letters so far, the last at j.
-    var cost = []
-    for (var k = 0; k < letters.length; k++) {
-      var next = []
-      for (var j = 0; j < t.length; j++) {
-        next.push(Infinity)
-        if (t.charAt(j) !== letters.charAt(k)) continue
-        var wordStart = j === 0 || t.charAt(j - 1) === "-"
-        if (k === 0) { next[j] = wordStart ? 0 : 3; continue }
-        if (j > 0 && cost[j - 1] < Infinity) next[j] = cost[j - 1]
-        for (var p = 0; p < j - 1; p++)
-          if (cost[p] < Infinity)
-            next[j] = Math.min(next[j], cost[p] + (wordStart ? 1 : 3) + 0.01 * (j - p - 1))
-      }
-      cost = next
-    }
-    var best = Math.min.apply(null, cost)
-    return best < Infinity ? 3 + best / (3 * letters.length + t.length + 1) : Infinity
-  }
+  // The matching itself lives in GoalMatch.js; these keep the old names.
+  function filterGoals(goals, query) { return GoalMatch.filterGoals(goals, query) }
+  function foldForMatch(s) { return GoalMatch.foldForMatch(s) }
+  function matchScore(t, q) { return GoalMatch.matchScore(t, q) }
 
   // Called just after a typed `@` has gone into the text. Not after a word
   // character or another `@`, so writing an e-mail address opens nothing --
@@ -572,116 +456,55 @@ Item {
   }
 
   // The canvas always shows *some* day, and on a fresh visit that day is
-  // today. Content arriving later (the 2s poll, then the per-file read) is
-  // picked up through `displayEntry`, but `bufferText` is the editor's own
-  // state and has to be refreshed once when the text for the open day first
-  // lands -- otherwise opening the journal on an existing entry before its
-  // FileView has read would leave an empty canvas over a non-empty file.
+  // today. `bufferText` is the editor's own state, so when the open day's
+  // disk text becomes known after the day was opened -- omvision.qml's
+  // FileView reading it, or JournalStore reading it before a first save --
+  // the buffer has to be brought in line here:
+  //   - Unbased and untouched: take the disk text. This is what used to be
+  //     missing: a journal opened before its files were read stayed blank
+  //     over a non-empty day. The old version read `entries`, which had not
+  //     been recomputed yet when journalContentsChanged fired, and it gave up
+  //     for good while the save debounce was running; nothing called it again.
+  //     It now reads the contents themselves (JournalStore.knownText), runs a
+  //     turn later (Qt.callLater, once every binding has settled), and the
+  //     test for unsaved edits is the buffer against its base, not a timer.
+  //   - Unbased with typing in it: the day's text first, then what was typed
+  //     (JournalStore.mergeTyped), and saved -- never the typed text alone.
+  //   - Based, with no unsaved edits and nothing of ours on the way to disk:
+  //     take a change made to the file from outside. With unsaved edits, the
+  //     buffer wins, as it always has.
   function syncBufferFromDisk() {
-    if (root.selectedPath === "") return
-    if (root.writeInFlight || root.writeQueue.length > 0) return
-    if (writeDebounce.running) return
-    var e = findEntry(root.selectedPath)
-    if (!e) return
-    if (e.content === root.bufferText) return
-    if (root.written[root.selectedPath] !== undefined) return // this screen's own text is newer
-    root.bufferText = e.content
+    var path = root.selectedPath
+    if (path === "") return
+    var disk = store.knownText(path)
+    if (disk === undefined) return
+    if (!root.bufferBased) {
+      var typed = root.bufferText
+      if (typed === "") {
+        root.setBuffer(disk, true)
+        editor.cursorPosition = editor.text.length
+        return
+      }
+      var merged = store.mergeTyped(disk, typed)
+      var cursor = editor.cursorPosition
+      root.bufferBased = true
+      root.bufferBase = disk
+      root.bufferText = merged
+      editor.cursorPosition = Math.min(merged.length, cursor + merged.length - typed.length)
+      root.flushWrite()
+      return
+    }
+    if (store.hasPending(path)) return // our own text is newer
+    if (root.bufferText !== root.bufferBase) return // unsaved edits win
+    if (disk === root.bufferBase) return
+    root.setBuffer(disk, true)
   }
-  onJournalContentsChanged: syncBufferFromDisk()
+  onJournalContentsChanged: Qt.callLater(root.syncBufferFromDisk)
 
   function flushWrite() {
     if (root.writesDisabled) return
     if (root.selectedPath === "") return
-    var path = root.selectedPath
-    var text = root.bufferText
-    var known = root.writtenFor(path)
-    var onDisk = findEntry(path)
-    if (onDisk && root.written[path] === undefined) known = onDisk.content
-    if (text === known) return
-    // Never let a not-yet-loaded/blank buffer clobber a day that had text.
-    if (text.length === 0 && known.length > 0) return
-    // A day typed into for the first time has no file yet: make the directory
-    // and the empty file first, then let the queue write the text into it.
-    // Not writerFile.setText("") for that: FileView compares against its
-    // (empty, never-loaded) internal buffer and treats an empty write as a
-    // no-op, so no file is ever created. `touch` is also the more precise
-    // primitive -- it creates an empty file if missing and otherwise only
-    // bumps mtime, so it can never truncate a day that already has text.
-    if (!onDisk && root.written[path] === undefined) {
-      if (root.pendingKind === "create") return // already on its way; the debounce will come round again
-      root.pendingPath = path
-      root.pendingKind = "create"
-      mkdirProc.command = ["/usr/bin/mkdir", "-p", root.journalDir]
-      mkdirProc.running = true
-      return
-    }
-    root.queueWrite(path, text)
-  }
-
-  Process {
-    id: mkdirProc
-    onExited: function(exitCode, exitStatus) {
-      if (exitCode !== 0) {
-        root.pendingKind = ""
-        root.writeError = "Couldn't make the journal folder -- nothing was written."
-        return
-      }
-      touchProc.command = ["/usr/bin/touch", root.pendingPath]
-      touchProc.running = true
-    }
-  }
-
-  Process {
-    id: touchProc
-    onExited: function(exitCode, exitStatus) {
-      if (root.pendingKind !== "create") return
-      root.pendingKind = ""
-      if (exitCode !== 0) {
-        root.writeError = "Couldn't create today's file -- nothing was written."
-        return
-      }
-      root.setWritten(root.pendingPath, "")
-      if (root.pendingPath === root.selectedPath) root.flushWrite()
-    }
-  }
-
-  FileView {
-    id: writerFile
-    printErrors: false
-    watchChanges: false
-    atomicWrites: true
-    onSaved: {
-      var path = root.inFlightPath
-      var text = root.inFlightText
-      root.setWritten(path, text)
-      if (path === root.selectedPath) root.writeError = ""
-      root.writeInFlight = false
-      root.inFlightPath = ""
-      root.inFlightText = ""
-      root.kickQueue()
-    }
-    onSaveFailed: function(error) {
-      var path = root.inFlightPath
-      root.writeInFlight = false
-      root.inFlightPath = ""
-      root.inFlightText = ""
-      // The text that failed to save is still sitting in `written`'s old value
-      // and in `bufferText` if this is still the open day -- it is not lost,
-      // just not on disk yet. A later keystroke or reopening the day queues
-      // another attempt, since `writtenFor(path)` still disagrees with
-      // whatever the editor holds.
-      if (path === root.selectedPath) {
-        root.writeError = "Couldn't save the last change -- it's still here, not on disk."
-      }
-      root.kickQueue()
-    }
-  }
-
-  Timer {
-    id: writeKickTimer
-    interval: 0
-    repeat: false
-    onTriggered: root.dispatchNextWrite()
+    store.save(root.selectedPath, root.bufferText, root.bufferBased)
   }
 
   Timer {
@@ -710,7 +533,7 @@ Item {
     anchors.fill: parent
     // A screenful of slack under the last line, so writing stays in the
     // middle of the window instead of creeping down to its bottom edge.
-    contentHeight: Math.max(height, editor.height + editor.y + 260)
+    contentHeight: Math.max(height, editor.height + editor.y + Theme.journalBottomSlack)
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     // The friction on the trackpad glide below (flick() decelerates by this;
@@ -720,10 +543,11 @@ Item {
     flickDeceleration: 1250
     maximumFlickVelocity: 12000
 
+    // Keeps the cursor's line in view with a margin of space around it.
     function ensureVisible(r) {
       var top = editor.y + r.y
-      var bottom = top + r.height + 24
-      if (contentY >= top - 24) contentY = Math.max(0, top - 24)
+      var bottom = top + r.height + Theme.spaceXl
+      if (contentY >= top - Theme.spaceXl) contentY = Math.max(0, top - Theme.spaceXl)
       else if (contentY + height <= bottom) contentY = bottom - height
     }
 
@@ -732,7 +556,7 @@ Item {
     // as tall as contentHeight, so this covers the viewport as well.
     MouseArea {
       width: canvas.width
-      height: Math.max(canvas.height, editor.height + editor.y + 260)
+      height: Math.max(canvas.height, editor.height + editor.y + Theme.journalBottomSlack)
       cursorShape: Qt.IBeamCursor
       onClicked: {
         root.settleIntoWriting()
@@ -919,162 +743,30 @@ Item {
   }
 
   // ---- the `@` list ---------------------------------------------------------
-  // Hangs under the `@` it belongs to, left edge on the `@`, like any
-  // editor's completion list; flips above the line when there is no room
-  // below, and is pulled back inside the window at the right. Over the
-  // canvas rather than in it, so the canvas's clip cannot cut it off, and
-  // below the day list, which closes it anyway.
-  Rectangle {
+  // Over the canvas rather than in it, so the canvas's clip cannot cut it
+  // off, and below the day list, which closes it anyway. See MentionPopup.
+  MentionPopup {
     id: mentionPopup
-    readonly property int rowHeight: Theme.bodySize + Theme.spaceSm * 2 + Theme.spaceXxs
-    readonly property int maxRows: 6
-    // Rebinds on scroll and on reflow (cursorRectangle moves with both the
-    // text and the width), which positionToRectangle() alone would not.
-    readonly property rect anchorRect: {
-      var dep = editor.cursorRectangle
-      var r = root.mentionOpen ? editor.positionToRectangle(root.mentionStart) : Qt.rect(0, 0, 0, 0)
-      return Qt.rect(editor.x + r.x - canvas.contentX, editor.y + r.y - canvas.contentY, r.width, r.height)
-    }
-    readonly property bool fitsBelow: anchorRect.y + anchorRect.height + Theme.spaceXs + height
-                                      <= root.height - statusBacking.height
-
     visible: root.mentionOpen && root.visible && !root.listOpen
     z: 25
-    width: Math.min(Math.round(Theme.pageMeasure / 2), root.width - Theme.spaceLg * 2)
-    height: (root.mentionMatches.length > 0
-             ? Math.min(root.mentionMatches.length, maxRows) * rowHeight
-             : emptyText.implicitHeight + Theme.spaceSm * 2) + Theme.borderWidth * 2
-    // The rows' text starts on the `@` itself.
-    x: Math.max(Theme.spaceLg, Math.min(anchorRect.x - Theme.spaceMd - Theme.borderWidth,
-                                        root.width - width - Theme.spaceLg))
-    y: fitsBelow ? anchorRect.y + anchorRect.height + Theme.spaceXs
-                 : anchorRect.y - height - Theme.spaceXs
-    color: Theme.paper
-    border.color: Theme.border
-    border.width: Theme.borderWidth
-
-    Text {
-      id: emptyText
-      visible: root.mentionMatches.length === 0
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
-      anchors.leftMargin: Theme.spaceMd
-      anchors.rightMargin: Theme.spaceMd
-      elide: Text.ElideRight
-      text: root.goals.length === 0 ? "No goals yet" : "No goal matches “" + root.mentionQuery + "”"
-      font.family: Theme.fontFamily
-      font.pixelSize: Theme.captionSize
-      color: Theme.faint
-    }
-
-    ListView {
-      id: mentionList
-      anchors.fill: parent
-      anchors.margins: Theme.borderWidth
-      clip: true
-      boundsBehavior: Flickable.StopAtBounds
-      model: root.mentionMatches
-      currentIndex: root.mentionIndex
-      onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
-
-      delegate: Rectangle {
-        id: mentionRow
-        required property var modelData
-        required property int index
-        readonly property bool current: index === root.mentionIndex
-
-        width: mentionList.width
-        height: mentionPopup.rowHeight
-        color: current ? Theme.hoverFill : "transparent"
-
-        Rectangle {
-          visible: mentionRow.current
-          anchors.left: parent.left
-          anchors.top: parent.top
-          anchors.bottom: parent.bottom
-          width: 3
-          color: Theme.accentColor
-        }
-
-        // One line: the title, and a closed goal's status on the right. The
-        // `@slug` used to sit under the title, but the tag is drawn as the
-        // title anyway, so the slug only added noise to the list.
-        Text {
-          id: mentionTitle
-          anchors.left: parent.left
-          anchors.right: statusText.left
-          anchors.verticalCenter: parent.verticalCenter
-          anchors.leftMargin: Theme.spaceMd
-          anchors.rightMargin: statusText.text === "" ? 0 : Theme.spaceSm
-          text: mentionRow.modelData.title
-          elide: Text.ElideRight
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.bodySize
-          color: mentionRow.modelData.status === "active" ? Theme.ink : Theme.dim
-        }
-        Text {
-          id: statusText
-          anchors.right: parent.right
-          anchors.baseline: mentionTitle.baseline
-          anchors.rightMargin: Theme.spaceMd
-          text: mentionRow.modelData.status === "active" ? "" : mentionRow.modelData.status
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.captionSize
-          color: Theme.faint
-        }
-
-        // Hover moves the highlight rather than drawing a second one, the
-        // way a menu does. It never takes focus, so the cursor stays in the
-        // text and typing goes on filtering.
-        MouseArea {
-          anchors.fill: parent
-          hoverEnabled: true
-          cursorShape: Qt.PointingHandCursor
-          onEntered: root.mentionIndex = mentionRow.index
-          onClicked: { root.acceptMention(mentionRow.index); editor.forceActiveFocus() }
-        }
-      }
-    }
+    textEdit: editor
+    scroller: canvas
+    mentionStart: root.mentionStart
+    matches: root.mentionMatches
+    currentIndex: root.mentionIndex
+    query: root.mentionQuery
+    goalCount: root.goals.length
+    bottomInset: statusBacking.height
+    onHighlight: function(index) { root.mentionIndex = index }
+    onAccept: function(index) { root.acceptMention(index); editor.forceActiveFocus() }
   }
 
   // ---- corner controls ------------------------------------------------------
-  // The only chrome on the screen: two quiet squares in the top-left corner.
-  // Faint, no border, no fill until hovered -- present enough to find, not
-  // loud enough to read as content. Both live at the corner of the window
-  // itself (this screen fills it while writing), clear of the text column,
-  // which starts 72px down.
-  component CornerButton: Rectangle {
-    id: cb
-    property string glyph: ""
-    property string tip: ""
-    signal activated()
-
-    width: 24
-    height: 24
-    color: cbArea.containsMouse ? Theme.hoverFill : "transparent"
-
-    Text {
-      anchors.centerIn: parent
-      text: cb.glyph
-      font.family: Theme.fontFamily
-      font.pixelSize: Theme.subtitleSize
-      color: cbArea.containsMouse ? Theme.dim : Theme.faint
-    }
-
-    MouseArea {
-      id: cbArea
-      anchors.fill: parent
-      hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
-      onClicked: cb.activated()
-    }
-
-    ToolTip.visible: cbArea.containsMouse
-    ToolTip.delay: 400
-    ToolTip.text: cb.tip
-  }
-
+  // The only chrome on the screen: two quiet squares in the top-left corner
+  // (CornerButton). Both live at the corner of the window itself (this
+  // screen fills it while writing), clear of the text column, which starts
+  // further down.
+  //
   // One sticky row: both controls and the day's date, floating over the text
   // rather than scrolling with it. Opaque (paper, not translucent) so lines
   // scrolled past disappear behind it the way a normal editor's header
@@ -1084,7 +776,7 @@ Item {
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.top: parent.top
-    height: 56
+    height: Theme.journalHeaderHeight
     color: Theme.paper
     z: 20
 
@@ -1107,14 +799,14 @@ Item {
       }
 
       // The day you are in, on the same line as the controls. Vertically
-      // centred against a 24px control, so it needs its own height rather
-      // than the Row's baseline.
+      // centred against a corner control, so it takes the control's height
+      // rather than the Row's baseline.
       Item {
-        width: 10
-        height: 24
+        width: Theme.journalDateGap
+        height: Theme.smallControlHeight
       }
       Text {
-        height: 24
+        height: Theme.smallControlHeight
         verticalAlignment: Text.AlignVCenter
         text: root.displayEntry ? root.displayEntry.dateLabel : ""
         font.family: Theme.fontFamily
@@ -1175,10 +867,7 @@ Item {
   }
 
   // ---- day list -------------------------------------------------------------
-  // Collapsed by default and an overlay when open, never an in-flow pane: the
-  // text column must not shift when you glance at the list of days. Same
-  // shape the app sidebar takes in this mode, on the same edge -- so opening
-  // one closes the other (see the reveal control above).
+  // A click outside the open list puts it away and goes back to writing.
   MouseArea {
     anchors.fill: parent
     visible: root.listOpen
@@ -1187,129 +876,17 @@ Item {
     onClicked: { root.settleIntoWriting(); editor.forceActiveFocus() }
   }
 
-  Rectangle {
+  DayList {
     id: dayList
-    width: 260
     anchors.top: parent.top
     anchors.bottom: parent.bottom
-    x: root.listOpen ? 0 : -width
-    visible: x > -width
     z: 40
-    color: Theme.paper
-    clip: true
-
-    Behavior on x {
-      NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
-    }
-
-    Rectangle {
-      anchors.right: parent.right
-      anchors.top: parent.top
-      anchors.bottom: parent.bottom
-      width: 1
-      color: Theme.hairline
-    }
-
-    Text {
-      id: dayListHeading
-      anchors.left: parent.left
-      anchors.top: parent.top
-      anchors.leftMargin: Theme.panelPadding
-      anchors.topMargin: Theme.spaceLg
-      text: "Days"
-      font.family: Theme.fontFamily
-      font.pixelSize: Theme.captionSize
-      color: Theme.faint
-    }
-
-    Flickable {
-      id: dayFlick
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.top: dayListHeading.bottom
-      anchors.bottom: parent.bottom
-      anchors.topMargin: Theme.spaceMd
-      anchors.rightMargin: Theme.spaceXxs
-      contentHeight: daysColumn.height
-      clip: true
-
-      Column {
-        id: daysColumn
-        width: dayFlick.width
-
-        Repeater {
-          model: root.entries
-          delegate: Rectangle {
-            id: dayRow
-            required property var modelData
-            required property int index
-
-            readonly property bool isSelected: root.selectedPath === modelData.path
-            property bool hovered: false
-
-            width: daysColumn.width
-            height: 60
-            color: (isSelected || hovered) ? Theme.fill : "transparent"
-
-            Rectangle {
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.top: parent.top
-              height: 1
-              color: Theme.hairline
-              visible: dayRow.index > 0
-            }
-
-            Rectangle {
-              visible: dayRow.isSelected
-              anchors.left: parent.left
-              anchors.top: parent.top
-              anchors.bottom: parent.bottom
-              width: 3
-              color: Theme.accentColor
-            }
-
-            Column {
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.leftMargin: Theme.panelPadding
-              anchors.rightMargin: Theme.spaceMd
-              spacing: Theme.spaceXxs
-
-              Text {
-                width: parent.width
-                text: dayRow.modelData.dateLabel
-                elide: Text.ElideRight
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.captionSize
-                font.bold: true
-                color: Theme.ink
-              }
-              Text {
-                width: parent.width
-                text: dayRow.modelData.firstLine === "" ? "empty" : dayRow.modelData.firstLine
-                elide: Text.ElideRight
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.bodySmallSize
-                color: dayRow.modelData.firstLine === "" ? Theme.faint : Theme.dim
-              }
-            }
-
-            MouseArea {
-              anchors.fill: parent
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onEntered: dayRow.hovered = true
-              onExited: dayRow.hovered = false
-              onClicked: {
-                root.listOpen = false
-                root.openDay(dayRow.modelData.path)
-              }
-            }
-          }
-        }
-      }
+    open: root.listOpen
+    entries: root.entries
+    selectedPath: root.selectedPath
+    onDayClicked: function(path) {
+      root.listOpen = false
+      root.openDay(path)
     }
   }
 }

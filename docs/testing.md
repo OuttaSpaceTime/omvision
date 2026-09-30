@@ -113,8 +113,6 @@ Bugs a test has found but that aren't fixed yet are pinned with
 one is fixed the assertion passes, which is reported as `XPASS` and fails the run, as a
 reminder to remove the `expectFailContinue`. Current ones:
 
-- The journal opened before its files have loaded stays blank over a non-empty day, and
-  typing then replaces the day's file (`tst_journal_blank.qml`).
 - The Writer task edits (`toggleTask`, `addTask`, `editTask`) ignore missing or
   unterminated front matter. `setStatus` and `updateGoalFields` refuse it.
 - `setStatus` edits front matter that Parser rejects (a line that isn't `key: value`).

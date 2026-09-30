@@ -1,17 +1,16 @@
 import QtQuick
 import "../../Parser.js" as Parser
 
-// Known bug, pinned: a journal opened before its files have loaded stays
-// blank over a non-empty day, and typing into that blank page then saves
-// over the day's file.
+// Regression test: a journal opened before its files have loaded used to
+// stay blank over a non-empty day, and typing into that blank page then
+// saved over the day's file.
 //
-// Opening the journal sets its buffer to "" (nothing loaded yet), and that
-// edit of the editor's text restarts the 800ms write debounce. The day's
-// text arrives within it, and syncBufferFromDisk(), which is what should
-// put it in the buffer, returns early while the debounce is running -- and
-// it also runs on journalContents' change, before `entries` has been
-// recomputed. Nothing calls it again, so the page stays blank, and the next
-// keystroke's write replaces the day's text with just that keystroke.
+// Opening the journal set its buffer to "" (nothing loaded yet), and that
+// edit restarted the 800ms write debounce. The day's text arrived within
+// it, and syncBufferFromDisk() returned early while the debounce ran -- and
+// it also ran before `entries` had been recomputed. Nothing called it
+// again. JournalStore now never writes a day before its text on disk is
+// known, and the page adopts that text when it arrives.
 //
 // A file of its own, with no reset between tests: the journal has to be
 // opened the moment the app starts, before any file is read, and only a
@@ -38,7 +37,6 @@ OmvisionTest {
               "the app loaded today's file")
     wait(1500)
 
-    expectFailContinue("", "BUG: journal opened before load stays blank over a non-empty day")
     compare(journal.bufferText, text, "the page shows the day's text")
 
     // Click into the page, the way you would start writing on it, and type.
@@ -48,7 +46,6 @@ OmvisionTest {
     type("x")
     compare(journal.bufferText.slice(-1), "x", "the keystroke reached the page")
     wait(2000) // the debounce, then the write
-    expectFailContinue("", "BUG: typing into the blank page saves over the day's file")
     compare(readFile(today), text + "x", "the day's text survives a keystroke")
   }
 }

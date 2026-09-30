@@ -215,6 +215,34 @@ QtObject {
   // characters, and the screen only decides whether it fits.
   readonly property int writingColumns: 70
 
+  // ---- journal screen geometry ---------------------------------------------
+  // The journal's own chrome sizes, which used to be typed into
+  // JournalScreen.qml as bare numbers. Most of them predate the spacing
+  // scale and sit between its steps; they are named here exactly as they
+  // were, not snapped to a neighbouring step, so moving them out of the
+  // screen left it pixel-identical. Snapping any of them is a visual change
+  // and its own decision. Where a value already had a token (the 24px
+  // corner controls are smallControlHeight, the 1px rules hairlineWidth,
+  // the cursor's scroll margin spaceXl), the screen uses that instead.
+  //
+  // The sticky row holding the corner controls and the day's label. Off the
+  // scale (between space3xl 48 and space4xl 64).
+  readonly property int journalHeaderHeight: 56
+  // The gap between the `≡` control and the day's label, on top of the
+  // row's own spaceXs either side. Off the scale (between spaceSm and spaceMd).
+  readonly property int journalDateGap: 10
+  // The day list overlay, and one day's row in it. Off the scale: panel and
+  // row sizes, not spacing, and no step is near either.
+  readonly property int journalDayListWidth: 260
+  readonly property int journalDayRowHeight: 60
+  // Empty page under the last line, so the line being written sits up in
+  // the window instead of on its bottom edge. Off the scale.
+  readonly property int journalBottomSlack: 260
+  // The accent bar on a selected row, in the day list and the `@` list.
+  // GoalsScreen's selected goal draws the same 3px bar with a typed number;
+  // it could share this. Off the scale (between spaceXxs and spaceXs).
+  readonly property int selectionBarWidth: 3
+
   // ---- the page column -----------------------------------------------------
   // Every screen sets its text in the journal's column: the same measure, on
   // the same vertical line in the window. Moving between Journal and Goals

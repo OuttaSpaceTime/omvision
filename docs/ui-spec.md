@@ -148,7 +148,7 @@ The text column is the app's page column (see Tokens): `Theme.writingColumns` (7
 monospace characters wide, measured off the live font, on the same vertical line as every
 other screen's text, and still while the sidebar slides in beside it. Type is `Theme.writingPointSize`
 (15pt ≈ 20px) — the only *point* size in the app, because the highlighter's character formats
-are point-sized (see README) — on a 185% line height. A sticky 44px header floats over the
+are point-sized (see README) — on a 185% line height. A sticky 56px header (`Theme.journalHeaderHeight`) floats over the
 text, opaque in `paper`, holding both controls and the day's label (`Today`, else
 `Tue 23 Sep`) on one line; the text scrolls behind it. A trackpad scroll follows the fingers
 and then glides on when they lift, faster swipes going further, the way other apps on the
@@ -204,6 +204,12 @@ greppable by the coach skill.
 
 One file per day, `journal/YYYY-MM-DD.md`, attached to no goal. Today always has a row in the
 day list whether or not its file exists — typing is what creates it.
+
+A day opened before its file has been read (right after launch, or a file not yet listed)
+shows an empty page and fills in with the day's text when it arrives. A day is never written
+until its text on disk is known: if something was typed onto that empty page first, the
+day's text is put back above it, as its own paragraph, and that is what is saved. Nothing on
+disk and nothing typed is lost. An empty page is never saved over a day that has text.
 
 ## Data
 

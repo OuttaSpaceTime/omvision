@@ -85,11 +85,11 @@ Rectangle {
   }
 
   // The screen is switched only after the data has loaded, the way a click
-  // in a running app would. Switching at startup opened the journal before
-  // its files were read, and a journal opened that early never picks up the
-  // day's text (an open bug: `syncBufferFromDisk()` runs before `entries`
-  // is recomputed, and returns early while `writeDebounce` runs) -- the
-  // shot showed an empty page over a non-empty file.
+  // in a running app would, so every screen is drawn from its real data.
+  // Switching at startup used to leave the journal blank for good -- it
+  // never picked up a day's text that arrived after it opened. That is
+  // fixed (JournalScreen.syncBufferFromDisk), but a shot taken before the
+  // files are read would still show whatever had loaded by then.
   Timer {
     interval: driver.settleMs
     running: true

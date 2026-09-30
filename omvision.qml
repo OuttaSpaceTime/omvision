@@ -15,7 +15,8 @@ import "Util.js" as Util
 //
 // This file owns the app's data. It lists and loads every goal, log, day and
 // journal file and hands the screens results that are already parsed, and it
-// makes every write except the journal's, which JournalScreen does itself.
+// makes every write except the journal's, which the journal screen makes
+// through its own JournalStore.
 // Writes take one of two paths, chosen per goal-files.md §2:
 //   - <slug>.md (tasks, status, the cancel note, a new goal) is
 //     read-modify-write, through goalFiles (SerialFileWriter.qml): one job at
