@@ -87,8 +87,9 @@ Rectangle {
   // The screen is switched only after the data has loaded, the way a click
   // in a running app would. Switching at startup opened the journal before
   // its files were read, and a journal opened that early never picks up the
-  // day's text (see TODO.md) -- the shot showed an empty page over a
-  // non-empty file.
+  // day's text (an open bug: `syncBufferFromDisk()` runs before `entries`
+  // is recomputed, and returns early while `writeDebounce` runs) -- the
+  // shot showed an empty page over a non-empty file.
   Timer {
     interval: driver.settleMs
     running: true

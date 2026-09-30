@@ -3,8 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 Omvision is a standalone Quickshell (QML) app: goals, tasks, a daily journal and coaching,
-reading and writing files under `~/Notes/Omvision/`. `TODO.md` is the hand-off log: read it
-first, and when you stop, record what landed and what is still open.
+reading and writing files under `~/Notes/Omvision/`.
 
 ## Running and verifying
 
@@ -42,7 +41,14 @@ first, and when you stop, record what landed and what is still open.
 - The ompom engine and bar (`~/Code/ompom-engine`, `~/Code/ompom-bar`) run the user's live
   pomodoro. Deploy them only with `~/Code/ompom-engine/bin/ompom-deploy` (the `ompom-deploy`
   skill): it keeps the running timer. See `~/Code/ompom-engine/CLAUDE.md`.
-- Quickshell's `FileView` fails silently in four ways: see TODO.md, "Four silent-failure bugs
-  in this Quickshell build".
+- Quickshell's `FileView` fails silently in four ways in this build:
+  1. `setText()` called synchronously inside `onLoaded` writes the file but drops
+     `onSaved`/`onSaveFailed`, stalling any queue waiting on it. Defer it with a
+     zero-interval `Timer`.
+  2. `setText("")` on a path never loaded is a no-op. Create empty files with `touch`.
+  3. `writeAdapter()` only works with a `JsonAdapter`; on a plain-text `FileView` it warns
+     and does nothing.
+  4. `reload()` called synchronously inside the same `FileView`'s `onSaved`/`onLoaded`
+     stalls the same way as 1. Same fix.
 - Comments explain *why*, in prose, including alternatives that were rejected. Match that
   style, and update a comment when the behaviour it describes changes.

@@ -79,7 +79,6 @@ fallback if that file is missing or unparseable. It never crashes on a missing t
 - [`docs/ui-spec.md`](docs/ui-spec.md) — tokens, window, per-screen layout
 - [`docs/layout-rules.md`](docs/layout-rules.md) — QML layout rules, each one learned by
   shipping the bug first, and how to screenshot the app offscreen with `bin/shot`
-- [`TODO.md`](TODO.md) — where development stopped and what is unverified
 
 ## Requirements
 

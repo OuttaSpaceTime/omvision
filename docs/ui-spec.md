@@ -81,7 +81,8 @@ hovered row: 4% fill plus a 3px accent bar at the fill's own left edge, in the m
 Row contents: the title at title size bold, an optional status chip (caption, bold —
 `running` in accent, a deadline in red), the `why` line at bodySmall in dim, and one caption
 line in faint: `N of M tasks done · ≈ N poms left · last session <when>`, eliding. There is
-no right-hand column; see TODO.md for why.
+no right-hand column: a fixed column of figures can't line up against rows of varying
+height, and it read ragged at every window size.
 
 ## Screen: Goal detail
 
