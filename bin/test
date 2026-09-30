@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# Runs Omvision's tests. Nothing here opens a window: everything is offscreen,
+# and nothing reads or writes ~/Notes -- the app tests get a throwaway HOME.
+#
+#   bin/test              both layers
+#   bin/test unit         layer 1 only: Writer.js and Parser.js (qmltestrunner)
+#   bin/test app          layer 2 only: the whole app, driven from inside qs
+#   bin/test app tasks    one app test file (tests/app/tst_tasks.qml)
+#   bin/test app tasks test_add_a_task
+#                         one test in it
+#   -k                    keep every app test's temp dir, not just failed ones
+#   -v                    print the runners' full output
+#
+# Layer 1 is Qt's qmltestrunner over tests/unit: plain TestCase files that
+# import the two .js files, fast, no app. Layer 2 starts the real app once per
+# tests/app/tst_*.qml, through bin/omvision (so the journal's compiled
+# highlighter loads too), with OMVISION_TEST pointing omvision.qml's test hook
+# at the file. Each run gets a fresh temp HOME seeded from
+# tests/fixtures/home; the test file resets it between its own tests. A run
+# that fails keeps its temp dir, with the app's log and a screenshot of each
+# failed test, and says where. See docs/testing.md.
+#
+# Exits non-zero if any test fails, a known failure starts passing (XPASS),
+# an app run times out or crashes, or the worked-example fixture has drifted
+# from the file contract.
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+QMLTESTRUNNER=/usr/lib/qt6/bin/qmltestrunner
+CONTRACT="$HOME/Code/ompom-engine/docs/goal-files.md"
+APP_TIMEOUT="${OMVISION_TEST_TIMEOUT:-120}"
+
+keep=0 verbose=0
+args=()
+for a in "$@"; do
+  case "$a" in
+    -k) keep=1 ;;
+    -v) verbose=1 ;;
+    -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) args+=("$a") ;;
+  esac
+done
+layer="${args[0]:-all}"
+only_file="${args[1]:-}"
+only_test="${args[2]:-}"
+case "$layer" in all|unit|app) ;; *) echo "bin/test: unknown layer '$layer' (all, unit, app)" >&2; exit 2 ;; esac
+
+failed=0
+summary=()
+
+# ---- layer 1 -----------------------------------------------------------------
+run_unit() {
+  if [ ! -x "$QMLTESTRUNNER" ]; then
+    echo "bin/test: $QMLTESTRUNNER not found (qt6-declarative)" >&2
+    failed=1; summary+=("unit     not run: no qmltestrunner"); return
+  fi
+
+  # tests/unit/workedexample.js must be the contract's worked example, byte
+  # for byte: the golden tests round-trip it, and would go on passing
+  # against an example the contract no longer has.
+  if [ -f "$CONTRACT" ]; then
+    if ! python3 - "$CONTRACT" "$ROOT/tests/unit/workedexample.js" <<'PY'
+import json, re, sys
+contract = open(sys.argv[1], encoding="utf-8").read()
+js = open(sys.argv[2], encoding="utf-8").read()
+def example(name):
+    at = contract.find("`~/Notes/Omvision/goals/" + name + "`:")
+    m = re.search(r"^```[a-z]*\n(.*?)^```", contract[at:], flags=re.S | re.M) if at != -1 else None
+    return m.group(1) if m else None
+def var(name):
+    m = re.search(r"^var " + name + r" = (.*)$", js, flags=re.M)
+    return json.loads(m.group(1)) if m else None
+bad = [n for n, v in (("ship-goal-files-doc.md", "goal"), ("ship-goal-files-doc.log.md", "log"))
+       if example(n) is None or example(n) != var(v)]
+if bad:
+    print("tests/unit/workedexample.js no longer matches the worked example in "
+          + sys.argv[1] + " (" + ", ".join(bad) + "): copy the new example in and re-check the golden tests.")
+    sys.exit(1)
+PY
+    then failed=1; summary+=("unit     worked example drifted from the contract"); fi
+  else
+    echo "note: $CONTRACT not found; worked example not checked against it"
+  fi
+
+  local out
+  out="$(cd "$ROOT" && QT_QPA_PLATFORM=offscreen "$QMLTESTRUNNER" -platform offscreen -input tests/unit 2>&1)"
+  local code=$?
+  if [ "$verbose" = 1 ]; then printf '%s\n' "$out"
+  else
+    # A failure's line and the indented Actual/Expected/Loc lines under it;
+    # the known failures (XFAIL) only count.
+    printf '%s\n' "$out" | awk '/^(FAIL!|XPASS)/ { show = 1; print; next } /^   / { if (show) print; next } { show = 0 }'
+  fi
+  local totals xfail
+  totals="$(printf '%s\n' "$out" | sed -n 's/^Totals: \([0-9]* passed, [0-9]* failed\).*/\1/p' | tail -1)"
+  xfail="$(printf '%s\n' "$out" | grep -c '^XFAIL' || true)"
+  if [ "$code" != 0 ] || [ -z "$totals" ]; then failed=1; fi
+  summary+=("unit     ${totals:-did not finish (exit $code)}, $xfail known failures")
+}
+
+# ---- layer 2 -----------------------------------------------------------------
+run_app_file() {
+  local file="$1" name
+  name="$(basename "$file" .qml)"; name="${name#tst_}"
+
+  local dir
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/omvision-test.$name.XXXXXX")"
+  mkdir -p "$dir/home" "$dir/out"
+  touch "$dir/home/.omvision-test-home"
+  if ! "$ROOT/tests/app/seed-home.sh" "$ROOT/tests/fixtures/home" "$dir/home" >/dev/null; then
+    failed=1; summary+=("app      $name: couldn't seed the test HOME ($dir)"); return
+  fi
+
+  # Only this run's own settings: no inherited OMVISION_SHOT_* (which would
+  # load the screenshot driver as well). WAYLAND_DISPLAY stays: qs's GTK
+  # setup aborts without a display to connect to, and with
+  # QT_QPA_PLATFORM=offscreen nothing is ever shown on it (bin/shot runs the
+  # same way). --no-color keeps Quickshell's log lines plain for the sed below.
+  env -u OMVISION_SHOT_DIR -u OMVISION_SHOT_WIDTH -u OMVISION_SHOT_HEIGHT \
+    HOME="$dir/home" QT_QPA_PLATFORM=offscreen \
+    OMVISION_TEST="$file" OMVISION_TEST_OUT="$dir/out" OMVISION_TEST_ONLY="$only_test" \
+    OMVISION_TEST_FIXTURES="$ROOT/tests/fixtures/home" \
+    timeout "$APP_TIMEOUT" "$ROOT/bin/omvision" --no-color >"$dir/app.log" 2>&1
+  local code=$?
+
+  local lines
+  lines="$(sed -n 's/.*\[omvision-test\] //p' "$dir/app.log")"
+  if [ "$verbose" = 1 ]; then cat "$dir/app.log"
+  else printf '%s\n' "$lines" | grep -E '^(FAIL|XFAIL|SKIP|SHOT) ' | sed 's/^/  /' || true
+  fi
+
+  local done_line
+  done_line="$(printf '%s\n' "$lines" | sed -n "s/^DONE $name //p" | tail -1)"
+  local ok=1
+  if [ -z "$done_line" ]; then
+    ok=0
+    if [ "$code" = 124 ]; then done_line="timed out after ${APP_TIMEOUT}s"
+    else done_line="the app exited ($code) before the tests finished"; fi
+  elif [ "$code" != 0 ] || printf '%s\n' "$lines" | grep -q '^FAIL '; then
+    ok=0
+  fi
+
+  if [ "$ok" = 1 ]; then
+    summary+=("app      $name: $done_line")
+    if [ "$keep" = 1 ]; then summary+=("           kept $dir"); else rm -rf -- "$dir"; fi
+  else
+    failed=1
+    summary+=("app      $name: $done_line -- log, screenshots and HOME kept in $dir")
+  fi
+}
+
+run_app() {
+  if ! command -v qs >/dev/null; then
+    echo "bin/test: qs (Quickshell) not found" >&2
+    failed=1; summary+=("app      not run: no qs"); return
+  fi
+  local files=()
+  if [ -n "$only_file" ]; then
+    files=("$ROOT/tests/app/tst_${only_file#tst_}")
+    files[0]="${files[0]%.qml}.qml"
+    [ -f "${files[0]}" ] || { echo "bin/test: no ${files[0]}" >&2; failed=1; return; }
+  else
+    for f in "$ROOT"/tests/app/tst_*.qml; do files+=("$f"); done
+  fi
+  for f in "${files[@]}"; do
+    echo "app: $(basename "$f")"
+    run_app_file "$f"
+  done
+}
+
+if [ "$layer" = all ] || [ "$layer" = unit ]; then echo "unit: tests/unit"; run_unit; fi
+if [ "$layer" = all ] || [ "$layer" = app ]; then run_app; fi
+
+echo
+printf '%s\n' "${summary[@]}"
+if [ "$failed" = 0 ]; then echo "all passed"; else echo "FAILED"; fi
+exit "$failed"

@@ -17,9 +17,15 @@ reading and writing files under `~/Notes/Omvision/`.
 - Lint: `/usr/lib/qt6/bin/qmllint <file>` (it is not on PATH). Its `[missing-property]`
   warnings on `Theme.*`, and its `[unqualified]` and `[import]` warnings, are noise: qmllint
   can't resolve Quickshell or the `Theme` singleton.
-- There is no test suite. Qt's `qml` and `qmltestrunner` can't load Quickshell's modules,
-  which are compiled into the `qs` binary. Clicks can't be simulated on this machine, so
-  verify by calling the functions a click would call.
+- Tests: `bin/test` runs both layers offscreen in about 15s. Run it before and after a
+  change. `tests/unit` (qmltestrunner) covers Writer.js and Parser.js. `tests/app` runs the
+  real app inside `qs` with a throwaway HOME, clicks and types through `OmvisionTest.qml`'s
+  helpers, and checks the bytes on disk. `bin/test app tasks` runs one file. See
+  `docs/testing.md`.
+- A change to the write path, or to what a click or key does, comes with a test: a
+  whole-file Writer/Parser case in `tests/unit`, or a flow in `tests/app`. Pin a bug you
+  aren't fixing with `expectFailContinue("", "BUG: …")`. Keep the objectNames listed in
+  `docs/testing.md` through refactors.
 - Launch with `bin/omvision`, not `qs -p omvision.qml`. The journal's markdown styling is a
   compiled module (`highlighter/`). Quickshell ignores directory-relative module imports, so
   the launcher puts the repo on `QML2_IMPORT_PATH`. After changing the C++, run

@@ -177,6 +177,7 @@ Item {
           model: root.filteredList
           delegate: Rectangle {
             id: rowItem
+            objectName: "goalRow:" + modelData.slug
             required property var modelData
             required property int index
 
@@ -325,6 +326,7 @@ Item {
             // caption lines elide short of it and hovering shifts nothing.
             PencilIcon {
               id: goalPencil
+              objectName: "goalEdit:" + rowItem.g.slug
               visible: rowItem.hovered
               anchors.right: parent.right
               anchors.rightMargin: Theme.panelPadding

@@ -226,6 +226,7 @@ Item {
           // Faded with opacity, not toggled with `visible`, so its slot is
           // always reserved and hovering never re-elides the title.
           PencilIcon {
+            objectName: "editGoalButton"
             opacity: titleHover.hovered && !!root.meta ? 1 : 0
             enabled: opacity > 0
             onClicked: root.editGoalRequested()
@@ -234,8 +235,8 @@ Item {
 
         Item { Layout.fillWidth: true }
 
-        Button { label: "Add event"; inert: false; onActivated: root.addEventRequested() }
-        Button { label: "Coach this goal"; filled: true; inert: false; onActivated: root.coachRequested() }
+        Button { objectName: "addEventButton"; label: "Add event"; inert: false; onActivated: root.addEventRequested() }
+        Button { objectName: "coachButton"; label: "Coach this goal"; filled: true; inert: false; onActivated: root.coachRequested() }
       }
 
       Item { Layout.preferredHeight: Theme.spaceLg; Layout.fillWidth: true }
@@ -624,6 +625,7 @@ Item {
             }
             Item { Layout.fillWidth: true }
             Button {
+              objectName: "addTaskButton"
               label: "+ task"
               inert: false
               visible: !root.addingTask
@@ -652,6 +654,7 @@ Item {
 
               TextInput {
                 id: addTaskInput
+                objectName: "addTaskField"
                 anchors.fill: parent
                 anchors.leftMargin: Theme.spaceXs
                 anchors.rightMargin: Theme.spaceXs
@@ -718,6 +721,7 @@ Item {
                 // and everything else falls through to the toggle.
                 Item {
                   id: taskRow
+                  objectName: "taskRow:" + index
                   width: parent.width
                   implicitHeight: taskRowLayout.implicitHeight + pad * 2
                   height: implicitHeight
@@ -802,6 +806,7 @@ Item {
                     // key handlers, so it never inserts a newline.
                     TextEdit {
                       id: taskEditInput
+                      objectName: "taskEditField:" + index
                       visible: taskRow.editing
                       Layout.fillWidth: true
                       Layout.alignment: Qt.AlignTop
@@ -866,6 +871,7 @@ Item {
 
                       PencilIcon {
                         id: taskPencil
+                        objectName: "taskEdit:" + index
                         small: true
                         anchors.centerIn: parent
                         onClicked: root.startEditTask(index, modelData.text)
@@ -930,6 +936,7 @@ Item {
               Layout.fillWidth: true
               spacing: Theme.spaceSm
               Button {
+                objectName: "closeGoalButton"
                 label: "Close goal · done"
                 inert: false
                 Layout.preferredWidth: implicitWidth
@@ -938,6 +945,7 @@ Item {
               }
               Item { Layout.fillWidth: true }
               Text {
+                objectName: "cancelGoalButton"
                 text: "Cancel"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.bodySmallSize
@@ -965,6 +973,7 @@ Item {
             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.hairline }
 
             Button {
+              objectName: "reopenGoalButton"
               label: "Reopen goal"
               inert: false
               Layout.preferredWidth: implicitWidth
