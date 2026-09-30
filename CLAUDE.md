@@ -13,10 +13,14 @@ reading and writing files under `~/Notes/Omvision/`.
   appears. Examples: `bin/shot -s journal -w 720`, `bin/shot -s journal -a sidebar -f 0,40,200`.
   Read every PNG it prints. After a visual change, capture wide and narrow. See
   `docs/layout-rules.md`, "Screenshotting".
-- Load check without a screenshot: `QT_QPA_PLATFORM=offscreen timeout 10 bin/omvision`.
-- Lint: `/usr/lib/qt6/bin/qmllint <file>` (it is not on PATH). Its `[missing-property]`
-  warnings on `Theme.*`, and its `[unqualified]` and `[import]` warnings, are noise: qmllint
-  can't resolve Quickshell or the `Theme` singleton.
+- Load check without a screenshot: `bin/check load` (the app offscreen against a fixture
+  HOME, failing on any QML warning).
+- Lint: `bin/check lint`, not a bare `/usr/lib/qt6/bin/qmllint <file>`. Run on the repo,
+  qmllint can't see the `Theme`/`Paths` singletons (Quickshell synthesizes their qmldir),
+  so every `Theme.*` reads as `[missing-property]`; `bin/check` lints a copy that fixes
+  that, and fails only on warnings not in `.qmllint-baseline`.
+- `bin/check` runs everything a change should pass: lint, the no-pixel-numbers rule, the
+  load check and `bin/test`. Run it before you stop. See `docs/testing.md`.
 - Tests: `bin/test` runs both layers offscreen in about 15s. Run it before and after a
   change. `tests/unit` (qmltestrunner) covers Writer.js and Parser.js. `tests/app` runs the
   real app inside `qs` with a throwaway HOME, clicks and types through `OmvisionTest.qml`'s
@@ -37,7 +41,8 @@ reading and writing files under `~/Notes/Omvision/`.
   `docs/ui-spec.md`. Keep `ui-spec.md` in step with behaviour you change. Parts of it are
   stale already, so check claims there against the code.
 - Colours, type sizes and spacing come from `Theme.qml` tokens. Spacing uses only the scale's
-  steps: never type a pixel number. Don't import `qs.Commons`.
+  steps: never type a pixel number (`bin/check px` enforces it; a number that must stay
+  takes `// check: allow-px <reason>` on its line). Don't import `qs.Commons`.
 - `~/Notes/Omvision/` holds the user's real notes. Don't write to it to test anything. The
   file contract is `~/Code/ompom-engine/docs/goal-files.md`:
   - `<slug>.log.md` and `days/*.md` are append-only (`tee -a`).

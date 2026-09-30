@@ -149,13 +149,16 @@ Things to know:
   dialog, the way its button does.
 - **Your notes may not exercise a screen.** The real data has, for instance, no goal
   with log entries, so the timeline never appears in a real-data shot. The notes live
-  under `$HOME`, so point `HOME` at a fixture instead of adding test data to `~/Notes`:
-  copy `~/Notes/Omvision` into a scratch dir, add the files you need (the worked
-  example in `goal-files.md` covers tasks, pomodoros, an event and coaching), and
-  symlink `.local/state/omarchy/current` so the live theme still loads. Then run
-  `HOME=<scratch> bin/shot …`.
-- **Mouse input can't be simulated offscreen either.** Drive state through the same
-  functions a click would call (see `runAction()` in `ShotDriver.qml`).
+  under `$HOME`, so point `HOME` at a fixture instead of adding test data to `~/Notes`.
+  `tests/fixtures/home` is a ready one (a goal with tasks and a log, and a journal
+  entry; copy it into a scratch dir and rename `journal/TODAY.md` to today's date), or
+  copy `~/Notes/Omvision` into a scratch dir and add the files you need (the worked
+  example in `goal-files.md` covers tasks, pomodoros, an event and coaching). Symlink
+  `.local/state/omarchy/current` into it so the live theme still loads; without it the
+  app runs on the Flexoki fallback. Then run `HOME=<scratch> bin/shot …`.
+- **`bin/shot` drives state, not the mouse.** Its actions call the same functions a
+  click would (see `runAction()` in `ShotDriver.qml`). Real clicks and key presses
+  offscreen are the app tests' job: `bin/test`, see `docs/testing.md`.
 
 **Never screenshot by launching a real window.** The recipe that used to be here did
 that (`setsid qs …`, then `hyprctl` to find the window and `grim` to capture it). It
@@ -165,6 +168,7 @@ fork) landed on the user's terminal three times, floating it, resizing it or mov
 to another workspace. Omarchy's "screenshot saved" toast also got into the captures.
 None of that happens offscreen.
 
-To check that a change still **loads**, without a screenshot:
-`QT_QPA_PLATFORM=offscreen timeout 10 bin/omvision`. QML warnings print to stderr.
-Ignore Quickshell's warning that WAYLAND_DISPLAY is set.
+To check that a change still **loads**, without a screenshot: `bin/check load`. It
+runs `QT_QPA_PLATFORM=offscreen timeout 10 bin/omvision` against a temp HOME seeded
+from `tests/fixtures/home` (never the real notes) and fails on any QML warning, leaving
+out Quickshell's expected notices about WAYLAND_DISPLAY and window masks.

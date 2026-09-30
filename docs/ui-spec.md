@@ -2,7 +2,8 @@
 
 A Quickshell QML app: `~/Code/omvision/bin/omvision`, one `FloatingWindow`. The journal's
 markdown highlighter is the one compiled part (`highlighter/build.sh`); everything else is QML.
-Milestone 2 is **read-only** — it renders what ompom and a hand-written goal file put on disk.
+It renders what ompom, the coach and hand edits put on disk, and writes goal files (tasks,
+status, new goals), events to the append-only logs, and the journal (README, **Writing**).
 
 ## Tokens
 
@@ -148,7 +149,9 @@ The text column is the app's page column (see Tokens): `Theme.writingColumns` (7
 monospace characters wide, measured off the live font, on the same vertical line as every
 other screen's text, and still while the sidebar slides in beside it. Type is `Theme.writingPointSize`
 (15pt ≈ 20px) — the only *point* size in the app, because the highlighter's character formats
-are point-sized (see README) — on a 185% line height. A sticky 56px header (`Theme.journalHeaderHeight`) floats over the
+are point-sized (see README) — on a 135% line height (`lineHeight` in `JournalHighlight.qml`;
+185% spaced every line like its own paragraph). Without the highlighter module the page keeps
+the font's own line height. A sticky 56px header (`Theme.journalHeaderHeight`) floats over the
 text, opaque in `paper`, holding both controls and the day's label (`Today`, else
 `Tue 23 Sep`) on one line; the text scrolls behind it. A trackpad scroll follows the fingers
 and then glides on when they lift, faster swipes going further, the way other apps on the
@@ -159,7 +162,8 @@ this screen can raise.
 The text is always live: no read mode, no edit mode, no click-to-edit. Markdown is styled in
 place by the `MarkdownHighlight` module, matching omawrite line for line:
 
-- `#`, `##`, `-`, `>` and `---` stay **visible** in `faint`.
+- `#`, `##`, `-`, `>` and `---` stay **visible** in `markup`, the one text colour below the
+  4.5:1 floor (2:1, what omawrite's markers measure), so the scaffold recedes behind the words.
 - `**`, `*`, `_` and a link's `[`/`](url)` are drawn at 1pt, transparent, with their advance
   width cancelled by negative letter-spacing — gone from the eye, still in the document and
   the file.
@@ -167,7 +171,7 @@ place by the `MarkdownHighlight` module, matching omawrite line for line:
 - Quotes italic in `faint`; inline code in `fill`, backticks included and undimmed; links
   accent + underline. `~~` and ``` ``` ``` are not markers here — omawrite has no rule for
   either, so neither does this.
-- Blocks sit on a 185% proportional line height.
+- Blocks sit on a 135% proportional line height.
 
 Nothing is deleted or rewritten: the file keeps every byte that was typed.
 
@@ -227,4 +231,6 @@ Read the files directly, in QML, without shelling out to ompom's helper:
   `~/Code/ompom-engine/docs/goal-files.md`. **Read it before writing a parser.**
 
 Anything that fails to parse is skipped, never fatal — a broken file must not blank the app.
-Watch the goals directory so edits appear without a restart.
+Edits appear without a restart: Quickshell has no directory watcher, so the goals and journal
+directories are listed every 2s (`find`), and each file found (and today's day file) is read
+through a `FileView` that watches it.

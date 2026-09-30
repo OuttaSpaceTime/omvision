@@ -1,0 +1,86 @@
+# qmllint warnings that existed when bin/check was introduced, one per line:
+# file, category, message and the warning's source line, tab-separated.
+# bin/check fails only on warnings that are not listed here. Fix one and
+# drop its line (bin/check --update-baseline rewrites the whole file); never
+# add a line by hand to get a new warning past the check.
+Appender.qml	signal-handler-parameters	Type QProcess::ExitStatus of parameter exitStatus in signal called exited was not found, but is required to compile onExited. Did you add all imports and dependencies?	onExited: function(exitCode) {
+CancelDialog.qml	Quick.layout-positioning	Detected height on an item that is managed by a layout. This is undefined behavior; use implictHeight or Layout.preferredHeight instead.	height: Theme.optionMarkSize
+CancelDialog.qml	Quick.layout-positioning	Detected width on an item that is managed by a layout. This is undefined behavior; use implicitWidth or Layout.preferredWidth instead.	width: Theme.optionMarkSize
+CancelDialog.qml	unqualified	Unqualified access	onClicked: root.reasonIndex = reasonRow.index
+CancelDialog.qml	unqualified	Unqualified access	readonly property bool selected: root.reasonIndex === index
+CoachingScreen.qml	unqualified	Unqualified access	Item { width: parent.width; height: index > 0 ? Theme.spaceSm : 0 }
+CoachingScreen.qml	unqualified	Unqualified access	onClicked: root.selectedMethod = parent.modelData
+CoachingScreen.qml	unqualified	Unqualified access	onClicked: root.selectedSlug = parent.modelData.slug
+CoachingScreen.qml	unqualified	Unqualified access	readonly property bool isSelected: root.selectedMethod === modelData
+CoachingScreen.qml	unqualified	Unqualified access	readonly property bool isSelected: root.selectedSlug === modelData.slug
+CoachingScreen.qml	unqualified	Unqualified access	text: modelData
+CoachingScreen.qml	unqualified	Unqualified access	text: modelData.date
+CoachingScreen.qml	unqualified	Unqualified access	text: modelData.method
+CoachingScreen.qml	unqualified	Unqualified access	text: modelData.summary
+CoachingScreen.qml	unqualified	Unqualified access	visible: !!modelData.summary
+CoachingScreen.qml	unqualified	Unqualified access	visible: index > 0
+DayList.qml	unqualified	Unqualified access	onClicked: dayList.dayClicked(dayRow.modelData.path)
+DayList.qml	unqualified	Unqualified access	readonly property bool isSelected: dayList.selectedPath === modelData.path
+DayList.qml	unqualified	Unqualified access	width: daysColumn.width
+EventDialog.qml	Quick.layout-positioning	Detected height on an item that is managed by a layout. This is undefined behavior; use implictHeight or Layout.preferredHeight instead.	height: Theme.optionMarkSize
+EventDialog.qml	Quick.layout-positioning	Detected width on an item that is managed by a layout. This is undefined behavior; use implicitWidth or Layout.preferredWidth instead.	width: Theme.optionMarkSize
+EventDialog.qml	unqualified	Unqualified access	MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.selectedSlug = parent.modelData.slug }
+EventDialog.qml	unqualified	Unqualified access	onClicked: root.kindIndex = index
+EventDialog.qml	unqualified	Unqualified access	onClicked: root.kindIndex = index
+EventDialog.qml	unqualified	Unqualified access	readonly property bool selected: root.kindIndex === index
+EventDialog.qml	unqualified	Unqualified access	readonly property bool selected: root.selectedSlug === modelData.slug
+GoalDetailScreen.qml	unqualified	Unqualified access	editError: root.editTaskError
+GoalDetailScreen.qml	unqualified	Unqualified access	editText: root.editTaskText
+GoalDetailScreen.qml	unqualified	Unqualified access	editing: root.editingTaskIndex === index
+GoalDetailScreen.qml	unqualified	Unqualified access	onCancelRequested: root.cancelEditTask()
+GoalDetailScreen.qml	unqualified	Unqualified access	onCommitRequested: root.commitEditTask(index)
+GoalDetailScreen.qml	unqualified	Unqualified access	onEditFieldShown: function(field) { root.taskEditField = field }
+GoalDetailScreen.qml	unqualified	Unqualified access	onEditRequested: root.startEditTask(index, modelData.text)
+GoalDetailScreen.qml	unqualified	Unqualified access	onEditTextEdited: function(text) { root.editTaskText = text }
+GoalDetailScreen.qml	unqualified	Unqualified access	onToggleRequested: root.toggleTask(index)
+GoalsScreen.qml	unqualified	Unqualified access	onClicked: root.editGoalRequested(rowItem.g.slug)
+GoalsScreen.qml	unqualified	Unqualified access	onClicked: root.filterStatus = parent.modelData
+GoalsScreen.qml	unqualified	Unqualified access	onClicked: root.openGoal(rowItem.g.slug)
+GoalsScreen.qml	unqualified	Unqualified access	parts.push("last session " + root.lastSessionLabel(rowItem.g.logEntries))
+GoalsScreen.qml	unqualified	Unqualified access	readonly property bool isSelected: root.filterStatus === modelData
+GoalsScreen.qml	unqualified	Unqualified access	readonly property bool isSelected: root.selectedSlug === g.slug
+GoalsScreen.qml	unqualified	Unqualified access	text: modelData + " " + root.countByStatus(modelData)
+GoalsScreen.qml	unqualified	Unqualified access	width: rowsColumn.width
+JournalHighlight.qml	import	Failed to import MarkdownHighlight. Are your import paths set up properly?	import MarkdownHighlight
+JournalHighlight.qml	import	MarkdownHighlighter was not found. Did you add all imports and dependencies?	MarkdownHighlighter {
+JournalHighlight.qml	import	Warnings occurred while importing module "MarkdownHighlight":	import MarkdownHighlight
+JournalScreen.qml	missing-property	Member "mentionSpans" not found on type "QObject"	var spans = h ? h.mentionSpans() : []
+JournalScreen.qml	missing-property	Member "mentionSpansChanged" not found on type "QObject"	item.mentionSpansChanged.connect(function() { Qt.callLater(root.refreshTagSpans) })
+JournalStore.qml	signal-handler-parameters	Type QProcess::ExitStatus of parameter exitStatus in signal called exited was not found, but is required to compile onExited. Did you add all imports and dependencies?	onExited: function(exitCode, exitStatus) {
+JournalStore.qml	signal-handler-parameters	Type QProcess::ExitStatus of parameter exitStatus in signal called exited was not found, but is required to compile onExited. Did you add all imports and dependencies?	onExited: function(exitCode, exitStatus) {
+MentionPopup.qml	missing-property	Member "contentX" not found on type "QQuickItem"	return Qt.rect(e.x + r.x - s.contentX, e.y + r.y - s.contentY, r.width, r.height)
+MentionPopup.qml	missing-property	Member "contentY" not found on type "QQuickItem"	return Qt.rect(e.x + r.x - s.contentX, e.y + r.y - s.contentY, r.width, r.height)
+MentionPopup.qml	missing-property	Member "cursorRectangle" not found on type "QQuickItem"	var dep = e.cursorRectangle
+MentionPopup.qml	missing-property	Member "positionToRectangle" not found on type "QQuickItem"	var r = mentionPopup.mentionStart >= 0 ? e.positionToRectangle(mentionPopup.mentionStart) : Qt.rect(0, 0, 0, 0)
+MentionPopup.qml	unqualified	Unqualified access	height: mentionPopup.rowHeight
+MentionPopup.qml	unqualified	Unqualified access	onClicked: mentionPopup.accept(mentionRow.index)
+MentionPopup.qml	unqualified	Unqualified access	onEntered: mentionPopup.highlight(mentionRow.index)
+MentionPopup.qml	unqualified	Unqualified access	readonly property bool current: index === mentionPopup.currentIndex
+MentionPopup.qml	unqualified	Unqualified access	width: mentionList.width
+Sidebar.qml	unqualified	Unqualified access	onClicked: root.navigate(navRow.modelData.id)
+Sidebar.qml	unqualified	Unqualified access	readonly property bool selected: root.currentScreen === modelData.id
+Timeline.qml	unqualified	Unqualified access	+ root.formatDayDuration(Parser.pomodoroMinutes(dayBlock.modelData.entries))
+Timeline.qml	unqualified	Unqualified access	timeWidth: Math.ceil(timeMetrics.advanceWidth)
+Timeline.qml	unqualified	Unqualified access	width: dayBlock.width
+Timeline.qml	unqualified	Unqualified access	width: timelineColumn.width
+TodayScreen.qml	unqualified	Unqualified access	text: root.typeLabel(rowItem.modelData)
+TodayScreen.qml	unqualified	Unqualified access	width: rowsColumn.width
+omvision.qml	unqualified	Unqualified access	onLoadFailed: function(error) { root.setJournalContent(jloader.modelData.path, "") }
+omvision.qml	unqualified	Unqualified access	onLoadFailed: function(error) { root.syncOrphanLog(orphanLoader.modelData, []) }
+omvision.qml	unqualified	Unqualified access	onLoaded: root.setJournalContent(jloader.modelData.path, text())
+omvision.qml	unqualified	Unqualified access	onLoaded: root.syncOrphanLog(orphanLoader.modelData, Parser.parseLogEntries(text(), new Date()))
+omvision.qml	unqualified	Unqualified access	root.syncGoal(loader.slug, loader.meta, [])
+omvision.qml	unqualified	Unqualified access	root.syncGoal(loader.slug, loader.meta, loader.entries)
+omvision.qml	unqualified	Unqualified access	root.syncGoal(loader.slug, loader.meta, loader.entries)
+omvision.qml	unqualified	Unqualified access	root.syncGoal(loader.slug, null, loader.entries)
+tests/app/OmvisionTest.qml	missing-property	Member "code" not found on type "QObject"	var r = { code: p.finished ? p.code : -1, out: p.out }
+tests/app/OmvisionTest.qml	missing-property	Member "finished" not found on type "QObject"	for (; t < limit && !p.finished; t += 10) wait(10)
+tests/app/OmvisionTest.qml	missing-property	Member "finished" not found on type "QObject"	var r = { code: p.finished ? p.code : -1, out: p.out }
+tests/app/OmvisionTest.qml	missing-property	Member "out" not found on type "QObject"	var r = { code: p.finished ? p.code : -1, out: p.out }
+tests/app/OmvisionTest.qml	missing-property	Member "streamDone" not found on type "QObject"	for (var s = 0; s < 500 && !p.streamDone; s += 10) wait(10)
+tests/app/OmvisionTest.qml	signal-handler-parameters	Type QProcess::ExitStatus of parameter exitStatus in signal called exited was not found, but is required to compile onExited. Did you add all imports and dependencies?	onExited: function(exitCode, exitStatus) { proc.code = exitCode; proc.finished = true }

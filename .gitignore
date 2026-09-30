@@ -12,3 +12,6 @@
 # built by highlighter/build.sh
 /MarkdownHighlight/
 /highlighter/build/
+
+# agent worktrees (Claude Code): each one is a whole second checkout
+/.claude/worktrees/

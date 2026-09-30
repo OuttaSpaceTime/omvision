@@ -17,6 +17,36 @@ It exits non-zero if a test fails, a known failure starts passing, an app run ti
 (`OMVISION_TEST_TIMEOUT`, default 120s) or crashes, or the worked-example fixture has
 drifted from the file contract.
 
+## `bin/check`: everything a change should pass
+
+`bin/check` runs four steps, all of them even when one fails, prints a summary and exits
+non-zero if any failed. `bin/check lint px` runs only the steps named; `-v` prints each
+step's full output.
+
+- **lint** — `qmllint` over every `.qml` file git tracks or would add. qmllint can't see
+  the `qmldir` Quickshell synthesizes, so on the repo itself it takes `Theme` and `Paths`
+  for ordinary types and reports every `Theme.foo` as missing. `bin/check` lints a temp
+  copy instead, with a `qmldir` there that declares the two singletons (the repo must not
+  have one: a hand-written `qmldir` switches Quickshell's off). Nothing is silenced, so a
+  misspelled token, id or import is a real warning. The warnings that predate the check
+  are listed in `.qmllint-baseline`, keyed by file, category, message and the text of the
+  line, and only a warning not listed there fails. Fixed some, or changed a line that
+  carries one? `bin/check --update-baseline` rewrites the list; its diff shows what
+  changed. `.qmllint.ini` holds qmllint's levels, for this run and a hand-run qmllint
+  alike.
+- **px** — no typed pixel numbers (CLAUDE.md, Rules). It flags a number other than 0 on a
+  geometry binding (`width`, `height`, `x`, `y`, margins, spacing, padding, `pixelSize`,
+  `pointSize`, `radius`, `duration`, and the implicit/preferred/minimum/maximum sizes) in
+  any `.qml` file but `Theme.qml`, `ShotDriver.qml` and `tests/`. A 1 counts, since a 1px
+  rule has `Theme.hairlineWidth`; a number something is multiplied or divided by is a
+  ratio and doesn't. A number that has to stay takes a marker with a reason on the same
+  line: `implicitWidth: 1440  // check: allow-px the window's default size`.
+- **load** — the app offscreen for 10s against a temp HOME seeded from
+  `tests/fixtures/home`, failing on any QML warning or error it logs. Only what exists at
+  startup is covered. A `ReferenceError` in a binding went unlogged when this was tried;
+  qmllint's `[unqualified]` is what catches a misspelled id.
+- **test** — `bin/test`.
+
 ## Layer 1: `tests/unit`
 
 Plain Qt `TestCase` files that import `Writer.js` and `Parser.js` directly, run by Qt's
@@ -81,8 +111,8 @@ absent, so the app runs on the Flexoki fallback.
 
 ### Finding controls
 
-`click()` and `item()` look items up by `objectName`. These names are meant to sit on
-the controls, and a refactor must keep them:
+`click()` and `item()` look items up by `objectName`. These names sit on the controls,
+and a refactor must keep them:
 
 | objectName | control |
 |---|---|
@@ -91,6 +121,7 @@ the controls, and a refactor must keep them:
 | `addTaskButton`, `addTaskField` | `+ task` and its input |
 | `closeGoalButton`, `reopenGoalButton`, `cancelGoalButton` | the goal's close, reopen and cancel |
 | `addEventButton`, `coachButton`, `editGoalButton` | the detail header's actions |
+| `backControl` | the detail's `← Goals` / `← Journal` link |
 | `journalEditor` | the journal's page |
 
 The goal names sit in `GoalsScreen.qml`, and in `GoalDetailScreen.qml` and its parts
@@ -129,8 +160,9 @@ reminder to remove the `expectFailContinue`. Current ones:
 - How things look: layout, colours, hover fills and the pencil fading in. The tests hover
   only to reach a control. Use `bin/shot` and read the images.
 - Compose and input-method typing (fcitx5 preedit). Key events are not the input
-  method's events. An offscreen C++ harness reproduced the compose bug. It has not been
-  committed yet, and it is out of scope for this suite.
+  method's events. An offscreen C++ harness (a `QQuickView` sending
+  `QInputMethodEvent`s) reproduced the compose bug, but it is not in this repo, and it
+  is out of scope for this suite.
 - The journal's kinetic trackpad glide, and anything else about timing and feel.
 - Everything that needs a real session: the ompom engine and bar, the live omarchy theme,
   and the user's own notes. Those stay with the user.
