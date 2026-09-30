@@ -46,20 +46,33 @@ Item {
     if (ok) { cancelDialogOpen = false; cancelError = "" }
     else cancelError = message || "couldn't save"
   }
+  // Only closes the field if it is still the one that was saved: a click on
+  // another task's pencil saves this edit and opens that one before the
+  // write lands, and the result must not close the new field. A failure
+  // then has no field to show in, but omvision.qml's banner reports it.
   function onEditTaskResult(ok, message) {
+    var saved = root.savingTaskIndex
+    root.savingTaskIndex = -1
+    if (root.editingTaskIndex !== saved) return
     if (ok) { root.editingTaskIndex = -1; root.editTaskText = "" }
     else root.editTaskError = message || "couldn't save"
   }
 
   function startEditTask(index, text) {
     root.editTaskText = text
+    root.editTaskOriginal = text
     root.editTaskError = ""
     root.editingTaskIndex = index
   }
-  // Saving an emptied task deletes it (Writer.editTask).
+  // Saving an emptied task deletes it (Writer.editTask). Unchanged text
+  // just closes the field: clicking away from a task you only looked at
+  // shouldn't rewrite the goal file.
   function commitEditTask(index) {
+    var text = root.editTaskText.trim()
+    if (text === root.editTaskOriginal.trim()) { root.cancelEditTask(); return }
     root.editTaskError = ""
-    root.editTask(index, root.editTaskText.trim())
+    root.savingTaskIndex = index
+    root.editTask(index, text)
   }
   function cancelEditTask() {
     root.editingTaskIndex = -1
@@ -85,7 +98,20 @@ Item {
   property string addTaskError: ""
   property int editingTaskIndex: -1
   property string editTaskText: ""
+  property string editTaskOriginal: ""
   property string editTaskError: ""
+  // The task whose edit is being written, -1 when none is in flight.
+  property int savingTaskIndex: -1
+  // The open edit field, for the click-away catcher's hit test.
+  property Item taskEditField: null
+
+  // Leaving the screen (the sidebar, or the back link) with a task open
+  // saves it too, the same as clicking anywhere else on this screen.
+  onVisibleChanged: if (!visible && root.editingTaskIndex >= 0 && root.savingTaskIndex < 0)
+    root.commitEditTask(root.editingTaskIndex)
+  // A field left open by a failed save belongs to that goal's task list,
+  // not to the same row of the next goal opened.
+  onSlugChanged: root.cancelEditTask()
   property bool cancelDialogOpen: false
   property string cancelError: ""
 
@@ -794,6 +820,7 @@ Item {
                         text = root.editTaskText
                         cursorPosition = length
                         forceActiveFocus()
+                        root.taskEditField = taskEditInput
                       }
                       onTextChanged: if (visible) root.editTaskText = text
                       Keys.onReturnPressed: root.commitEditTask(index)
@@ -984,6 +1011,38 @@ Item {
           }
         }
       }
+    }
+  }
+
+  // Click away to save. While a task is open, a press anywhere on this
+  // screen outside its field saves it (Enter's commitEditTask), and the
+  // press then carries on to whatever is under it: ticking another task or
+  // opening its pencil takes one click, not two. A press in the field
+  // itself is passed straight through, so the caret and selection work.
+  //
+  // One exception: saving an emptied task deletes it, and every task below
+  // it moves up an index. Queued behind that delete, a tick or an edit on a
+  // lower row would hit the task after the one clicked, so that press is
+  // swallowed and only saves.
+  //
+  // A MouseArea on top that declines the press, not activeFocus: the other
+  // rows, the rail and the timeline don't take focus, so clicking them
+  // never takes it from the field, and the window losing focus (switching
+  // workspace mid-edit) would have saved and closed it.
+  MouseArea {
+    id: clickAway
+    anchors.fill: parent
+    enabled: root.editingTaskIndex >= 0 && root.savingTaskIndex < 0
+    onPressed: function(mouse) {
+      var field = root.taskEditField
+      if (field && field.visible
+          && field.contains(field.mapFromItem(clickAway, mouse.x, mouse.y))) {
+        mouse.accepted = false
+        return
+      }
+      var deleting = root.editTaskText.trim() === ""
+      root.commitEditTask(root.editingTaskIndex)
+      mouse.accepted = deleting
     }
   }
 

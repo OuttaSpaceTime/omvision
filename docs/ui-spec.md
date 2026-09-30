@@ -112,7 +112,11 @@ the first line. Hovering a row shows the pencil at its end, centred on the whole
 its slot is always reserved, so hovering never re-wraps the text. Clicking it turns the text
 into an inline wrapping field with the cursor at the end, nothing selected (Enter saves,
 Escape cancels, the `≈N` estimate is kept; saving it empty deletes the task). Clicking anywhere
-else on the row ticks it. When there are no
+else on the screen also saves it, and the click still does what it would have done: ticking
+another task or opening its pencil takes one click. The exception is an emptied task. The click
+only saves it (so deletes it), because the rows below shift up an index. Leaving the screen with
+a task open saves it too. Unchanged text just closes the field, without a write. Clicking anywhere
+else on a row ticks it. When there are no
 tasks yet, this line at caption size in faint: "Tasks belong to the goal, not to a pomodoro. A
 finished pom never ticks one off — you do, or the coach does." At the bottom, while the goal is open,
 `Close goal · done` and a red `Cancel`; on a done goal, `Reopen goal` instead, which sets it
