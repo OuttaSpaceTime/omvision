@@ -40,9 +40,8 @@ Rectangle {
   color: Theme.paper
 
   function nameFor(ms) {
-    var base = driver.screen.replace(/[^A-Za-z0-9_-]+/g, "_")
-    if (driver.action !== "") base += "-" + driver.action
-    return base + "-" + ms + "ms.png"
+    var base = driver.screen + (driver.action !== "" ? "-" + driver.action : "")
+    return base.replace(/[^A-Za-z0-9_-]+/g, "_") + "-" + ms + "ms.png"
   }
 
   function applyScreen() {
@@ -65,6 +64,16 @@ Rectangle {
     else if (driver.action === "editgoal") driver.app.openEditGoalDialog(driver.app.openGoalSlug)
     else if (driver.action === "edittask" && driver.goalDetail && driver.goalDetail.tasks.length > 0)
       driver.goalDetail.startEditTask(0, driver.goalDetail.tasks[0].text)
+    // Types `@` and a query into the journal to show the goal list. The
+    // journal's writes are switched off first (typeMentionForShot), so the
+    // day's file is never touched.
+    else if (driver.action.indexOf("mention") === 0 && driver.journal)
+      driver.journal.typeMentionForShot(driver.action.slice("mention".length).replace(/^:/, ""))
+    // Opens the first goal the journal's tags name, the way clicking it does:
+    // from the tags the highlighter styled, so only one a click could open.
+    else if (driver.action === "opentag" && driver.journal) {
+      if (driver.journal.tagSpans.length > 0) driver.journal.openGoal(driver.journal.tagSpans[0].slug)
+    }
     else if (driver.action !== "") console.warn("shot: unknown action", driver.action)
   }
 

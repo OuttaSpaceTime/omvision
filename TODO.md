@@ -14,6 +14,93 @@ Milestones 2, 3 and 4 are in: it reads and writes `~/Notes/Omvision/goals/*.md`,
 `~/.claude/skills/ompom-coach/SKILL.md`. The UI spec is `docs/ui-spec.md`, the layout rules are
 `docs/layout-rules.md`, and the file contract is `~/Code/ompom-engine/docs/goal-files.md`.
 
+## Landed 2026-09-29
+
+- **Compose (fcitx5) no longer paints a box at the start of a styled line.** The user
+  reported the cursor jumping to the line start when typing `ä` with Compose, but only on
+  lines with `@` tags. The cursor never moved: the `ä` always landed in place. fcitx5 colours
+  its preedit (`·`), QSyntaxHighlighter puts that range first in the layout's format list,
+  and Qt Quick's `QQuickTextNodeEngine::mergeFormats` assumes the list is sorted. So the
+  highlight was painted on the line's first coloured character. That affects a list's `-`
+  and links too, not only tags. The fix is `uncolourPreedit()` in the highlighter: the
+  preedit loses its blue background and draws in text colour at the cursor. The comment
+  there explains why sorting the list was rejected. Reproduced and verified with a C++
+  harness in the session scratchpad (not in the repo). It loads `MarkdownHighlight` with a
+  TextEdit offscreen, sends fcitx5-qt's own `QInputMethodEvent`s (preedit `·`, `"`, then
+  commit `ä`), grabs the window and prints the layout's format order. Before the fix, a box
+  sat on the `@` and on the `-`; after, neither, and a plain line is unchanged. The app
+  loads offscreen without errors. It has not yet been checked in the live app (it needs a
+  restart to load the rebuilt plugin).
+
+- **The `@` list filters fuzzily**, ignoring case and accents: `filterGoals`, `foldForMatch`,
+  `matchScore` in JournalScreen.qml. Tiers are prefix, word start, substring and scattered.
+  Scattered matches pick the best placement (a small DP), not the first, so `sa` ranks
+  Study Software Architecture above Wall Squat. Checked offscreen with `bin/shot -a mention:`
+  `wsq`, `WallSq`, `dia`, `sa` and `e` at 900px, and `wsq` at 420px. The user reported that
+  typing had stopped filtering the list. Offscreen, typing filtered fine, and after this
+  change it worked for the user too. The cause was never pinned down. Ten `qs -p` instances
+  were running at the time, so the user may have been typing in a stale one.
+
+- **The `@` list shows one line per goal**: the title, plus `done`/`cancelled` in caption
+  faint at the right of closed goals. The `@slug` line under each title is gone (the tag
+  already draws as the title). Checked offscreen with `bin/shot -a mention` at 900 and 420px.
+
+- **Smaller pencil on task rows.** `PencilIcon.qml` has a `small` size: the `+ task` button's
+  `smallControlHeight` (24px square) with a caption-size glyph. Task rows use it. At the full
+  32px it nearly filled a one-line row. Goals rows and the detail title keep the full size.
+  Checked offscreen with the pencil forced visible at 1100 and 720px.
+
+- **Tags show the goal's current title** and follow a rename live, with no write to the
+  journal. The file still holds `@slug`. A highlighter can't change characters, so
+  `formatMentions()` (highlighter) makes the slug transparent and exactly as wide as the title.
+  All the width goes on its first character as letter spacing, and the rest is hidden at 1pt.
+  A line break can't split one character, and a slug stretched evenly could break after a
+  hyphen. `mentionSpans()` reads each gap's x, baseline, width and font from the layout, and
+  JournalScreen's `tagTitles` Repeater draws the titles there (refreshed on text, tag, width
+  and height changes). `mentions` is now a slug → title map. This replaces the words-from-slug
+  styling (transparent hyphens, AllUppercase capitals), so "Diät" now reads "Diät". Widths are
+  capped at the line, the title elides, and a change of column width re-sizes them.
+  Verified offscreen against a fixture HOME: body, heading, quote and list tags at 1100 and
+  720px, a title changed on disk mid-run (the tag re-rendered and the line reflowed), the
+  long-title cap, the `@` picker, and `mentionAt()` at each title's middle, on the `@` and past
+  the line end. **Open:** a real click, drag-select and caret placement inside a tag. The caret
+  now stops at the `@`, at the end of the title, and at invisible zero-width positions in
+  between.
+
+- **Edit a goal from its detail screen.** Hovering the title shows the pencil right after it
+  (`titleGroup` in GoalDetailScreen.qml, sized to the title so the pencil follows the words;
+  slot reserved, so the title never re-elides). It opens the same Edit goal dialog
+  (`editGoalRequested` → `openEditGoalDialog`).
+- **The pencil is a button now.** `PencilIcon.qml` is a 32px square drawn like `Button.qml`
+  (border, 8% hover fill, ink glyph) with its own MouseArea and `clicked` signal; the three
+  callers (Goals rows, task rows, detail title) dropped their MouseAreas. The bare dim glyph
+  didn't read as clickable: on a Goals row the whole row already shows a hand cursor.
+  Verified offscreen with hover forced on in a scratch copy (goals list, goal detail wide
+  and 720px). **Open:** the real hover and click, which can't be driven here.
+
+- **`@` goal tags in the journal.** Typing `@` opens a list of every goal under the `@`,
+  and the letters after it filter the list. Up/Down/Return/Tab/Escape or a click writes
+  `@<slug>`. It works in headings and list items, and never after a word character, so
+  e-mail addresses don't trigger it. Known tags are styled by the highlighter: a new
+  `mentions` property on `MarkdownHighlighter`, empty by default, so the ompom overlay is
+  unaffected. A plain click on a tag opens the goal (`TapHandler` with a passive grab, next
+  to the TextEdit's own mouse handling), and its back link reads `← Journal`
+  (`goalBackScreen` in omvision.qml). Tags show the goal's title (see the entry above; this first version read the
+  slug as words). The pattern lives only in `mentionRe` (C++): clicks, hover and
+  `-a opentag` hit-test the spans it produced (`tagSpans`), so a tag in a link or code span,
+  which the highlighter leaves plain, isn't clickable either. The spec is in ui-spec.md,
+  Journal, "Goal tags".
+  Verified offscreen against a fixture HOME: the list, filtering, flip-above and no-match
+  shots (`bin/shot -a mention[:query]`, `-a opentag`); and, calling the functions directly,
+  accept, word-end replacement, space/email/Escape closing, hit-testing (known, unknown,
+  in code, past the line end), and journal → goal → back. The day's file was unchanged
+  afterwards (`writesDisabled`).
+  **Open:** a real mouse click and hover on a tag were not tried (they can't be simulated
+  here). What needs a hand check: the click opens the goal, dragging across a tag still
+  selects, and the pointer turns into a hand. The deployed ompom copy of the highlighter was
+  not redeployed; it doesn't need `mentions`. The coach skill doesn't look for `@slug` yet;
+  it could grep all journal days for a goal's tag instead of only overlapping dates.
+
 ## Landed 2026-09-25
 
 - **Journal trackpad glide** (`JournalScreen.qml`, the `trackpadGlide` WheelHandler). Qt Quick
@@ -170,6 +257,11 @@ barely readable on light themes.
    clicked after loading has finished. But typing into that blank page within the first
    second or two would save the new text *over* the day's file. `flushWrite` only refuses
    to save an *empty* buffer over existing text. Not fixed yet.
+5. **Omvision processes outlive their windows.** On 2026-09-29, ten `qs -p …/omvision.qml`
+   processes were running, but only the newest had a window. The other nine were ended
+   with the user's OK. Probably closing the window doesn't quit Quickshell, so every launch
+   leaves one behind. That has not been verified. Stale instances still poll, and could
+   write, the journal.
 
 ## Fixed and verified on screen (2026-09-20)
 

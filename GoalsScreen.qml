@@ -329,13 +329,7 @@ Item {
               anchors.right: parent.right
               anchors.rightMargin: Theme.panelPadding
               anchors.verticalCenter: parent.verticalCenter
-
-              MouseArea {
-                anchors.fill: parent
-                anchors.margins: -6
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.editGoalRequested(rowItem.g.slug)
-              }
+              onClicked: root.editGoalRequested(rowItem.g.slug)
             }
           }
         }

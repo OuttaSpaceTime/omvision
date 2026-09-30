@@ -13,6 +13,9 @@ Item {
   property string slug: ""
   property var meta: null
   property var logEntries: []
+  // Where the back link goes, which depends on how you got here: the Goals
+  // list, or a tag in the journal. omvision.qml owns the navigation.
+  property string backLabel: "← Goals"
   signal back()
 
   // Write-path signals. GoalDetailScreen owns none of the filesystem work
@@ -29,6 +32,7 @@ Item {
   signal cancelGoal(string reason, string takeaway)
   signal addEventRequested()
   signal coachRequested()
+  signal editGoalRequested()
 
   // Result callbacks from omvision.qml: called directly on this instance
   // (it holds the id) rather than routed back through a signal, so the
@@ -169,15 +173,40 @@ Item {
         Layout.fillWidth: true
         spacing: Theme.spaceMd
 
-        Text {
+        // The title and its edit pencil (the Goals rows' pencil, same
+        // dialog). The group is sized to the title, capped by maximumWidth so
+        // a long title still elides, rather than filling the row: the pencil
+        // belongs right after the words, not over by the buttons. The hover
+        // covers title and pencil together, so crossing the gap between them
+        // doesn't flicker it off.
+        RowLayout {
+          id: titleGroup
           Layout.fillWidth: true
-          text: root.meta ? root.meta.title : root.slug
-          elide: Text.ElideRight
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.headingSize
-          font.bold: true
-          color: Theme.ink
+          Layout.maximumWidth: implicitWidth
+          spacing: Theme.spaceSm
+
+          HoverHandler { id: titleHover }
+
+          Text {
+            Layout.fillWidth: true
+            text: root.meta ? root.meta.title : root.slug
+            elide: Text.ElideRight
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.headingSize
+            font.bold: true
+            color: Theme.ink
+          }
+
+          // Faded with opacity, not toggled with `visible`, so its slot is
+          // always reserved and hovering never re-elides the title.
+          PencilIcon {
+            opacity: titleHover.hovered && !!root.meta ? 1 : 0
+            enabled: opacity > 0
+            onClicked: root.editGoalRequested()
+          }
         }
+
+        Item { Layout.fillWidth: true }
 
         Button { label: "Add event"; inert: false; onActivated: root.addEventRequested() }
         Button { label: "Coach this goal"; filled: true; inert: false; onActivated: root.coachRequested() }
@@ -222,7 +251,7 @@ Item {
             Text {
               id: backLabel
               anchors.centerIn: parent
-              text: "← Goals"
+              text: root.backLabel
               font.family: Theme.fontFamily
               font.pixelSize: Theme.captionSize
               color: Theme.dim
@@ -810,13 +839,8 @@ Item {
 
                       PencilIcon {
                         id: taskPencil
+                        small: true
                         anchors.centerIn: parent
-                      }
-
-                      MouseArea {
-                        anchors.fill: parent
-                        anchors.margins: -6
-                        cursorShape: Qt.PointingHandCursor
                         onClicked: root.startEditTask(index, modelData.text)
                       }
                     }

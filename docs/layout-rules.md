@@ -117,6 +117,8 @@ bin/shot -s journal -a sidebar -f 0,40,200 # toggle the sidebar, grab 3 frames
 bin/shot -s journal -a days    -f 0,40,200 # open the day list, grab 3 frames
 bin/shot -a event                          # a dialog: event | newgoal | cancel (on goal:<slug>)
 bin/shot -s goal:<slug> -a editgoal        # also: edittask (first task's inline edit)
+bin/shot -s journal -a mention:stu         # type `@stu` (journal writes off): the goal list
+bin/shot -s journal -a opentag -f 300      # open the first `@tag`'s goal, as a click would
 bin/shot -o <dir>                          # default dir: $TMPDIR/omvision-shots
 ```
 
@@ -138,7 +140,9 @@ Things to know:
 - **Switch screens late, never at startup.** A journal opened before its files have
   loaded stays blank (TODO.md, Open 4). The driver switches only after `-t` for this
   reason. If a screen looks empty, suspect that before suspecting the layout.
-- **It only reads.** It never types, so nothing under `~/Notes` changes. Keep it that way
+- **It only reads.** It never types, so nothing under `~/Notes` changes. The one
+  exception, `-a mention`, types into the journal's editor only after switching the
+  journal's writes off (`writesDisabled`), so the day's file is never written. Keep it that way
   if you add actions: the data is the user's real data. The dialog actions only open a
   dialog, the way its button does.
 - **Your notes may not exercise a screen.** The real data has, for instance, no goal

@@ -25,6 +25,8 @@ usage: bin/shot [-s screen] [-w width] [-h height] [-a action] [-f frames] [-t s
   -a  sidebar | days    toggle it after settling         (default none)
       event | newgoal | cancel   open that dialog (cancel: on a goal:<slug> screen)
       editgoal | edittask   on a goal:<slug> screen: Edit goal dialog, first task's inline edit
+      mention[:query]       on journal: type `@query` at the end (writes off) to show the goal list
+      opentag               on journal: open the first `@tag`'s goal, as a click on it would
   -f  comma-separated ms after the action to grab at     (default 0)
   -t  ms to wait for data to load before anything        (default 1500)
   -o  output directory                                   (default $TMPDIR/omvision-shots)

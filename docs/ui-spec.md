@@ -67,7 +67,8 @@ right. Under it, a band between two hairlines holding the filter chips (`active 
 `done N`, `cancelled N`, caption — the selected one underlined in accent), at the same left
 edge as the goal titles. There is no paused status.
 
-Hovering a goal row shows the pencil (`PencilIcon.qml`: Font Awesome U+F040 at its own diagonal, 16px, dim) at its right end, centred vertically;
+Hovering a goal row shows the pencil (`PencilIcon.qml`: Font Awesome U+F040 at its own diagonal, 16px, ink, in a
+32px square drawn like `Button`: 1px border, 8% fill under the pointer, hand cursor) at its right end, centred vertically;
 its width is always reserved, so it shifts nothing. Clicking it opens the New goal dialog as `Edit goal`, pre-filled, with `Save`. Saving
 rewrites only the front-matter keys that changed (a coach's `# was 9` note on an untouched
 estimate survives); clearing estimate or done-by removes the key. The slug and file name
@@ -85,8 +86,9 @@ no right-hand column; see TODO.md for why.
 ## Screen: Goal detail
 
 Header: the title at heading bold (eliding), then `Add event` and `Coach this goal` buttons
-pushed right (the second one accent-filled). Under it, a hairline band like the Goals filter
-row holding `← Goals` (caption, dim, navigates back; its text on the column edge, its hover
+pushed right (the second one accent-filled). Hovering the title shows the pencil right after it
+(its slot always reserved), opening the same `Edit goal` dialog as a Goals row's pencil. Under it, a hairline band like the Goals filter
+row holding `← Goals`, or `← Journal` when the goal was opened from a journal tag (caption, dim, navigates back; its text on the column edge, its hover
 fill in the margin) and a `running` chip. Below, a `Flow` of figures at body size:
 `<N> poms · <H>m in`, `≈ <N> poms left`, `<done> of <total> tasks`. No progress rule.
 
@@ -106,7 +108,7 @@ size, and the `done:`/`left:`/`else:` lines beneath at bodySmall in dim, all wra
 button; then one row per task, hairline-separated, each a checkbox (checked and struck through
 when done) with the task text and an optional `≈N` estimate at the right. Long task text wraps
 onto more lines (the row grows; it never elides); checkbox and estimate line up with
-the first line. Hovering a row shows the pencil at its end, centred on the whole row;
+the first line. Hovering a row shows the pencil at its end, centred on the whole row, at `+ task`'s small size (24px square, 12px glyph);
 its slot is always reserved, so hovering never re-wraps the text. Clicking it turns the text
 into an inline wrapping field with the cursor at the end, nothing selected (Enter saves,
 Escape cancels, the `≈N` estimate is kept; saving it empty deletes the task). Clicking anywhere
@@ -163,6 +165,37 @@ place by the `MarkdownHighlight` module, matching omawrite line for line:
 - Blocks sit on a 185% proportional line height.
 
 Nothing is deleted or rewritten: the file keeps every byte that was typed.
+
+**Goal tags.** Typing `@` (at the start of a line or after a non-word character, so an
+e-mail address never triggers it; headings and list items included) opens a list of every
+goal under the `@`, its rows' text on the `@`'s own left edge: title at body size (dim when
+the goal is not active), one line per goal, with `done` or `cancelled` in caption faint at
+the right of closed goals. Active goals come first, then the rest, each by title. At
+most six rows show, and the list scrolls to follow the highlight. It flips above the line
+when there is no room below. What follows the `@` filters it, fuzzily and ignoring case and
+accents: the letters must appear in the slug or title in order, not side by side (`wsq`
+finds Wall Squat, `dia` finds Diät). Prefix matches rank first, then word starts, then
+substrings, then scattered matches, those whose letters begin words (initials) first. A
+`-` in the query matches a space in a title. Up/Down move the highlight (hovering a row moves it too), Return or Tab (or a click)
+writes `@<slug>`, with a space after it at the end of a line. Escape, a space or moving out
+of the word closes it. With nothing matching it says `No goal matches "…"`, and Return
+ends the line as usual. The list opens only on a typed `@`, never when the cursor merely
+lands on an existing tag.
+
+A tag that names an existing goal (and is not inside a code span) reads as the goal's
+current title, not as the slug: `@study-software-architecture` shows `@Study software
+architecture`, and renaming the goal changes every tag at once, with no write to the journal.
+The highlighter makes the slug invisible and exactly as wide as the title (all of the width on
+its first character, so a line never breaks inside it), and the editor draws the title there in
+the slug's own font: a heading's weight, a quote's italic. A title longer than the line is cut
+with `…`. In body text the tag keeps its `@` and is drawn in the accent, not underlined. In a
+heading the `@` is hidden (at 1pt, like emphasis markers) and the title is part of the heading's
+words, still in the accent: `# Morning on Study software architecture`. The file always holds
+the slug. Hovering it shows a pointing hand, and
+a plain click opens that goal's detail page, whose back link then reads `← Journal` and
+returns here, with the cursor on the tag and the rail hidden again. `@anything-else` stays
+plain text. The tag is the slug, not the title: one word, stable across a rename, and
+greppable by the coach skill.
 
 One file per day, `journal/YYYY-MM-DD.md`, attached to no goal. Today always has a row in the
 day list whether or not its file exists — typing is what creates it.

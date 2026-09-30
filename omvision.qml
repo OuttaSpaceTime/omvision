@@ -38,6 +38,16 @@ ShellRoot {
 
   property string currentScreen: "goals" // today | goals | coaching | journal | goalDetail
   property string openGoalSlug: ""
+  // The screen a goal's back link returns to: the Goals list, or the
+  // journal when the goal was opened from an `@` tag there, so reading up
+  // on a goal mid-sentence puts you back in the sentence.
+  property string goalBackScreen: "goals"
+
+  function openGoal(slug, from) {
+    root.openGoalSlug = slug
+    root.goalBackScreen = from
+    root.currentScreen = "goalDetail"
+  }
 
   // ---- sidebar -------------------------------------------------------------
   // There is one sidebar and one state for it: the 64px icon rail (see
@@ -793,7 +803,7 @@ ShellRoot {
             id: inFlowSidebar
             height: parent.height
             x: sidebarSlot.width - width
-            currentScreen: root.currentScreen === "goalDetail" ? "goals" : root.currentScreen
+            currentScreen: root.currentScreen === "goalDetail" ? root.goalBackScreen : root.currentScreen
             onNavigate: function(screen) { root.currentScreen = screen }
           }
         }
@@ -813,10 +823,7 @@ ShellRoot {
           goalsData: root.goalsData
           todaySummary: root.todaySummary
           selectedSlug: root.openGoalSlug
-          onOpenGoal: function(slug) {
-            root.openGoalSlug = slug
-            root.currentScreen = "goalDetail"
-          }
+          onOpenGoal: function(slug) { root.openGoal(slug, "goals") }
           onAddEventRequested: root.openEventDialog("")
           onNewGoalRequested: root.openNewGoalDialog()
           onEditGoalRequested: function(slug) { root.openEditGoalDialog(slug) }
@@ -830,7 +837,8 @@ ShellRoot {
           slug: root.openGoalSlug
           meta: root.goalsData[root.openGoalSlug] ? root.goalsData[root.openGoalSlug].meta : null
           logEntries: root.goalsData[root.openGoalSlug] ? root.goalsData[root.openGoalSlug].logEntries : []
-          onBack: root.currentScreen = "goals"
+          backLabel: root.goalBackScreen === "journal" ? "← Journal" : "← Goals"
+          onBack: root.currentScreen = root.goalBackScreen
           onToggleTask: function(index) { root.handleToggleTask(root.openGoalSlug, index) }
           onAddTask: function(text) {
             root.handleAddTask(root.openGoalSlug, text, function(ok, message) {
@@ -850,6 +858,7 @@ ShellRoot {
             })
           }
           onAddEventRequested: root.openEventDialog(root.openGoalSlug)
+          onEditGoalRequested: root.openEditGoalDialog(root.openGoalSlug)
           onCoachRequested: {
             coachingScreen.selectedSlug = root.openGoalSlug
             root.currentScreen = "coaching"
@@ -880,8 +889,10 @@ ShellRoot {
           visible: root.currentScreen === "journal"
           journalFiles: root.journalFiles
           journalContents: root.journalContents
+          goalsData: root.goalsData
           sidebarShown: !root.sidebarHidden()
           onToggleSidebar: root.toggleSidebar()
+          onOpenGoal: function(slug) { root.openGoal(slug, "journal") }
         }
         }
       }

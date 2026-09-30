@@ -39,6 +39,7 @@
 // highlighter/build.sh.
 
 #include <QColor>
+#include <QFont>
 #include <QObject>
 // Included, not forward-declared: the QML property below is a pointer to it,
 // and Qt's meta-type system refuses a pointer to an incomplete type.
@@ -47,6 +48,9 @@
 #include <QRegularExpression>
 #include <QSyntaxHighlighter>
 #include <QTextCharFormat>
+#include <QTextBlockUserData>
+#include <QVariantList>
+#include <QVariantMap>
 #include <QVector>
 
 class QTextDocument;
@@ -74,6 +78,26 @@ struct MarkdownStyle {
   bool operator!=(const MarkdownStyle& o) const { return !(*this == o); }
 };
 
+// One goal tag as it was styled, kept on its block (MentionBlockData) so the
+// QML side can draw the goal's title over it: see formatMentions().
+struct MentionSpan {
+  int start = 0;   // of the `@`, in the block
+  QString slug;
+  QString title;
+  QFont font;      // the title's: the slug's own font after every rule
+  qreal width = 0; // what the slug was stretched to
+
+  bool operator==(const MentionSpan& o) const {
+    return start == o.start && slug == o.slug && title == o.title
+        && font == o.font && qFuzzyCompare(width + 1, o.width + 1);
+  }
+};
+
+class MentionBlockData : public QTextBlockUserData {
+public:
+  QVector<MentionSpan> spans;
+};
+
 class MarkdownBlockHighlighter : public QSyntaxHighlighter {
   Q_OBJECT
 
@@ -81,22 +105,41 @@ public:
   explicit MarkdownBlockHighlighter(QTextDocument* document);
 
   void setStyle(const MarkdownStyle& style);
+  // Goal slug -> title, the goals an `@slug` may name. Only these are
+  // styled: an `@` in front of anything else (an address, a typo, a goal
+  // since deleted) stays plain text, so what looks like a tag is always one
+  // the journal can open.
+  void setMentions(const QVariantMap& mentions);
+
+signals:
+  // A block's tags moved, appeared, went, or changed title or font.
+  void spansChanged();
 
 protected:
   void highlightBlock(const QString& text) override;
 
 private:
+  // A tag applyInline() found, `@` start and length, for formatMentions() to
+  // finish once the block's other rules are done.
+  using PendingMentions = QVector<QPair<int, int>>;
+  // Everything highlightBlock() styles except the tags' titles, which have
+  // to wait until every other rule has had its say on the slug's font.
+  PendingMentions styleBlock(const QString& text);
   enum BlockState { StateNone = -1, StateFence = 1 };
 
   void rebuildFormats();
   // Inline spans (code, bold, italic, strike, links) over [from, end). `taken`
   // keeps later rules out of a span an earlier rule already claimed -- code
   // spans are matched first for exactly that reason, so `**` inside `` ` ``
-  // stays literal.
-  void applyInline(const QString& text, int from);
+  // stays literal. A tag in a heading (`inHeading`) is drawn as part of the
+  // heading's own words, not as a tag.
+  PendingMentions applyInline(const QString& text, int from, bool inHeading);
   // A marker that goes away: 1pt with its advance cancelled. Emphasis
   // markers and a link's brackets and target, and nothing else.
   void hideMarker(int start, int length);
+  // Takes the colours off an input method's preedit while one is being
+  // composed, so Qt Quick cannot paint them over the start of the line.
+  void uncolourPreedit();
   // Generous line spacing, applied per block the way omawrite does it.
   void applyBlockSpacing();
   // Content formats are merged onto whatever is already there rather than
@@ -105,6 +148,15 @@ private:
   void mergeFormat(int start, int length, const QTextCharFormat& extra);
 
   MarkdownStyle m_style;
+  QVariantMap m_mentions;
+  // The line width the tags were last sized against; -1 until a tag is.
+  qreal m_mentionLineWidth = -1;
+  void formatMentions(const QString& text, const PendingMentions& pending);
+  // One deferred rehighlight() however many style or goal changes land in
+  // the same event-loop turn: goals load one at a time at startup, and each
+  // would otherwise queue a pass of its own.
+  void scheduleRehighlight();
+  bool m_rehighlightQueued = false;
   bool m_inBlockFormat = false; // re-entrancy guard for applyBlockSpacing()
   QTextCharFormat m_marker;
   QTextCharFormat m_hidden;
@@ -114,6 +166,7 @@ private:
   QTextCharFormat m_listMarker;
   QTextCharFormat m_rule;
   QTextCharFormat m_link;
+  QTextCharFormat m_mention;
   QTextCharFormat m_heading[7]; // 1..6
   QVector<bool> m_taken;
 };
@@ -134,6 +187,10 @@ class MarkdownHighlighter : public QObject {
   Q_PROPERTY(QColor quoteColor READ quoteColor WRITE setQuoteColor NOTIFY styleChanged)
   Q_PROPERTY(QColor codeColor READ codeColor WRITE setCodeColor NOTIFY styleChanged)
   Q_PROPERTY(QColor codeBackground READ codeBackground WRITE setCodeBackground NOTIFY styleChanged)
+  // Omvision's own addition, not omawrite's: `@slug` names a goal, and this
+  // maps each slug to the goal's title. Empty by default, so the ompom
+  // overlay, which loads this module too, is unchanged.
+  Q_PROPERTY(QVariantMap mentions READ mentions WRITE setMentions NOTIFY mentionsChanged)
 
 public:
   explicit MarkdownHighlighter(QObject* parent = nullptr);
@@ -157,10 +214,21 @@ public:
   void setCodeColor(const QColor& c);
   QColor codeBackground() const { return m_style.codeBackground; }
   void setCodeBackground(const QColor& c);
+  QVariantMap mentions() const { return m_mentions; }
+  void setMentions(const QVariantMap& mentions);
+
+  // Every tag in the document, where to draw its title and where a click
+  // hits it: { slug, title, font, x (the title's), baseline, width, left
+  // (the `@`'s), top, height (the line's) }, in the document's own
+  // coordinates, which are the TextEdit's. Read from the current layout, so
+  // ask again on mentionSpansChanged, which also fires on every reflow.
+  Q_INVOKABLE QVariantList mentionSpans() const;
 
 signals:
   void documentChanged();
   void styleChanged();
+  void mentionsChanged();
+  void mentionSpansChanged();
 
 private:
   void applyStyle();
@@ -168,4 +236,5 @@ private:
   QPointer<QQuickTextDocument> m_document;
   QPointer<MarkdownBlockHighlighter> m_highlighter;
   MarkdownStyle m_style;
+  QVariantMap m_mentions;
 };

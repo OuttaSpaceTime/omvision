@@ -70,6 +70,17 @@ Item {
   // animated width while it is out; see Theme.pageX.
   property int leftInset: 0
 
+  // slug -> { meta, logEntries }, the app's goals, for `@` tags: the picker
+  // offers them and a click on a tag opens one (openGoal; omvision.qml
+  // brings you back here from the goal's own back link).
+  property var goalsData: ({})
+  signal openGoal(string slug)
+
+  // bin/shot only: the driver types into the editor to show the `@` picker,
+  // and those keystrokes must never reach the real day's file. Nothing else
+  // sets it.
+  property bool writesDisabled: false
+
   function openList(open) {
     root.listOpen = open
   }
@@ -291,6 +302,7 @@ Item {
   // ---- opening a day --------------------------------------------------------
   function openDay(path) {
     if (path === root.selectedPath) { editor.forceActiveFocus(); return }
+    root.closeMention()
     writeDebounce.stop()
     flushWrite() // the day being left is written before the buffer moves on
     // Prefer any not-yet-confirmed text already queued or in flight for this
@@ -337,6 +349,223 @@ Item {
     return true
   }
 
+  // ---- `@` goal tags ------------------------------------------------------
+  // Typing `@` opens a list of every goal under the cursor, and what follows
+  // it filters the list. Accepting one writes `@<slug>` into the text: the
+  // slug, not the title, because it is one word (so it cannot be mistaken
+  // for where the tag ends), it never changes when a goal is renamed (the
+  // file name is the slug; Writer.updateGoalFields keeps it), and a reader
+  // -- the coach skill, or grep -- can find every mention of a goal in the
+  // journal with a plain search. What you read is the goal's title as it is
+  // now: the highlighter hides the slug in a gap the title's width, and
+  // tagTitles draws the title in it, so a rename shows at once. The
+  // highlighter styles only tags that name a goal that exists, and those are
+  // what a click opens.
+  //
+  // The list only opens on a typed `@`, never because the cursor happened
+  // to land on an existing tag: arrowing through a paragraph must not keep
+  // popping a menu up. It closes when the cursor leaves the word after the
+  // `@`, on Escape, or on a character a slug cannot hold (a space, say).
+  readonly property var goals: {
+    var out = []
+    for (var slug in root.goalsData) {
+      var m = root.goalsData[slug] ? root.goalsData[slug].meta : null
+      if (!m) continue
+      // A goal file with no status: key is active, as on the Goals screen.
+      out.push({ slug: slug, title: m.title, status: m.status || "active" })
+    }
+    // Active goals first -- those are what a day's writing is about -- then
+    // done and cancelled ones, each group by title.
+    out.sort(function(a, b) {
+      var ra = a.status === "active" ? 0 : 1, rb = b.status === "active" ? 0 : 1
+      if (ra !== rb) return ra - rb
+      var ta = a.title.toLowerCase(), tb = b.title.toLowerCase()
+      return ta < tb ? -1 : (ta > tb ? 1 : 0)
+    })
+    return out
+  }
+  // slug -> title, what the highlighter sizes each tag's gap to.
+  readonly property var goalTitles: {
+    var out = {}
+    for (var i = 0; i < root.goals.length; i++) out[root.goals[i].slug] = root.goals[i].title
+    return out
+  }
+
+  // Where the highlighter left a gap for a title, from mentionSpans(): what
+  // tagTitles draws and what mentionAt() hit-tests. Read from the text's
+  // layout, so it is asked again, a moment later (once the layout has caught
+  // up), whenever the highlighter says the tags or the layout changed. A day
+  // with no tags keeps its empty list, so the Repeater isn't reset for
+  // nothing on every reflow.
+  property var tagSpans: []
+  function refreshTagSpans() {
+    var h = highlightLoader.item
+    var spans = h ? h.mentionSpans() : []
+    if (spans.length === 0 && root.tagSpans.length === 0) return
+    root.tagSpans = spans
+  }
+
+  property int mentionStart: -1   // index of the `@` while the list is open
+  property string mentionQuery: ""
+  property int mentionIndex: 0    // the highlighted row
+  readonly property bool mentionOpen: root.mentionStart >= 0
+  readonly property var mentionMatches: root.filterGoals(root.goals, root.mentionQuery)
+
+  // Fuzzy and case-blind: the query's letters have to appear in the slug or
+  // the title in order, not side by side, so `wsq` and `WallSq` both find
+  // Wall Squat. Plain substring matching missed those, and a query is typed
+  // fast and half-remembered. Tighter matches rank first -- see matchScore
+  // -- and ties keep the list's own order (active goals first).
+  function filterGoals(goals, query) {
+    var q = root.foldForMatch(query)
+    if (q === "") return goals
+    var scored = []
+    for (var i = 0; i < goals.length; i++) {
+      var g = goals[i]
+      var score = Math.min(root.matchScore(root.foldForMatch(g.slug), q),
+                           root.matchScore(root.foldForMatch(g.title), q))
+      if (score < Infinity) scored.push({ g: g, score: score, i: i })
+    }
+    scored.sort(function(a, b) { return a.score !== b.score ? a.score - b.score : a.i - b.i })
+    return scored.map(function(s) { return s.g })
+  }
+
+  // Lower case, accents dropped (a title's `Diät` has to answer to `dia`:
+  // the query is a would-be slug, so it can only hold ASCII), and every run
+  // of spaces or hyphens made one hyphen, so a slug and a title compare
+  // alike and a hyphen typed in the query matches a space in a title.
+  function foldForMatch(s) {
+    var t = String(s).toLowerCase()
+    if (typeof t.normalize === "function") t = t.normalize("NFD").replace(/[̀-ͯ]/g, "")
+    return t.replace(/[\s-]+/g, "-")
+  }
+
+  // How well the folded query q matches the folded text t, lower is better,
+  // Infinity for no match. In tiers: the start of the text, then the start
+  // of a word, then anywhere as one piece, then scattered in order. Hyphens
+  // in the query are ignored for the scattered tier, so `wall-sq` and
+  // `wallsq` rank alike there.
+  //
+  // A scattered match is scored the way initials are read: a letter that
+  // follows the previous one costs nothing, one that begins a word costs a
+  // little, one lost in the middle of a word costs most, and a hair more for
+  // every letter skipped breaks ties. The best placement is searched for,
+  // not the first: taking each letter where it first appears reads `sa` in
+  // Study Software Architecture as the `a` inside "software", and ranks it
+  // below Wall Squat, when the `a` of "architecture" is plainly meant.
+  function matchScore(t, q) {
+    if (t.indexOf(q) === 0) return 0
+    if (("-" + t).indexOf("-" + q) >= 0) return 1
+    if (t.indexOf(q) >= 0) return 2
+    var letters = q.replace(/-/g, "")
+    if (letters === "") return Infinity
+    // cost[j]: the cheapest placement of the letters so far, the last at j.
+    var cost = []
+    for (var k = 0; k < letters.length; k++) {
+      var next = []
+      for (var j = 0; j < t.length; j++) {
+        next.push(Infinity)
+        if (t.charAt(j) !== letters.charAt(k)) continue
+        var wordStart = j === 0 || t.charAt(j - 1) === "-"
+        if (k === 0) { next[j] = wordStart ? 0 : 3; continue }
+        if (j > 0 && cost[j - 1] < Infinity) next[j] = cost[j - 1]
+        for (var p = 0; p < j - 1; p++)
+          if (cost[p] < Infinity)
+            next[j] = Math.min(next[j], cost[p] + (wordStart ? 1 : 3) + 0.01 * (j - p - 1))
+      }
+      cost = next
+    }
+    var best = Math.min.apply(null, cost)
+    return best < Infinity ? 3 + best / (3 * letters.length + t.length + 1) : Infinity
+  }
+
+  // Called just after a typed `@` has gone into the text. Not after a word
+  // character or another `@`, so writing an e-mail address opens nothing --
+  // the same rule the highlighter's mentionRe uses.
+  function maybeOpenMention() {
+    var t = editor.text
+    var pos = editor.cursorPosition
+    if (pos < 1 || t.charAt(pos - 1) !== "@") return
+    if (pos >= 2 && /[\w@]/.test(t.charAt(pos - 2))) return
+    root.mentionQuery = ""
+    root.mentionIndex = 0
+    root.mentionStart = pos - 1
+  }
+
+  function closeMention() {
+    root.mentionStart = -1
+    root.mentionQuery = ""
+    root.mentionIndex = 0
+  }
+
+  // Follows the text and the cursor while the list is open.
+  function updateMention() {
+    if (!root.mentionOpen) return
+    var t = editor.text
+    var pos = editor.cursorPosition
+    if (t.charAt(root.mentionStart) !== "@" || pos <= root.mentionStart) { root.closeMention(); return }
+    var q = t.substring(root.mentionStart + 1, pos)
+    if (!/^[A-Za-z0-9-]*$/.test(q)) { root.closeMention(); return }
+    if (q !== root.mentionQuery) {
+      root.mentionQuery = q
+      root.mentionIndex = 0
+    }
+  }
+
+  function moveMention(step) {
+    var n = root.mentionMatches.length
+    if (n === 0) return
+    root.mentionIndex = (root.mentionIndex + step + n) % n
+  }
+
+  // Replaces the `@` and whatever of the word follows it -- up to the end
+  // of the word, not just the cursor, so accepting inside `@lea|rn` does
+  // not leave `rn` dangling -- with `@<slug>`. A space follows at the end of
+  // a line, where the next thing typed is a word; before punctuation or an
+  // existing space it does not, so `@slug.` and `@slug ,` stay as written.
+  function acceptMention(i) {
+    var g = root.mentionMatches[i]
+    if (!g) return false
+    var start = root.mentionStart
+    root.closeMention()
+    var t = editor.text
+    var end = editor.cursorPosition
+    while (end < t.length && /[A-Za-z0-9-]/.test(t.charAt(end))) end++
+    var next = t.charAt(end)
+    var insert = "@" + g.slug + ((next === "" || next === "\n") ? " " : "")
+    editor.remove(start, end)
+    editor.insert(start, insert)
+    editor.cursorPosition = start + insert.length + (next === " " ? 1 : 0)
+    return true
+  }
+
+  // The goal slug of the tag drawn at (x, y) in the editor, or "": a hit on
+  // one of tagSpans, from the `@` to the end of the title, on its line. The
+  // highlighter already decided which tags count (a known slug, not inside
+  // a code span or a link), so nothing here re-reads the text.
+  function mentionAt(x, y) {
+    for (var i = 0; i < root.tagSpans.length; i++) {
+      var s = root.tagSpans[i]
+      if (x >= s.left && x <= s.x + s.width && y >= s.top && y <= s.top + s.height) return s.slug
+    }
+    return ""
+  }
+
+  // bin/shot's `mention` action: writes `@` and a query at the end of the
+  // day the way typing would, with writes switched off first.
+  function typeMentionForShot(query) {
+    root.writesDisabled = true
+    editor.forceActiveFocus()
+    editor.cursorPosition = editor.text.length
+    var lead = editor.text.length > 0 && editor.text.charAt(editor.text.length - 1) !== "\n" ? "\n\n" : ""
+    editor.insert(editor.cursorPosition, lead + "@")
+    editor.cursorPosition = editor.text.length
+    root.maybeOpenMention()
+    editor.insert(editor.cursorPosition, query)
+    editor.cursorPosition = editor.text.length
+    root.updateMention()
+  }
+
   function openToday() {
     root.listOpen = false
     root.openDay(root.todayPath)
@@ -361,6 +590,7 @@ Item {
   onJournalContentsChanged: syncBufferFromDisk()
 
   function flushWrite() {
+    if (root.writesDisabled) return
     if (root.selectedPath === "") return
     var path = root.selectedPath
     var text = root.bufferText
@@ -463,6 +693,7 @@ Item {
 
   onVisibleChanged: {
     if (!root.visible) {
+      root.closeMention()
       writeDebounce.stop()
       flushWrite()
       root.listOpen = false
@@ -588,10 +819,32 @@ Item {
       selectByMouse: true
       persistentSelection: true
       text: root.bufferText
-      onTextChanged: { root.bufferText = text; writeDebounce.restart() }
+      onTextChanged: {
+        root.bufferText = text
+        writeDebounce.restart()
+        root.updateMention()
+      }
+      onCursorPositionChanged: root.updateMention()
       onCursorRectangleChanged: canvas.ensureVisible(cursorRectangle)
-      Keys.onEscapePressed: root.listOpen = false
+      Keys.onEscapePressed: {
+        if (root.mentionOpen) root.closeMention()
+        else root.listOpen = false
+      }
       Keys.onPressed: function(event) {
+        // The `@` list, while open, takes the keys a menu takes. Return and
+        // Tab with nothing to accept close it and fall through, so Return
+        // still ends the line.
+        if (root.mentionOpen && !(event.modifiers & Qt.ControlModifier)) {
+          if (event.key === Qt.Key_Down) { root.moveMention(1); event.accepted = true; return }
+          if (event.key === Qt.Key_Up) { root.moveMention(-1); event.accepted = true; return }
+          if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Tab) {
+            if (root.acceptMention(root.mentionIndex)) { event.accepted = true; return }
+            root.closeMention()
+          }
+        }
+        // After the key has gone into the text, not now: the `@` is not
+        // there yet.
+        if (event.text === "@") Qt.callLater(root.maybeOpenMention)
         if (!(event.modifiers & Qt.ControlModifier)) {
           // Anything that produces text (letters, Return, Backspace...) is
           // writing; arrows and Escape carry none and leave things as they are.
@@ -615,10 +868,174 @@ Item {
       Loader {
         id: highlightLoader
         source: "JournalHighlight.qml"
-        onLoaded: if (item) item.document = editor.textDocument
+        onLoaded: {
+          if (!item) return
+          item.document = editor.textDocument
+          item.mentions = Qt.binding(function() { return root.goalTitles })
+          item.mentionSpansChanged.connect(function() { Qt.callLater(root.refreshTagSpans) })
+        }
+      }
+
+      // The goal titles over the tags' gaps (see the `@` goal tags section).
+      // Children of the editor, so they share its coordinates and scroll
+      // with it, and are drawn over its text. In the slug's own font -- a
+      // heading's weight, `**` bold -- and on the line's baseline, the way
+      // the text around it is set.
+      Repeater {
+        id: tagTitles
+        model: root.tagSpans
+        Text {
+          required property var modelData
+          x: modelData.x
+          y: modelData.baseline - baselineOffset
+          width: modelData.width
+          text: modelData.title
+          font: modelData.font
+          color: Theme.accentColor
+          elide: Text.ElideRight
+        }
+      }
+
+      // A click on a goal tag opens the goal. A plain click, not Ctrl+click:
+      // tags are few and short, and the cursor can still be put inside one
+      // with the arrow keys. The TapHandler only watches (a passive grab),
+      // so the TextEdit still places the cursor and a drag still selects --
+      // DragThreshold drops the tap once the pointer moves -- and coming back
+      // from the goal finds the cursor on the tag you left from.
+      TapHandler {
+        acceptedButtons: Qt.LeftButton
+        onTapped: function(eventPoint) {
+          var slug = root.mentionAt(eventPoint.position.x, eventPoint.position.y)
+          if (slug !== "") root.openGoal(slug)
+        }
+      }
+      HoverHandler {
+        id: tagHover
+        cursorShape: root.mentionAt(tagHover.point.position.x, tagHover.point.position.y) !== ""
+                     ? Qt.PointingHandCursor : Qt.IBeamCursor
       }
     }
 
+  }
+
+  // ---- the `@` list ---------------------------------------------------------
+  // Hangs under the `@` it belongs to, left edge on the `@`, like any
+  // editor's completion list; flips above the line when there is no room
+  // below, and is pulled back inside the window at the right. Over the
+  // canvas rather than in it, so the canvas's clip cannot cut it off, and
+  // below the day list, which closes it anyway.
+  Rectangle {
+    id: mentionPopup
+    readonly property int rowHeight: Theme.bodySize + Theme.spaceSm * 2 + Theme.spaceXxs
+    readonly property int maxRows: 6
+    // Rebinds on scroll and on reflow (cursorRectangle moves with both the
+    // text and the width), which positionToRectangle() alone would not.
+    readonly property rect anchorRect: {
+      var dep = editor.cursorRectangle
+      var r = root.mentionOpen ? editor.positionToRectangle(root.mentionStart) : Qt.rect(0, 0, 0, 0)
+      return Qt.rect(editor.x + r.x - canvas.contentX, editor.y + r.y - canvas.contentY, r.width, r.height)
+    }
+    readonly property bool fitsBelow: anchorRect.y + anchorRect.height + Theme.spaceXs + height
+                                      <= root.height - statusBacking.height
+
+    visible: root.mentionOpen && root.visible && !root.listOpen
+    z: 25
+    width: Math.min(Math.round(Theme.pageMeasure / 2), root.width - Theme.spaceLg * 2)
+    height: (root.mentionMatches.length > 0
+             ? Math.min(root.mentionMatches.length, maxRows) * rowHeight
+             : emptyText.implicitHeight + Theme.spaceSm * 2) + Theme.borderWidth * 2
+    // The rows' text starts on the `@` itself.
+    x: Math.max(Theme.spaceLg, Math.min(anchorRect.x - Theme.spaceMd - Theme.borderWidth,
+                                        root.width - width - Theme.spaceLg))
+    y: fitsBelow ? anchorRect.y + anchorRect.height + Theme.spaceXs
+                 : anchorRect.y - height - Theme.spaceXs
+    color: Theme.paper
+    border.color: Theme.border
+    border.width: Theme.borderWidth
+
+    Text {
+      id: emptyText
+      visible: root.mentionMatches.length === 0
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.leftMargin: Theme.spaceMd
+      anchors.rightMargin: Theme.spaceMd
+      elide: Text.ElideRight
+      text: root.goals.length === 0 ? "No goals yet" : "No goal matches “" + root.mentionQuery + "”"
+      font.family: Theme.fontFamily
+      font.pixelSize: Theme.captionSize
+      color: Theme.faint
+    }
+
+    ListView {
+      id: mentionList
+      anchors.fill: parent
+      anchors.margins: Theme.borderWidth
+      clip: true
+      boundsBehavior: Flickable.StopAtBounds
+      model: root.mentionMatches
+      currentIndex: root.mentionIndex
+      onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+
+      delegate: Rectangle {
+        id: mentionRow
+        required property var modelData
+        required property int index
+        readonly property bool current: index === root.mentionIndex
+
+        width: mentionList.width
+        height: mentionPopup.rowHeight
+        color: current ? Theme.hoverFill : "transparent"
+
+        Rectangle {
+          visible: mentionRow.current
+          anchors.left: parent.left
+          anchors.top: parent.top
+          anchors.bottom: parent.bottom
+          width: 3
+          color: Theme.accentColor
+        }
+
+        // One line: the title, and a closed goal's status on the right. The
+        // `@slug` used to sit under the title, but the tag is drawn as the
+        // title anyway, so the slug only added noise to the list.
+        Text {
+          id: mentionTitle
+          anchors.left: parent.left
+          anchors.right: statusText.left
+          anchors.verticalCenter: parent.verticalCenter
+          anchors.leftMargin: Theme.spaceMd
+          anchors.rightMargin: statusText.text === "" ? 0 : Theme.spaceSm
+          text: mentionRow.modelData.title
+          elide: Text.ElideRight
+          font.family: Theme.fontFamily
+          font.pixelSize: Theme.bodySize
+          color: mentionRow.modelData.status === "active" ? Theme.ink : Theme.dim
+        }
+        Text {
+          id: statusText
+          anchors.right: parent.right
+          anchors.baseline: mentionTitle.baseline
+          anchors.rightMargin: Theme.spaceMd
+          text: mentionRow.modelData.status === "active" ? "" : mentionRow.modelData.status
+          font.family: Theme.fontFamily
+          font.pixelSize: Theme.captionSize
+          color: Theme.faint
+        }
+
+        // Hover moves the highlight rather than drawing a second one, the
+        // way a menu does. It never takes focus, so the cursor stays in the
+        // text and typing goes on filtering.
+        MouseArea {
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onEntered: root.mentionIndex = mentionRow.index
+          onClicked: { root.acceptMention(mentionRow.index); editor.forceActiveFocus() }
+        }
+      }
+    }
   }
 
   // ---- corner controls ------------------------------------------------------
