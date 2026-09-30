@@ -1,6 +1,7 @@
 import QtQuick
 
-// 28px, 1px-border control used for the header actions. `inert: true`
+// A controlHeight-tall, 1px-border control used for the header actions,
+// its label padded half a spaceXl each side. `inert: true`
 // (the default — every button in M2 except the timeline "copy" control is
 // inert per spec) suppresses the click signal entirely: present and styled,
 // does nothing.
@@ -13,7 +14,7 @@ Rectangle {
   signal activated()
 
   implicitHeight: Theme.controlHeight
-  implicitWidth: labelText.implicitWidth + 24
+  implicitWidth: labelText.implicitWidth + Theme.spaceXl
   color: filled ? Theme.accentColor : (hovered ? Theme.hoverFill : "transparent")
   border.color: filled ? Theme.accentColor : Theme.border
   border.width: Theme.borderWidth

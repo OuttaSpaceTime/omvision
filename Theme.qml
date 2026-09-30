@@ -175,6 +175,19 @@ QtObject {
   readonly property int dialogWidth: 560
   readonly property int hairlineWidth: 1
   readonly property int borderWidth: 1
+  // The accent bar on a selected row: a Goals row, the journal's day list
+  // and its `@` list. Off the scale (between spaceXxs and spaceXs).
+  readonly property int selectionBarWidth: 3
+  // How long the pointer rests on a control before its tooltip shows (the
+  // rail's icons).
+  readonly property int tooltipDelay: 400
+  // The window: its size on launch, and the smallest it can be made. 720 is
+  // the width every screen is checked at (docs/layout-rules.md); below it
+  // the goal detail's rail and the Goals header no longer fit.
+  readonly property int windowWidth: 1440
+  readonly property int windowHeight: 900
+  readonly property int windowMinWidth: 720
+  readonly property int windowMinHeight: 560
 
   // ---- notices ---------------------------------------------------------------
   // The write-error banner, a one-line notice at the top of the window.
@@ -188,6 +201,53 @@ QtObject {
   readonly property int noticePaddingY: spaceSm
   readonly property int noticeWindowMargin: 20
 
+  // ---- small marks and fixed sizes ------------------------------------------
+  // Sizes that used to be typed into the screens and dialogs as bare numbers.
+  // Most are the size of a mark, not a gap, and sit off the spacing scale;
+  // they are named here exactly as they were, not snapped to a neighbouring
+  // step, so moving them out left every screen pixel-identical. Snapping any
+  // of them is a visual change and its own decision.
+  //
+  // The icon rail (Sidebar.qml): the mark at its top, one screen's row, and
+  // the accent bar on the selected row. The bar is 2, not the 3 of
+  // selectionBarWidth: the rail is narrow and its rows short.
+  readonly property int railMarkSize: 26
+  readonly property int railRowHeight: 36
+  readonly property int railBarWidth: 2
+  // A task's checkbox on the goal detail rail, and the tick drawn in it. The
+  // tick's size is off the type scale: it is a mark inside a 12px box, not
+  // text. The box is spaceMd's value, but a size, not a gap.
+  readonly property int checkboxSize: 12
+  readonly property int checkMarkSize: 9
+  // A timeline entry's node: the square on the rule. An event's node is
+  // dashed, `timelineDash` on and off, in units of its 1px line.
+  readonly property int timelineNodeSize: 7
+  readonly property var timelineDash: [2, 1]
+  // The dialogs' own tick box and radio ring, and the dot drawn in them.
+  readonly property int optionMarkSize: 13
+  readonly property int optionDotSize: 7
+  // An empty list's one line (`No active goals.`, `Nothing logged today.`):
+  // the height of the band it is centred in.
+  readonly property int emptyRowHeight: 60
+
+  // ---- hit targets -----------------------------------------------------------
+  // How far past its text a text-only control takes clicks. The filter and
+  // choice chips (Goals, Coaching) reach one scale step out. The goal
+  // detail's red `Cancel` reaches 6, which is off the scale.
+  readonly property int chipHitSlop: spaceXs
+  readonly property int linkHitSlop: 6
+
+  // ---- dialogs -----------------------------------------------------------------
+  // The card's own border, twice a hairline so the card holds its edge
+  // against the scrim.
+  readonly property int dialogBorderWidth: 2
+  // A field that holds a short value (`How long`, `Estimate`), kept at this
+  // width beside a field that fills the row. Off the scale.
+  readonly property int dialogShortFieldWidth: 120
+  // The cancel dialog's multi-line `What do you take from it?` box. Off the
+  // scale (between space3xl 48 and space4xl 64).
+  readonly property int dialogTextAreaHeight: 56
+
   // ---- motion ----------------------------------------------------------------
   // One duration and one curve for everything that slides: the sidebar
   // opening and closing (omvision.qml) and the journal's day list. Short,
@@ -195,6 +255,9 @@ QtObject {
   // decelerating, so a panel arrives rather than stops.
   readonly property int slideDuration: 130
   readonly property int slideEasing: Easing.OutCubic
+  // How long the Coaching screen's `copy` button says `copied!` before it
+  // goes back.
+  readonly property int copiedFeedbackDuration: 1300
 
   // ---- writing surface (Journal) -------------------------------------------
   // The journal is a writing tool, not a list screen: it gets its own type
@@ -238,10 +301,6 @@ QtObject {
   // Empty page under the last line, so the line being written sits up in
   // the window instead of on its bottom edge. Off the scale.
   readonly property int journalBottomSlack: 260
-  // The accent bar on a selected row, in the day list and the `@` list.
-  // GoalsScreen's selected goal draws the same 3px bar with a typed number;
-  // it could share this. Off the scale (between spaceXxs and spaceXs).
-  readonly property int selectionBarWidth: 3
 
   // ---- the page column -----------------------------------------------------
   // Every screen sets its text in the journal's column: the same measure, on

@@ -115,67 +115,19 @@ Item {
   property bool cancelDialogOpen: false
   property string cancelError: ""
 
-  function pomsCount(entries) {
-    var n = 0
-    for (var i = 0; i < entries.length; i++) if (entries[i].type === "pomodoro") n++
-    return n
-  }
-
-  readonly property int poms: pomsCount(logEntries)
+  readonly property int poms: Parser.pomodoroCount(logEntries)
   readonly property int minutes: Parser.investedMinutes(logEntries)
   readonly property var est: meta ? meta.estimate : undefined
   readonly property var doneBy: meta ? meta.done_by : undefined
   readonly property var tasks: meta ? meta.tasks : []
-  readonly property int tasksDone: tasks.filter(function(t) { return t.done }).length
+  readonly property int tasksDone: Parser.doneTaskCount(tasks)
   readonly property bool isOpenGoal: !!meta && meta.status !== "done" && meta.status !== "cancelled"
 
-  // ---- timeline grouping ------------------------------------------------
-  function groupByDay(entries) {
-    var byDay = {}
-    var order = []
-    for (var i = entries.length - 1; i >= 0; i--) { // newest first
-      var e = entries[i]
-      var key = Parser.dayKey(e.date)
-      if (!byDay[key]) { byDay[key] = { key: key, date: e.date, entries: [] }; order.push(key) }
-      byDay[key].entries.push(e)
-    }
-    var out = []
-    for (var j = 0; j < order.length; j++) out.push(byDay[order[j]])
-    return out
-  }
-  readonly property var dayGroups: groupByDay(logEntries)
-
-  function dayPoms(entries) {
-    var n = 0
-    for (var i = 0; i < entries.length; i++) if (entries[i].type === "pomodoro") n++
-    return n
-  }
-  function dayMinutes(entries) {
-    var n = 0
-    for (var i = 0; i < entries.length; i++) if (entries[i].type === "pomodoro") n += entries[i].minutes
-    return n
-  }
-  function formatDayDuration(total) {
-    var h = Math.floor(total / 60), m = total % 60
-    if (h === 0) return m + " min"
-    if (m === 0) return h + " h"
-    return h + " h " + (m < 10 ? "0" + m : String(m))
-  }
-
-  function entryLabel(e) {
-    if (e.type === "pomodoro") return e.minutes + " min"
-    if (e.type === "coaching") return "coaching"
-    if (e.type === "event") return "event · " + String(e.kind || "") + " · " + Parser.formatHCaption(e.minutes)
-    return ""
-  }
-
-  TextMetrics {
-    id: timeMetrics
-    font.family: Theme.fontFamily
-    font.pixelSize: Theme.captionSize
-    text: "00:00"
-  }
-
+  // The screen is put together from GoalHeader, GoalFigures, Timeline,
+  // TaskRow and GoalEndActions. None of them keeps state or writes: the
+  // state above stays here, where omvision.qml, the tests and the
+  // click-away catcher below reach it, and the parts report what the user
+  // did through their signals.
   ColumnLayout {
     // The journal's column, on the journal's line (Theme.pageX).
     x: Theme.pageX(root.width, root.leftInset)
@@ -184,173 +136,25 @@ Item {
     height: root.height - Theme.panelPadding * 2
     spacing: Theme.sectionGap
 
-    // ---- header ---------------------------------------------------------
-    // The title and the buttons own the first row and never move. The back
-    // link and the "running" chip can't always fit alongside a long title
-    // and two buttons, so they get a row of their own, banded by hairlines
-    // the way GoalsScreen's filter row is -- degrading by design instead of
-    // clipping off the right edge (layout-rules §1, §7).
-    ColumnLayout {
-      id: header
+    GoalHeader {
       Layout.fillWidth: true
-      spacing: 0
-
-      RowLayout {
-        Layout.fillWidth: true
-        spacing: Theme.spaceMd
-
-        // The title and its edit pencil (the Goals rows' pencil, same
-        // dialog). The group is sized to the title, capped by maximumWidth so
-        // a long title still elides, rather than filling the row: the pencil
-        // belongs right after the words, not over by the buttons. The hover
-        // covers title and pencil together, so crossing the gap between them
-        // doesn't flicker it off.
-        RowLayout {
-          id: titleGroup
-          Layout.fillWidth: true
-          Layout.maximumWidth: implicitWidth
-          spacing: Theme.spaceSm
-
-          HoverHandler { id: titleHover }
-
-          Text {
-            Layout.fillWidth: true
-            text: root.meta ? root.meta.title : root.slug
-            elide: Text.ElideRight
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.headingSize
-            font.bold: true
-            color: Theme.ink
-          }
-
-          // Faded with opacity, not toggled with `visible`, so its slot is
-          // always reserved and hovering never re-elides the title.
-          PencilIcon {
-            objectName: "editGoalButton"
-            opacity: titleHover.hovered && !!root.meta ? 1 : 0
-            enabled: opacity > 0
-            onClicked: root.editGoalRequested()
-          }
-        }
-
-        Item { Layout.fillWidth: true }
-
-        Button { objectName: "addEventButton"; label: "Add event"; inert: false; onActivated: root.addEventRequested() }
-        Button { objectName: "coachButton"; label: "Coach this goal"; filled: true; inert: false; onActivated: root.coachRequested() }
-      }
-
-      Item { Layout.preferredHeight: Theme.spaceLg; Layout.fillWidth: true }
-
-      Rectangle {
-        Layout.fillWidth: true
-        Layout.preferredHeight: subHeaderRow.implicitHeight + Theme.spaceXl
-        color: "transparent"
-
-        Rectangle {
-          anchors.left: parent.left
-          anchors.right: parent.right
-          anchors.top: parent.top
-          height: 1
-          color: Theme.hairline
-        }
-
-        RowLayout {
-          id: subHeaderRow
-          anchors.left: parent.left
-          anchors.verticalCenter: parent.verticalCenter
-          spacing: Theme.spaceMd
-
-          // A real control, not a bare Text + MouseArea: sized
-          // deterministically (a full control's height as its hit target)
-          // so the click always lands, with a hover fill so it reads as a
-          // control rather than as receding dim text.
-          Rectangle {
-            id: backControl
-            objectName: "backControl"
-            // Its label sits on the column's left edge and the hover fill
-            // spills into the margin, not the other way round (layout-rules
-            // §2, §3).
-            Layout.leftMargin: -Math.round((implicitWidth - backLabel.implicitWidth) / 2)
-            implicitWidth: backLabel.implicitWidth + Theme.spaceMd
-            implicitHeight: Theme.controlHeight
-            color: backArea.containsMouse ? Theme.hoverFill : "transparent"
-
-            Text {
-              id: backLabel
-              anchors.centerIn: parent
-              text: root.backLabel
-              font.family: Theme.fontFamily
-              font.pixelSize: Theme.captionSize
-              color: Theme.dim
-            }
-
-            MouseArea {
-              id: backArea
-              anchors.fill: parent
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: root.back()
-            }
-          }
-
-          Text {
-            visible: !!root.meta && root.meta.status === "active"
-            text: "running"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.captionSize
-            font.bold: true
-            color: Theme.accentColor
-          }
-        }
-
-        Rectangle {
-          anchors.left: parent.left
-          anchors.right: parent.right
-          anchors.bottom: parent.bottom
-          height: 1
-          color: Theme.hairline
-        }
-      }
+      title: root.meta ? root.meta.title : root.slug
+      editable: !!root.meta
+      backLabel: root.backLabel
+      running: !!root.meta && root.meta.status === "active"
+      onBack: root.back()
+      onEditGoalRequested: root.editGoalRequested()
+      onAddEventRequested: root.addEventRequested()
+      onCoachRequested: root.coachRequested()
     }
 
-    // ---- figures row ------------------------------------------------------
-    // Independent facts, not a rigid row: each sized to its own content in a
-    // Flow so it wraps onto a second line at narrow widths instead of
-    // running off the edge. The progress rule always spans the full row
-    // width beneath them, wrapped or not.
-    Flow {
+    GoalFigures {
       Layout.fillWidth: true
-      spacing: Theme.spaceXl
-
-      Text {
-        // Parser.formatHm, not a local hours-only calculation: flooring to
-        // whole hours rendered two pomodoros as "0 h in", which is both wrong
-        // and the most discouraging possible way to state 50 minutes of work.
-        text: root.poms + (root.poms === 1 ? " pom · " : " poms · ") + Parser.formatHm(root.minutes) + " in"
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.bodySize
-        color: Theme.ink
-      }
-      Text {
-        // `estimate:` is poms REMAINING, not the goal's total -- the coach
-        // rewrites it down each session, so this is a direct read of the
-        // field, never `est - poms` (that double-counts: a goal with 2
-        // poms done and estimate: 3 means 3 poms remain, not 1). Says
-        // "poms left", not just "left": this sits beside "N of M tasks" in
-        // the same row, and a bare number there would read as a second
-        // fraction over that M instead of a different unit.
-        visible: root.est !== undefined
-        text: "≈ " + (root.est !== undefined ? root.est : 0) + " poms left"
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.bodySize
-        color: Theme.ink
-      }
-      Text {
-        text: root.tasksDone + " of " + root.tasks.length + " tasks"
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.bodySize
-        color: Theme.ink
-      }
+      poms: root.poms
+      minutes: root.minutes
+      estimate: root.est
+      tasksDone: root.tasksDone
+      taskCount: root.tasks.length
     }
 
     // A progress rule used to fill by `poms / estimate`. Dropped: once
@@ -368,213 +172,15 @@ Item {
       Layout.fillHeight: true
       spacing: 0
 
-      // Timeline
-      Flickable {
+      Timeline {
         Layout.fillWidth: true
         Layout.fillHeight: true
-        contentHeight: timelineColumn.height
-        clip: true
-
-        Column {
-          id: timelineColumn
-          // Clear of the rail's hairline by the same gap the rail keeps on
-          // its side of it; wrapped lines used to run right up to the rule.
-          width: parent.width - Theme.spaceLg
-          spacing: Theme.spaceSm
-
-          Text {
-            text: "What happened"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.captionSize
-            font.bold: true
-            color: Theme.dim
-          }
-
-          Text {
-            visible: root.dayGroups.length === 0
-            text: "No sessions logged yet."
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.bodySize
-            color: Theme.faint
-          }
-
-          Repeater {
-            model: root.dayGroups
-            delegate: Column {
-              id: dayBlock
-              required property var modelData
-              width: timelineColumn.width
-              spacing: Theme.spaceXs
-
-              RowLayout {
-                width: dayBlock.width
-                spacing: Theme.spaceSm
-                Text {
-                  text: Parser.dayHeaderLabel(dayBlock.modelData.date)
-                  font.family: Theme.fontFamily
-                  font.pixelSize: Theme.captionSize
-                  font.bold: true
-                  color: Theme.ink
-                }
-                Text {
-                  text: { var n = root.dayPoms(dayBlock.modelData.entries); return n + (n === 1 ? " pom · " : " poms · ") + root.formatDayDuration(root.dayMinutes(dayBlock.modelData.entries)) }
-                  font.family: Theme.fontFamily
-                  font.pixelSize: Theme.bodySmallSize
-                  color: Theme.dim
-                }
-                // Holds the row's surplus width. Without it the layout spread
-                // that width between the two labels and the day's summary
-                // drifted to the middle of the column.
-                Item { Layout.fillWidth: true }
-              }
-
-              Repeater {
-                model: dayBlock.modelData.entries
-                delegate: Item {
-                  id: entryRow
-                  required property var modelData
-                  width: dayBlock.width
-                  height: contentCol.height + Theme.spaceMd
-
-                  readonly property var e: modelData
-
-                  Text {
-                    id: timeText
-                    text: entryRow.e.heading.split(" ").pop()
-                    // Wide enough for any HH:MM at this size, so every
-                    // entry's rule and node sit on one vertical line. A
-                    // typed 40 fitted 11px digits and clipped larger ones.
-                    width: Math.ceil(timeMetrics.advanceWidth)
-                    horizontalAlignment: Text.AlignRight
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    // The entry label's size, so the two top-aligned lines
-                    // also share a baseline across the rule.
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.captionSize
-                    color: Theme.faint
-                  }
-
-                  Rectangle {
-                    id: rule
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    anchors.left: timeText.right
-                    anchors.leftMargin: Theme.spaceLg
-                    width: 1
-                    color: Theme.hairline
-                  }
-
-                  Rectangle {
-                    id: node
-                    // Centred on the rule only. It was also anchored to the
-                    // rule's left edge, and with both set Qt sized it to fit
-                    // between them: the square came out a 1px sliver.
-                    width: 7
-                    height: 7
-                    anchors.horizontalCenter: rule.horizontalCenter
-                    anchors.top: parent.top
-                    anchors.topMargin: Theme.spaceXs
-                    color: entryRow.e.type === "coaching" ? Theme.accentColor : Theme.paper
-                    border.color: entryRow.e.type === "coaching" ? Theme.accentColor : Theme.ink
-                    border.width: 1
-                    radius: 0
-
-                    // Dashed look for events: Quickshell/QtQuick has no
-                    // native dashed border, so approximate with a dashed
-                    // Canvas outline.
-                    Canvas {
-                      anchors.fill: parent
-                      visible: entryRow.e.type === "event"
-                      onPaint: {
-                        var ctx = getContext("2d")
-                        ctx.reset()
-                        ctx.strokeStyle = Theme.ink
-                        ctx.lineWidth = 1
-                        ctx.setLineDash([2, 1])
-                        ctx.strokeRect(0.5, 0.5, width - 1, height - 1)
-                      }
-                    }
-                  }
-
-                  Column {
-                    id: contentCol
-                    anchors.left: rule.right
-                    anchors.leftMargin: Theme.spaceMd
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    spacing: Theme.spaceXxs
-
-                    Text {
-                      text: root.entryLabel(entryRow.e)
-                      font.family: Theme.fontFamily
-                      font.pixelSize: Theme.captionSize
-                      font.bold: true
-                      color: Theme.dim
-                    }
-                    Text {
-                      visible: entryRow.e.type === "pomodoro" && !!entryRow.e.focus
-                      width: contentCol.width
-                      text: "focus: " + entryRow.e.focus
-                      wrapMode: Text.WordWrap
-                      lineHeight: Theme.proseLineHeight
-                      font.family: Theme.fontFamily
-                      font.pixelSize: Theme.bodySize
-                      color: Theme.ink
-                    }
-                    Text {
-                      visible: entryRow.e.type === "event" && !!entryRow.e.title
-                      width: contentCol.width
-                      text: entryRow.e.title ? entryRow.e.title : ""
-                      wrapMode: Text.WordWrap
-                      lineHeight: Theme.proseLineHeight
-                      font.family: Theme.fontFamily
-                      font.pixelSize: Theme.bodySize
-                      color: Theme.ink
-                    }
-                    Text {
-                      visible: entryRow.e.type === "pomodoro" && !!entryRow.e.done
-                      width: contentCol.width
-                      text: "done: " + entryRow.e.done
-                      wrapMode: Text.WordWrap
-                      lineHeight: Theme.proseLineHeight
-                      font.family: Theme.fontFamily
-                      font.pixelSize: Theme.bodySmallSize
-                      color: Theme.dim
-                    }
-                    Text {
-                      visible: entryRow.e.type === "pomodoro" && !!entryRow.e.left
-                      width: contentCol.width
-                      text: "left: " + entryRow.e.left
-                      wrapMode: Text.WordWrap
-                      lineHeight: Theme.proseLineHeight
-                      font.family: Theme.fontFamily
-                      font.pixelSize: Theme.bodySmallSize
-                      color: Theme.dim
-                    }
-                    Text {
-                      // goal-files.md §4's "Anything else?" line, written
-                      // only when the break's open question was answered.
-                      visible: entryRow.e.type === "pomodoro" && !!entryRow.e.other
-                      width: contentCol.width
-                      text: "else: " + entryRow.e.other
-                      wrapMode: Text.WordWrap
-                      lineHeight: Theme.proseLineHeight
-                      font.family: Theme.fontFamily
-                      font.pixelSize: Theme.bodySmallSize
-                      color: Theme.dim
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
+        logEntries: root.logEntries
       }
 
       // hairline between timeline and right rail
       Rectangle {
-        Layout.preferredWidth: 1
+        Layout.preferredWidth: Theme.hairlineWidth
         Layout.fillHeight: true
         color: Theme.hairline
       }
@@ -592,7 +198,7 @@ Item {
       // wrapped hint text reports its unwrapped, full-sentence width.
       Item {
         Layout.preferredWidth: Math.max(Math.round(Theme.pageWidth(root.width) * 3 / 8),
-                                        Math.ceil(Math.max(tasksHeader.implicitWidth, closeRow.implicitWidth))
+                                        Math.ceil(Math.max(tasksHeader.implicitWidth, endActions.closeRowWidth))
                                         + Theme.spaceLg * 2)
         Layout.fillHeight: true
 
@@ -689,206 +295,21 @@ Item {
             Layout.fillWidth: true
             Repeater {
               model: root.tasks
-              delegate: Column {
+              delegate: TaskRow {
                 required property var modelData
                 required property int index
                 width: parent.width
-
-                // Full row width, same edges the row content below sits
-                // inside -- every rule starts and ends at the same two
-                // points now that the checkbox is no longer bled outside
-                // this width (layout-rules §2, §3: one left edge, fills
-                // bleed only where the scroller itself is the wide thing,
-                // which this rail is not).
-                Rectangle {
-                  width: parent.width
-                  height: 1
-                  color: Theme.hairline
-                  visible: index > 0
-                }
-
-                // The checkbox is the row's leading element and owns the
-                // rail's left edge -- the same edge the TASKS heading
-                // sits at -- with the label inset a consistent gap to its
-                // right. Row height floors at the control-height token but
-                // grows for a task long enough to wrap (no more eliding --
-                // the row still centres the checkbox and estimate against
-                // whatever height that takes). The hit target covers the
-                // whole row, not just the checkbox, so ticking a task is
-                // easy; the toggle MouseArea sits *behind* the RowLayout
-                // (declared first) so the edit control and the inline edit
-                // field, both on top, get first claim on their own clicks
-                // and everything else falls through to the toggle.
-                Item {
-                  id: taskRow
-                  objectName: "taskRow:" + index
-                  width: parent.width
-                  implicitHeight: taskRowLayout.implicitHeight + pad * 2
-                  height: implicitHeight
-
-                  readonly property bool editing: root.editingTaskIndex === index
-                  // One line of task text. The side items (checkbox,
-                  // estimate, pencil) sit in boxes this tall, top-aligned,
-                  // so on a wrapped task they line up with the first line
-                  // rather than floating mid-block. `pad` keeps a one-line
-                  // row at the control height, and a wrapped one off its
-                  // hairlines.
-                  readonly property int lineH: Math.ceil(taskFont.height)
-                  readonly property int pad: Math.max(Theme.spaceXs, Math.floor((Theme.controlHeight - lineH) / 2))
-
-                  FontMetrics {
-                    id: taskFont
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.bodySize
-                  }
-
-                  // Passive, so it stays hovered while the pointer is over
-                  // the pencil's own MouseArea too.
-                  HoverHandler { id: taskRowHover }
-
-                  MouseArea {
-                    anchors.fill: parent
-                    enabled: !taskRow.editing
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleTask(index)
-                  }
-
-                  RowLayout {
-                    id: taskRowLayout
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.topMargin: taskRow.pad
-                    spacing: Theme.spaceSm
-
-                    Item {
-                      Layout.preferredWidth: 12
-                      Layout.preferredHeight: taskRow.lineH
-                      Layout.alignment: Qt.AlignTop
-
-                      Rectangle {
-                        anchors.centerIn: parent
-                        width: 12
-                        height: 12
-                        border.color: Theme.border
-                        border.width: 1
-                        color: "transparent"
-
-                        Text {
-                          visible: modelData.done
-                          anchors.centerIn: parent
-                          text: "✓"
-                          font.family: Theme.fontFamily
-                          font.pixelSize: 9
-                          color: Theme.accentColor
-                        }
-                      }
-                    }
-
-                    Text {
-                      visible: !taskRow.editing
-                      Layout.fillWidth: true
-                      Layout.alignment: Qt.AlignTop
-                      wrapMode: Text.WordWrap
-                      text: modelData.text
-                      font.family: Theme.fontFamily
-                      font.pixelSize: Theme.bodySize
-                      font.strikeout: modelData.done
-                      color: modelData.done ? Theme.faint : Theme.ink
-                    }
-
-                    // Inline edit field, same minimal-input pattern as
-                    // "+ task" (Enter commits, Escape cancels) rather than
-                    // a dialog -- editing one task's wording is a small
-                    // secondary action, not one that deserves a modal.
-                    // A TextEdit so a long task wraps while being edited
-                    // exactly as it does when shown; Enter is taken by the
-                    // key handlers, so it never inserts a newline.
-                    TextEdit {
-                      id: taskEditInput
-                      objectName: "taskEditField:" + index
-                      visible: taskRow.editing
-                      Layout.fillWidth: true
-                      Layout.alignment: Qt.AlignTop
-                      wrapMode: TextEdit.Wrap
-                      font.family: Theme.fontFamily
-                      font.pixelSize: Theme.bodySize
-                      color: Theme.ink
-                      selectionColor: Theme.accentFill
-                      selectedTextColor: Theme.ink
-                      selectByMouse: true
-
-                      // Cursor at the end, nothing selected: an edit is
-                      // usually a tweak, and a select-all would make the
-                      // first keystroke wipe the whole task.
-                      onVisibleChanged: if (visible) {
-                        text = root.editTaskText
-                        cursorPosition = length
-                        forceActiveFocus()
-                        root.taskEditField = taskEditInput
-                      }
-                      onTextChanged: if (visible) root.editTaskText = text
-                      Keys.onReturnPressed: root.commitEditTask(index)
-                      Keys.onEnterPressed: root.commitEditTask(index)
-                      Keys.onEscapePressed: root.cancelEditTask()
-
-                      Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.bottom
-                        height: Theme.hairlineWidth
-                        color: Theme.accentColor
-                      }
-                    }
-
-                    Item {
-                      visible: modelData.estimate !== undefined && !taskRow.editing
-                      Layout.preferredWidth: taskEstimate.implicitWidth
-                      Layout.preferredHeight: taskRow.lineH
-                      Layout.alignment: Qt.AlignTop
-
-                      Text {
-                        id: taskEstimate
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: modelData.estimate !== undefined ? ("≈" + modelData.estimate) : ""
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.bodySmallSize
-                        color: Theme.dim
-                      }
-                    }
-
-                    // A pencil, shown only while the pointer is over the
-                    // row. Faded with opacity rather than toggled with
-                    // `visible`, so its slot is always reserved: hovering
-                    // must never re-wrap the task text or grow the row.
-                    // Centred on the whole row, unlike the checkbox: it
-                    // belongs to the row, not to the first line of text.
-                    Item {
-                      Layout.preferredWidth: taskPencil.implicitWidth
-                      Layout.fillHeight: true
-                      opacity: taskRowHover.hovered && !taskRow.editing ? 1 : 0
-                      enabled: opacity > 0
-
-                      PencilIcon {
-                        id: taskPencil
-                        objectName: "taskEdit:" + index
-                        small: true
-                        anchors.centerIn: parent
-                        onClicked: root.startEditTask(index, modelData.text)
-                      }
-                    }
-                  }
-                }
-
-                Text {
-                  visible: taskRow.editing && root.editTaskError.length > 0
-                  width: parent.width
-                  wrapMode: Text.WordWrap
-                  text: root.editTaskError
-                  font.family: Theme.fontFamily
-                  font.pixelSize: Theme.captionSize
-                  color: Theme.red
-                }
+                task: modelData
+                taskIndex: index
+                editing: root.editingTaskIndex === index
+                editText: root.editTaskText
+                editError: root.editTaskError
+                onToggleRequested: root.toggleTask(index)
+                onEditRequested: root.startEditTask(index, modelData.text)
+                onEditTextEdited: function(text) { root.editTaskText = text }
+                onCommitRequested: root.commitEditTask(index)
+                onCancelRequested: root.cancelEditTask()
+                onEditFieldShown: function(field) { root.taskEditField = field }
               }
             }
 
@@ -922,101 +343,13 @@ Item {
 
           Item { Layout.fillHeight: true }
 
-          // Close / cancel. Only offered while the goal is still open --
-          // a done or cancelled goal has nothing left to close or cancel.
-          ColumnLayout {
+          GoalEndActions {
+            id: endActions
             Layout.fillWidth: true
-            visible: root.isOpenGoal
-            spacing: Theme.spaceSm
-
-            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.hairline }
-
-            RowLayout {
-              id: closeRow
-              Layout.fillWidth: true
-              spacing: Theme.spaceSm
-              Button {
-                objectName: "closeGoalButton"
-                label: "Close goal · done"
-                inert: false
-                Layout.preferredWidth: implicitWidth
-                Layout.preferredHeight: Theme.controlHeight
-                onActivated: root.closeGoal()
-              }
-              Item { Layout.fillWidth: true }
-              Text {
-                objectName: "cancelGoalButton"
-                text: "Cancel"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.bodySmallSize
-                color: Theme.red
-                MouseArea {
-                  anchors.fill: parent
-                  anchors.margins: -6
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: { root.cancelError = ""; root.cancelDialogOpen = true }
-                }
-              }
-            }
-          }
-
-          // A done goal can be taken back up: closing one by mistake, or
-          // finding there is more to do, shouldn't mean editing the file by
-          // hand. Cancelled goals aren't offered this -- their "## Cancelled"
-          // note would stay in the file and a second cancel would append
-          // another beside it.
-          ColumnLayout {
-            Layout.fillWidth: true
-            visible: !!root.meta && root.meta.status === "done"
-            spacing: Theme.spaceSm
-
-            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.hairline }
-
-            Button {
-              objectName: "reopenGoalButton"
-              label: "Reopen goal"
-              inert: false
-              Layout.preferredWidth: implicitWidth
-              Layout.preferredHeight: Theme.controlHeight
-              onActivated: root.reopenGoal()
-            }
-          }
-
-          // A cancelled goal keeps its reason/takeaway on screen -- it's
-          // the one place this otherwise-invisible "## Cancelled" section
-          // (Writer.appendCancelNote) is ever shown back to the user.
-          ColumnLayout {
-            Layout.fillWidth: true
-            visible: !!root.meta && root.meta.status === "cancelled" && !!root.meta.cancelled
-            spacing: Theme.spaceXs
-            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.hairline }
-            Text {
-              text: "Cancelled"
-              font.family: Theme.fontFamily
-              font.pixelSize: Theme.captionSize
-              font.bold: true
-              color: Theme.red
-            }
-            Text {
-              Layout.fillWidth: true
-              wrapMode: Text.WordWrap
-              lineHeight: Theme.proseLineHeight
-              visible: !!root.meta && !!root.meta.cancelled && root.meta.cancelled.reason.length > 0
-              text: root.meta && root.meta.cancelled ? root.meta.cancelled.reason : ""
-              font.family: Theme.fontFamily
-              font.pixelSize: Theme.bodySmallSize
-              color: Theme.ink
-            }
-            Text {
-              Layout.fillWidth: true
-              wrapMode: Text.WordWrap
-              lineHeight: Theme.proseLineHeight
-              visible: !!root.meta && !!root.meta.cancelled && root.meta.cancelled.takeaway.length > 0
-              text: root.meta && root.meta.cancelled ? root.meta.cancelled.takeaway : ""
-              font.family: Theme.fontFamily
-              font.pixelSize: Theme.bodySmallSize
-              color: Theme.dim
-            }
+            meta: root.meta
+            onCloseGoal: root.closeGoal()
+            onReopenGoal: root.reopenGoal()
+            onCancelRequested: { root.cancelError = ""; root.cancelDialogOpen = true }
           }
         }
       }

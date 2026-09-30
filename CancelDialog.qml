@@ -86,7 +86,7 @@ FocusScope {
     height: content.height + Theme.spaceXl * 2
     color: Theme.paper
     border.color: Theme.border
-    border.width: 2
+    border.width: Theme.dialogBorderWidth
 
     // Swallow clicks/hover so the scrim beneath never sees them.
     MouseArea { anchors.fill: parent; hoverEnabled: true; onClicked: {} }
@@ -121,7 +121,7 @@ FocusScope {
         }
       }
 
-      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.hairline }
+      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
 
       ColumnLayout {
         Layout.fillWidth: true
@@ -148,18 +148,21 @@ FocusScope {
               spacing: Theme.spaceSm
 
               Rectangle {
-                width: 13
-                height: 13
-                radius: 7
+                // A ring: a radius of half the width. Qt caps a radius at
+                // half the shorter side, so this is what the 7 typed here
+                // before drew too.
+                width: Theme.optionMarkSize
+                height: Theme.optionMarkSize
+                radius: width / 2
                 border.color: Theme.border
-                border.width: 1
+                border.width: Theme.borderWidth
                 color: "transparent"
                 Rectangle {
                   visible: reasonRow.selected
                   anchors.centerIn: parent
-                  width: 7
-                  height: 7
-                  radius: 4
+                  width: Theme.optionDotSize
+                  height: Theme.optionDotSize
+                  radius: width / 2
                   color: Theme.accentColor
                 }
               }
@@ -192,10 +195,10 @@ FocusScope {
         }
         Rectangle {
           Layout.fillWidth: true
-          Layout.preferredHeight: 56
+          Layout.preferredHeight: Theme.dialogTextAreaHeight
           color: Theme.fill
           border.color: Theme.border
-          border.width: 1
+          border.width: Theme.borderWidth
 
           Flickable {
             anchors.fill: parent
@@ -228,7 +231,7 @@ FocusScope {
         color: Theme.red
       }
 
-      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.hairline }
+      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
 
       RowLayout {
         Layout.fillWidth: true

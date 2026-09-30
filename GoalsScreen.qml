@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 
 import "Parser.js" as Parser
+import "Util.js" as Util
 
 // Spec §Screen: Goals.
 Item {
@@ -20,18 +21,7 @@ Item {
 
   property string filterStatus: "active"
 
-  function buildGoalList(data) {
-    var out = []
-    for (var slug in data) {
-      var g = data[slug]
-      if (!g || !g.meta) continue
-      out.push({ slug: slug, meta: g.meta, logEntries: g.logEntries || [] })
-    }
-    out.sort(function(a, b) { return a.meta.title < b.meta.title ? -1 : (a.meta.title > b.meta.title ? 1 : 0) })
-    return out
-  }
-
-  readonly property var goalList: buildGoalList(goalsData)
+  readonly property var goalList: Util.goalsByTitle(goalsData)
 
   function statusOf(g) { return g.meta.status || "active" }
 
@@ -42,18 +32,6 @@ Item {
   }
 
   readonly property var filteredList: goalList.filter(function(g) { return statusOf(g) === root.filterStatus })
-
-  function pomsCount(entries) {
-    var n = 0
-    for (var i = 0; i < entries.length; i++) if (entries[i].type === "pomodoro") n++
-    return n
-  }
-
-  function pomsMinutes(entries) {
-    var n = 0
-    for (var i = 0; i < entries.length; i++) if (entries[i].type === "pomodoro") n += entries[i].minutes
-    return n
-  }
 
   function lastSessionLabel(entries) {
     if (entries.length === 0) return "never"
@@ -117,7 +95,7 @@ Item {
           anchors.left: parent.left
           anchors.right: parent.right
           anchors.top: parent.top
-          height: 1
+          height: Theme.hairlineWidth
           color: Theme.hairline
         }
 
@@ -139,7 +117,7 @@ Item {
 
               MouseArea {
                 anchors.fill: parent
-                anchors.margins: -4
+                anchors.margins: -Theme.chipHitSlop
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.filterStatus = parent.modelData
               }
@@ -151,7 +129,7 @@ Item {
           anchors.left: parent.left
           anchors.right: parent.right
           anchors.bottom: parent.bottom
-          height: 1
+          height: Theme.hairlineWidth
           color: Theme.hairline
         }
       }
@@ -206,7 +184,7 @@ Item {
               anchors.left: parent.left
               anchors.right: parent.right
               anchors.top: parent.top
-              height: 1
+              height: Theme.hairlineWidth
               color: Theme.hairline
               visible: rowItem.index > 0
             }
@@ -218,7 +196,7 @@ Item {
               anchors.left: parent.left
               anchors.top: parent.top
               anchors.bottom: parent.bottom
-              width: 3
+              width: Theme.selectionBarWidth
               color: Theme.accentColor
             }
 
@@ -283,8 +261,8 @@ Item {
                 // knowing from the estimate rides along here, where it
                 // elides cleanly instead of clipping at the window edge.
                 Text {
-                  readonly property int doneCount: rowItem.g.meta.tasks.filter(function(t) { return t.done }).length
-                  readonly property int poms: root.pomsCount(rowItem.g.logEntries)
+                  readonly property int doneCount: Parser.doneTaskCount(rowItem.g.meta.tasks)
+                  readonly property int poms: Parser.pomodoroCount(rowItem.g.logEntries)
                   readonly property var est: rowItem.g.meta.estimate
                   Layout.fillWidth: true
                   elide: Text.ElideRight
@@ -339,7 +317,7 @@ Item {
         Item {
           visible: root.filteredList.length === 0
           width: rowsColumn.width
-          height: 60
+          height: Theme.emptyRowHeight
           Text {
             anchors.centerIn: parent
             text: "No " + root.filterStatus + " goals."

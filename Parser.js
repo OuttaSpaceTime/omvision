@@ -322,6 +322,20 @@ function pomodoroMinutes(entries) {
   return n
 }
 
+// How many of a goal's tasks (meta.tasks) are ticked. The Goals rows and
+// the goal detail both show it, and each used to count it by hand.
+function doneTaskCount(tasks) {
+  var n = 0
+  for (var i = 0; i < tasks.length; i++) if (tasks[i].done) n++
+  return n
+}
+
+// The clock time an entry's heading carries: "28 Sep 09:30" -> "09:30". The
+// timeline and the Today screen show it in their time column.
+function entryTime(e) {
+  return String(e.heading).split(" ").pop()
+}
+
 // ---- "## Cancelled" (Omvision's own section, see Writer.appendCancelNote) --
 // Takes the same already-normalized `rest` lines parseTasks()/
 // parseCoaching() do. Reads the *last* such section in the file (a goal

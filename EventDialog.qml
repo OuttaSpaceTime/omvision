@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 
 import "Writer.js" as Writer
+import "Util.js" as Util
 
 // "Add event" (plan.md M3/O4, mockup Event.dc.html): logs time that
 // wasn't run through the timer -- training, a meeting, reading, deep
@@ -61,13 +62,7 @@ FocusScope {
   }
 
   function goalList() {
-    var out = []
-    for (var slug in root.goalsData) {
-      var g = root.goalsData[slug]
-      if (g && g.meta) out.push({ slug: slug, title: g.meta.title })
-    }
-    out.sort(function(a, b) { return a.title < b.title ? -1 : (a.title > b.title ? 1 : 0) })
-    return out
+    return Util.goalsByTitle(root.goalsData).map(function(g) { return { slug: g.slug, title: g.meta.title } })
   }
 
   function tryWhen() { return Writer.parseWhen(root.whenText, new Date()) }
@@ -113,7 +108,7 @@ FocusScope {
     height: content.height + Theme.spaceXl * 2
     color: Theme.paper
     border.color: Theme.border
-    border.width: 2
+    border.width: Theme.dialogBorderWidth
 
     // Swallow clicks/hover so the scrim beneath never sees them, and a
     // click inside the card never dismisses it.
@@ -147,7 +142,7 @@ FocusScope {
         }
       }
 
-      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.hairline }
+      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
 
       // ---- type chips -----------------------------------------------------
       Flow {
@@ -163,7 +158,7 @@ FocusScope {
             width: chipLabel.implicitWidth + Theme.spaceLg
             color: selected ? Theme.accentFill : "transparent"
             border.color: selected ? Theme.accentColor : Theme.hairline
-            border.width: 1
+            border.width: Theme.borderWidth
             Text {
               id: chipLabel
               anchors.centerIn: parent
@@ -197,7 +192,7 @@ FocusScope {
           Layout.preferredHeight: Theme.controlHeight
           color: Theme.fill
           border.color: Theme.border
-          border.width: 1
+          border.width: Theme.borderWidth
           TextInput {
             id: whatInput
             anchors.fill: parent
@@ -236,7 +231,7 @@ FocusScope {
             Layout.preferredHeight: Theme.controlHeight
             color: Theme.fill
             border.color: Theme.border
-            border.width: 1
+            border.width: Theme.borderWidth
             TextInput {
               anchors.fill: parent
               anchors.leftMargin: Theme.spaceSm
@@ -257,7 +252,7 @@ FocusScope {
         ColumnLayout {
           // Fixed, explicitly: its field's fillWidth would otherwise make
           // this whole column fill too, and it squeezed its neighbour.
-          Layout.preferredWidth: 120
+          Layout.preferredWidth: Theme.dialogShortFieldWidth
           Layout.fillWidth: false
           spacing: Theme.spaceXs
           Text {
@@ -272,7 +267,7 @@ FocusScope {
             Layout.preferredHeight: Theme.controlHeight
             color: Theme.fill
             border.color: Theme.border
-            border.width: 1
+            border.width: Theme.borderWidth
             TextInput {
               anchors.fill: parent
               anchors.leftMargin: Theme.spaceSm
@@ -313,7 +308,7 @@ FocusScope {
             width: noGoalLabel.implicitWidth + Theme.spaceLg
             color: selected ? Theme.accentFill : "transparent"
             border.color: selected ? Theme.accentColor : Theme.hairline
-            border.width: 1
+            border.width: Theme.borderWidth
             Text {
               id: noGoalLabel
               anchors.centerIn: parent
@@ -334,7 +329,7 @@ FocusScope {
               width: goalLabel.implicitWidth + Theme.spaceLg
               color: selected ? Theme.accentFill : "transparent"
               border.color: selected ? Theme.accentColor : Theme.hairline
-              border.width: 1
+              border.width: Theme.borderWidth
               Text {
                 id: goalLabel
                 anchors.centerIn: parent
@@ -356,16 +351,16 @@ FocusScope {
           anchors.fill: parent
           spacing: Theme.spaceSm
           Rectangle {
-            width: 13
-            height: 13
+            width: Theme.optionMarkSize
+            height: Theme.optionMarkSize
             border.color: Theme.border
-            border.width: 1
+            border.width: Theme.borderWidth
             color: "transparent"
             Rectangle {
               visible: root.countsToward
               anchors.centerIn: parent
-              width: 7
-              height: 7
+              width: Theme.optionDotSize
+              height: Theme.optionDotSize
               color: Theme.accentColor
             }
           }
@@ -394,7 +389,7 @@ FocusScope {
         color: Theme.red
       }
 
-      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.hairline }
+      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
 
       RowLayout {
         Layout.fillWidth: true

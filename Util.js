@@ -42,3 +42,19 @@ function sameList(a, b, keyOf) {
   }
   return true
 }
+
+// The goals in `goalsData` (slug -> { meta, logEntries }, as omvision.qml
+// keeps it), as a list sorted by title: { slug, meta, logEntries } each. A
+// slug whose file didn't parse (no meta) is left out. The Goals and
+// Coaching screens and the event dialog's goal chips all list goals this
+// way, and each used to build the list itself.
+function goalsByTitle(goalsData) {
+  var out = []
+  for (var slug in goalsData) {
+    var g = goalsData[slug]
+    if (!g || !g.meta) continue
+    out.push({ slug: slug, meta: g.meta, logEntries: g.logEntries || [] })
+  }
+  out.sort(function(a, b) { return a.meta.title < b.meta.title ? -1 : (a.meta.title > b.meta.title ? 1 : 0) })
+  return out
+}

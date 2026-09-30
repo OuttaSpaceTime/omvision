@@ -28,6 +28,7 @@ own runner: `qmltestrunner -platform offscreen -input tests/unit`.
   on files that are not goal files, where it must return null.
 - `tst_parser.qml` covers goal files, tasks, coaching, log entries (`else:`, dedupe, year
   wrap, the `[+time]` marker), `estimate:` as poms *left*, and the small formatters.
+- `tst_util.qml` covers Util.js's list helpers (`goalsByTitle`).
 - `workedexample.js` is the worked example from `~/Code/ompom-engine/docs/goal-files.md`,
   as JS strings (a test can't read files). bin/test checks it against the contract on
   every run.
@@ -92,9 +93,11 @@ the controls, and a refactor must keep them:
 | `addEventButton`, `coachButton`, `editGoalButton` | the detail header's actions |
 | `journalEditor` | the journal's page |
 
-Until those `objectName`s are in `GoalDetailScreen.qml` and `GoalsScreen.qml`,
-`OmvisionTest.locate()` finds each item by its label or its delegate's properties
-instead. Once they land, `locate()` goes unused and can be deleted.
+The goal names sit in `GoalsScreen.qml`, and in `GoalDetailScreen.qml` and its parts
+(`GoalHeader.qml`, `TaskRow.qml`, `GoalEndActions.qml`), and `journalEditor` on the
+journal's TextEdit in `JournalScreen.qml`. `OmvisionTest.locate()`, which finds an item by
+its label or its delegate's properties, predates the names and is now only a fallback:
+every test finds its items by objectName.
 
 ### The `qtest_results` workaround
 

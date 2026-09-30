@@ -109,7 +109,7 @@ FocusScope {
     height: content.height + Theme.spaceXl * 2
     color: Theme.paper
     border.color: Theme.border
-    border.width: 2
+    border.width: Theme.dialogBorderWidth
 
     // Swallow clicks/hover so the scrim beneath never sees them, and a
     // click inside the card never dismisses it.
@@ -131,7 +131,7 @@ FocusScope {
         color: Theme.ink
       }
 
-      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.hairline }
+      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
 
       // ---- title --------------------------------------------------------
       ColumnLayout {
@@ -150,7 +150,7 @@ FocusScope {
           Layout.preferredHeight: Theme.controlHeight
           color: Theme.fill
           border.color: Theme.border
-          border.width: 1
+          border.width: Theme.borderWidth
           TextInput {
             id: titleInput
             anchors.fill: parent
@@ -186,7 +186,7 @@ FocusScope {
           Layout.preferredHeight: Theme.controlHeight
           color: Theme.fill
           border.color: Theme.border
-          border.width: 1
+          border.width: Theme.borderWidth
           TextInput {
             id: whyInput
             anchors.fill: parent
@@ -213,7 +213,7 @@ FocusScope {
         ColumnLayout {
           // Fixed, explicitly: its field's fillWidth would otherwise make
           // this whole column fill too, and it squeezed its neighbour.
-          Layout.preferredWidth: 120
+          Layout.preferredWidth: Theme.dialogShortFieldWidth
           Layout.fillWidth: false
           spacing: Theme.spaceXs
           Text {
@@ -228,7 +228,7 @@ FocusScope {
             Layout.preferredHeight: Theme.controlHeight
             color: Theme.fill
             border.color: Theme.border
-            border.width: 1
+            border.width: Theme.borderWidth
             TextInput {
               anchors.fill: parent
               anchors.leftMargin: Theme.spaceSm
@@ -261,7 +261,7 @@ FocusScope {
             Layout.preferredHeight: Theme.controlHeight
             color: Theme.fill
             border.color: Theme.border
-            border.width: 1
+            border.width: Theme.borderWidth
             TextInput {
               anchors.fill: parent
               anchors.leftMargin: Theme.spaceSm
@@ -291,7 +291,7 @@ FocusScope {
         color: Theme.red
       }
 
-      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.hairline }
+      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
 
       RowLayout {
         Layout.fillWidth: true

@@ -45,7 +45,7 @@ Rectangle {
     anchors.right: parent.right
     anchors.top: parent.top
     anchors.bottom: parent.bottom
-    width: 1
+    width: Theme.hairlineWidth
     color: Theme.hairline
   }
 
@@ -53,8 +53,8 @@ Rectangle {
   // accent here, the same way the ompom bar widget tints its copy of it.
   Item {
     id: mark
-    width: 26
-    height: 26
+    width: Theme.railMarkSize
+    height: Theme.railMarkSize
     anchors.left: parent.left
     anchors.leftMargin: Math.round((root.railWidth - width) / 2)
     anchors.top: parent.top
@@ -96,7 +96,7 @@ Rectangle {
         id: navRow
         required property var modelData
         width: parent.width
-        height: 36
+        height: Theme.railRowHeight
 
         readonly property bool selected: root.currentScreen === modelData.id
 
@@ -105,7 +105,7 @@ Rectangle {
           anchors.left: parent.left
           anchors.top: parent.top
           anchors.bottom: parent.bottom
-          width: 2
+          width: Theme.railBarWidth
           color: Theme.accentColor
         }
 
@@ -132,7 +132,7 @@ Rectangle {
         }
 
         ToolTip.visible: navArea.containsMouse
-        ToolTip.delay: 400
+        ToolTip.delay: Theme.tooltipDelay
         ToolTip.text: navRow.modelData.label
       }
     }

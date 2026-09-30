@@ -471,9 +471,9 @@ ShellRoot {
     id: window
     title: "Omvision"
     // bin/shot sets these to capture at other sizes; unset, they are 0.
-    implicitWidth: parseInt(Quickshell.env("OMVISION_SHOT_WIDTH") || "0") || 1440
-    implicitHeight: parseInt(Quickshell.env("OMVISION_SHOT_HEIGHT") || "0") || 900
-    minimumSize: Qt.size(720, 560)
+    implicitWidth: parseInt(Quickshell.env("OMVISION_SHOT_WIDTH") || "0") || Theme.windowWidth
+    implicitHeight: parseInt(Quickshell.env("OMVISION_SHOT_HEIGHT") || "0") || Theme.windowHeight
+    minimumSize: Qt.size(Theme.windowMinWidth, Theme.windowMinHeight)
     color: Theme.paper
 
     Item {

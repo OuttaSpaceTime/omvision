@@ -444,10 +444,11 @@ TestCase {
 
   // Stand-ins for the objectNames the tests use, found by what the item is
   // instead: its label, or the public properties of the delegate it sits in.
-  // They are here because the objectNames themselves (a patch to
-  // GoalDetailScreen.qml and GoalsScreen.qml) have not landed yet; findNamed()
-  // is always tried first, so once they do, these go unused and can be
-  // deleted. Keep the two in step until then.
+  // They were written before the objectNames landed in the app. findNamed()
+  // is always tried first and every name now resolves, so this is only a
+  // fallback, and an unwelcome one: it would find an item whose objectName
+  // was renamed by other means, so the rename goes unnoticed. Due for
+  // deletion.
   function locate(name) {
     var gd = base.goalDetail
     var m

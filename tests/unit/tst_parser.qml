@@ -170,6 +170,32 @@ TestCase {
     compare(Parser.investedMinutes(e), 50, "the event isn't marked, so only the two pomodoros count")
   }
 
+  // The timer's own figures, which the Goals rows, the goal detail and the
+  // timeline's day headers show: an event counts in neither, even one
+  // marked to count toward the goal's time (investedMinutes counts that).
+  function test_pomodoroCount_and_pomodoroMinutes() {
+    var e = Parser.parseLogEntries(log, now)
+    compare(Parser.pomodoroCount(e), 2)
+    compare(Parser.pomodoroMinutes(e), 50, "the 1h30 event is not a pomodoro")
+    var marked = Parser.parseLogEntries(log.replace("Bouldering", "[+time] Bouldering"), now)
+    compare(Parser.pomodoroMinutes(marked), 50, "marked to count, still not a pomodoro")
+    compare(Parser.investedMinutes(marked), 140)
+    compare(Parser.pomodoroCount([]), 0)
+    compare(Parser.pomodoroMinutes([]), 0)
+  }
+
+  function test_entryTime() {
+    var e = Parser.parseLogEntries(log, now)
+    compare(Parser.entryTime(e[0]), "16:10")
+    compare(Parser.entryTime(e[1]), "09:00", "an event's heading, too")
+  }
+
+  function test_doneTaskCount() {
+    var meta = Parser.parseGoalFile(goal)
+    compare(Parser.doneTaskCount(meta.tasks), 1)
+    compare(Parser.doneTaskCount([]), 0)
+  }
+
   function test_parseLogEntries_else_line() {
     // The contract's §4 example, with the break screen's "What else?" line.
     var text = "### 20 Sep 14:25 · 25m\n" +

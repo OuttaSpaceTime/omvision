@@ -44,7 +44,7 @@ Item {
         var e = entries[i]
         if (Parser.dayKey(e.date) !== todayKey) continue
         out.push({
-          date: e.date, type: e.type, time: e.heading.split(" ").pop(),
+          date: e.date, type: e.type, time: Parser.entryTime(e),
           focus: e.focus || "", done: e.done || "", left: e.left || "",
           other: e.other || "", kind: e.kind || "", title2: e.title || "",
           minutes: e.minutes || 0, goalTitle: title, goalSlug: slug
@@ -59,7 +59,7 @@ Item {
         var eo = oentries[o]
         if (Parser.dayKey(eo.date) !== todayKey) continue
         out.push({
-          date: eo.date, type: eo.type, time: eo.heading.split(" ").pop(),
+          date: eo.date, type: eo.type, time: Parser.entryTime(eo),
           focus: eo.focus || "", done: eo.done || "", left: eo.left || "",
           other: eo.other || "", kind: eo.kind || "", title2: eo.title || "",
           minutes: eo.minutes || 0, goalTitle: oslug, goalSlug: oslug
@@ -72,7 +72,7 @@ Item {
       var e2 = dl[j]
       if (Parser.dayKey(e2.date) !== todayKey) continue
       out.push({
-        date: e2.date, type: e2.type, time: e2.heading.split(" ").pop(),
+        date: e2.date, type: e2.type, time: Parser.entryTime(e2),
         focus: e2.focus || "", done: e2.done || "", left: e2.left || "",
         other: e2.other || "", kind: e2.kind || "", title2: e2.title || "",
         minutes: e2.minutes || 0, goalTitle: "", goalSlug: ""
@@ -133,7 +133,7 @@ Item {
 
       Rectangle {
         width: parent.width
-        height: 1
+        height: Theme.hairlineWidth
         color: Theme.hairline
       }
     }
@@ -169,7 +169,7 @@ Item {
               anchors.left: parent.left
               anchors.right: parent.right
               anchors.top: parent.top
-              height: 1
+              height: Theme.hairlineWidth
               color: Theme.hairline
               visible: rowItem.index > 0
             }
@@ -284,7 +284,7 @@ Item {
         Item {
           visible: root.todayList.length === 0
           width: rowsColumn.width
-          height: 60
+          height: Theme.emptyRowHeight
           Text {
             anchors.centerIn: parent
             text: "Nothing logged today."

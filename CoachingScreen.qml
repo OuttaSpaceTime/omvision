@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell.Io
 
-import "Parser.js" as Parser
+import "Util.js" as Util
 
 // Coaching — the hand-off screen, minus anything that writes (plan.md
 // Milestone 4 / C2). Goal + method are local UI state only (they pick which
@@ -31,17 +31,7 @@ Item {
   readonly property string command:
     "claude /ompom-coach " + root.selectedSlug + " --method " + methodFlag(root.selectedMethod)
 
-  function buildGoalList(data) {
-    var out = []
-    for (var slug in data) {
-      var g = data[slug]
-      if (!g || !g.meta) continue
-      out.push({ slug: slug, meta: g.meta })
-    }
-    out.sort(function(a, b) { return a.meta.title < b.meta.title ? -1 : (a.meta.title > b.meta.title ? 1 : 0) })
-    return out
-  }
-  readonly property var goalList: buildGoalList(root.goalsData)
+  readonly property var goalList: Util.goalsByTitle(root.goalsData)
 
   function findGoal(slug) {
     for (var i = 0; i < goalList.length; i++) if (goalList[i].slug === slug) return goalList[i]
@@ -84,7 +74,7 @@ Item {
 
   Timer {
     id: copiedTimer
-    interval: 1300
+    interval: Theme.copiedFeedbackDuration
     onTriggered: copyBtn.label = "copy"
   }
 
@@ -161,7 +151,7 @@ Item {
 
                 MouseArea {
                   anchors.fill: parent
-                  anchors.margins: -4
+                  anchors.margins: -Theme.chipHitSlop
                   cursorShape: Qt.PointingHandCursor
                   onClicked: root.selectedSlug = parent.modelData.slug
                 }
@@ -199,7 +189,7 @@ Item {
 
                 MouseArea {
                   anchors.fill: parent
-                  anchors.margins: -4
+                  anchors.margins: -Theme.chipHitSlop
                   cursorShape: Qt.PointingHandCursor
                   onClicked: root.selectedMethod = parent.modelData
                 }
@@ -225,7 +215,7 @@ Item {
             width: parent.width
             height: Theme.smallControlHeight + Theme.spaceSm * 2
             border.color: Theme.border
-            border.width: 1
+            border.width: Theme.borderWidth
             color: "transparent"
 
             RowLayout {
@@ -340,12 +330,12 @@ Item {
 
                 Rectangle {
                   width: parent.width
-                  height: 1
+                  height: Theme.hairlineWidth
                   color: Theme.hairline
                   visible: index > 0
                 }
 
-                Item { width: 1; height: index > 0 ? Theme.spaceSm : 0 }
+                Item { width: parent.width; height: index > 0 ? Theme.spaceSm : 0 }
 
                 RowLayout {
                   width: parent.width
@@ -379,7 +369,7 @@ Item {
                   color: Theme.dim
                 }
 
-                Item { width: 1; height: Theme.spaceSm }
+                Item { width: parent.width; height: Theme.spaceSm }
               }
             }
           }

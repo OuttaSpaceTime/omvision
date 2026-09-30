@@ -625,6 +625,7 @@ Item {
     // so the text stays still while the sidebar slides in beside it.
     TextEdit {
       id: editor
+      objectName: "journalEditor"
       x: Theme.pageX(canvas.width, root.leftInset)
       // Clears the sticky header (which floats over this Flickable rather
       // than sitting in it) and then some: the first line of the day starts
