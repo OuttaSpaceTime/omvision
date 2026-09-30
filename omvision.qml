@@ -752,9 +752,17 @@ ShellRoot {
         border.width: Theme.borderWidth
         z: 1000
 
+        // Bounded by the box and wrapping, so a long message grows the
+        // banner downwards instead of running out of the window at 720px.
+        // The box sizes itself from the text's *implicit* (unwrapped) width
+        // and the text takes its width from the box; sizing the box from
+        // the text's actual width would be a binding loop.
         Text {
           id: bannerText
           anchors.centerIn: parent
+          width: parent.width - Theme.spaceMd * 2
+          wrapMode: Text.Wrap
+          horizontalAlignment: Text.AlignHCenter
           text: root.writeError
           font.family: Theme.fontFamily
           font.pixelSize: Theme.bodySmallSize
