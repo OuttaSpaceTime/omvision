@@ -46,8 +46,9 @@ OmvisionTest {
     type("Draft the intro")
     compare(goalDetail.editTaskText, "Draft the intro")
     clickAway()
-    // Writer.editTask keeps the ≈3 and collapses its alignment spaces.
-    expectFile(goal, edited("- [ ] Draft the summary   ≈3", "- [ ] Draft the intro ≈3"))
+    // Writer.editTask replaces only the text: the ≈3 and its alignment
+    // spaces stay as they were.
+    expectFile(goal, edited("- [ ] Draft the summary   ≈3", "- [ ] Draft the intro   ≈3"))
     tryCompare(goalDetail, "editingTaskIndex", -1)
   }
 

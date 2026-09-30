@@ -41,14 +41,25 @@ TestCase {
     return text.slice(0, at) + to + text.slice(at + from.length)
   }
 
-  // Files the contract says are not goal files (goal-files.md §6). Every
-  // entry point that edits a goal file must refuse them with null.
+  // Files the contract says are not goal files (goal-files.md §6), and
+  // Parser.parseGoalFile skips. Every entry point that edits a goal file
+  // must refuse them with null: Writer may only edit what the app can show.
   readonly property var notGoalFiles: [
     "## Tasks\n- [ ] no front matter\n",
     "---\ntitle: never closed\n## Tasks\n- [ ] a\n",
     "title: no fences\n## Tasks\n- [ ] a\n",
-    ""
+    "",
+    "---\ntitle: T\njust a sentence\n---\n## Tasks\n- [ ] a\n",
+    "---\r\ntitle: T\r\njust a sentence\r\n---\r\n## Tasks\r\n- [ ] a\r\n",
+    "---\ntitle: T\n  continued\n---\n## Tasks\n- [ ] a\n",
+    "---\nwhy: no title\nstatus: active\n---\n## Tasks\n- [ ] a\n",
+    "---\ntitle:\n---\n## Tasks\n- [ ] a\n"
   ]
+
+  function test_notGoalFiles_are_what_parser_skips() {
+    for (var i = 0; i < notGoalFiles.length; i++)
+      compare(Parser.parseGoalFile(notGoalFiles[i]), null, JSON.stringify(notGoalFiles[i]))
+  }
 
   // ---- line helpers ------------------------------------------------------
   function test_detectEol() {
@@ -233,21 +244,45 @@ TestCase {
   }
 
   // ---- editTask ------------------------------------------------------------
+  // Only the text changes: the ≈N stays, and so does the run of alignment
+  // spaces before it, which the coach skill writes as three and asks every
+  // writer to keep. (editTask used to rebuild it as " ≈N".)
   function test_editTask_keeps_estimate() {
-    // The ≈N stays, but the run of alignment spaces before it collapses to
-    // one: editTask rebuilds the line as "<marker><text> ≈N". Parser reads
-    // the same estimate either way. Pinned here so a change is deliberate.
-    var want = edited(goal, "- [ ] Write docs/goal-files.md   ≈2", "- [ ] Write the doc ≈2")
+    var want = edited(goal, "- [ ] Write docs/goal-files.md   ≈2", "- [ ] Write the doc   ≈2")
     compare(apply(goal, function(l) { return Writer.editTask(l, 1, "Write the doc") }), want)
+    compare(apply(crlf(goal), function(l) { return Writer.editTask(l, 1, "Write the doc") }), crlf(want), "CRLF")
     compare(Parser.parseGoalFile(want).tasks[1].estimate, 2)
     compare(Parser.parseGoalFile(want).tasks[1].text, "Write the doc")
+  }
+
+  // Every suffix shape Parser.splitTaskBody cuts off, kept byte for byte;
+  // and a "≈ 5" that isn't an estimate is text, so it is replaced.
+  function test_editTask_keeps_suffix_data() {
+    return [
+      { tag: "one space", line: "- [ ] a ≈3", want: "- [ ] new ≈3" },
+      { tag: "no space", line: "- [ ] d≈4", want: "- [ ] new≈4" },
+      { tag: "tab", line: "- [ ] a\t≈3", want: "- [ ] new\t≈3" },
+      { tag: "trailing space after ≈N", line: "- [ ] a   ≈3  ", want: "- [ ] new   ≈3  " },
+      { tag: "trailing space, no ≈N", line: "- [ ] a   ", want: "- [ ] new   " },
+      { tag: "not an estimate", line: "- [ ] e ≈ 5", want: "- [ ] new" },
+      { tag: "two ≈, the last counts", line: "- [ ] a ≈3   ≈4", want: "- [ ] new   ≈4" },
+      { tag: "only an estimate", line: "- [ ] ≈2", want: "- [ ] new≈2" }
+    ]
+  }
+  function test_editTask_keeps_suffix(row) {
+    var before = "---\ntitle: T\n---\n## Tasks\n" + row.line + "\n"
+    var want = "---\ntitle: T\n---\n## Tasks\n" + row.want + "\n"
+    compare(apply(before, function(l) { return Writer.editTask(l, 0, "new") }), want)
+    compare(Parser.parseGoalFile(want).tasks[0].text, "new", "the row shows the new text")
+    compare(Parser.parseGoalFile(want).tasks[0].estimate, Parser.parseGoalFile(before).tasks[0].estimate,
+            "and the same estimate")
   }
 
   function test_editTask_keeps_done_marker() {
     compare(apply(goal, function(l) { return Writer.editTask(l, 0, "Read it all") }),
             edited(goal, "- [x] Read the plan and notes-helper.py", "- [x] Read it all"))
     compare(apply(oddTasks, function(l) { return Writer.editTask(l, 2, "tres") }),
-            edited(oddTasks, "- [X] three   \n", "- [X] tres\n"), "uppercase X kept")
+            edited(oddTasks, "- [X] three   \n", "- [X] tres   \n"), "uppercase X and trailing spaces kept")
     compare(apply(oddTasks, function(l) { return Writer.editTask(l, 1, "dos") }),
             edited(oddTasks, "-[x] two\n", "-[x] dos\n"), "a marker with no space before its box")
     compare(Parser.parseGoalFile(apply(oddTasks, function(l) { return Writer.editTask(l, 1, "dos") })).tasks[1].text, "dos")
@@ -277,15 +312,14 @@ TestCase {
   }
 
   // ---- task edits refuse files that aren't goal files -----------------------
-  // goal-files.md §6: a file with no front matter, or front matter that never
-  // closes, "is not a goal file ... leave it alone, drop the operation", and
-  // Writer.js's header promises null "on anything it can't safely edit".
-  // setStatus and updateGoalFields honour that. The task edits only look for
-  // "## Tasks" and never check the front matter, and omvision.qml doesn't
-  // check either before calling them, so a goal file broken by a
-  // half-finished hand edit still gets a task ticked, added or rewritten
-  // (addTask even creates "## Tasks" at the top of a file with no front
-  // matter). Expected to fail until Writer.js checks findFrontMatter() here.
+  // goal-files.md §6: a file with no front matter, or front matter that
+  // doesn't parse, "is not a goal file ... leave it alone, drop the
+  // operation", and Writer.js's header promises null "on anything it can't
+  // safely edit". The task edits used to look only for "## Tasks", so a
+  // goal file broken by a half-finished hand edit still got a task ticked,
+  // added or rewritten, and addTask even created "## Tasks" at the top of a
+  // file with no front matter. Every row but the empty file has a task at
+  // index 0, so toggleTask and editTask can only be refusing the file.
   function test_task_edits_refuse_non_goal_files_data() {
     var rows = []
     for (var i = 0; i < notGoalFiles.length; i++) rows.push({ tag: "file " + i, text: notGoalFiles[i] })
@@ -293,17 +327,9 @@ TestCase {
   }
   function test_task_edits_refuse_non_goal_files(row) {
     var text = row.text
-    // The empty file has no task to tick or edit, so those two return null
-    // for that reason already; only addTask can show the bug there.
-    if (text.indexOf("- [ ]") !== -1) {
-      expectFailContinue("", "BUG: toggleTask ignores missing/unterminated front matter")
-      compare(apply(text, function(l) { return Writer.toggleTask(l, 0) }), null, "toggleTask")
-    }
-    if (text.indexOf("- [ ]") !== -1) {
-      expectFailContinue("", "BUG: editTask ignores missing/unterminated front matter")
-      compare(apply(text, function(l) { return Writer.editTask(l, 0, "x") }), null, "editTask")
-    }
-    expectFailContinue("", "BUG: addTask ignores missing/unterminated front matter")
+    compare(apply(text, function(l) { return Writer.toggleTask(l, 0) }), null, "toggleTask")
+    compare(apply(text, function(l) { return Writer.editTask(l, 0, "x") }), null, "editTask")
+    compare(apply(text, function(l) { return Writer.editTask(l, 0, "") }), null, "editTask, deleting")
     compare(apply(text, function(l) { return Writer.addTask(l, "x") }), null, "addTask")
   }
 
@@ -336,15 +362,29 @@ TestCase {
 
   // Front matter that is fenced but has a line that isn't `key: value`.
   // Parser.parseGoalFile skips such a file as not a goal file (§6: "front
-  // matter that doesn't parse -> skip the whole file"); Writer's
-  // findFrontMatter only looks for the two fences, so it still edits it.
-  // Minor -- it only touches the status line -- but it is the "don't guess"
-  // rule broken. Expected to fail until findFrontMatter checks the lines.
+  // matter that doesn't parse -> skip the whole file"). Writer used to
+  // check only for the two fences and set the status anyway; it now asks
+  // Parser.goalFrontMatter, the same function the parser reads through.
   function test_setStatus_refuses_unparseable_front_matter() {
     var text = "---\ntitle: T\njust a sentence\n---\n## Tasks\n"
     compare(Parser.parseGoalFile(text), null, "the parser skips this file")
-    expectFailContinue("", "BUG: Writer edits front matter Parser rejects")
     compare(apply(text, function(l) { return Writer.setStatus(l, "done") }), null)
+    compare(apply(crlf(text), function(l) { return Writer.setStatus(l, "done") }), null, "CRLF")
+  }
+
+  function test_setStatus_unchanged_is_untouched() {
+    var text = "---\ntitle: T\nstatus: done  \n---\n"
+    compare(apply(text, function(l) { return Writer.setStatus(l, "done") }), text,
+            "already done: the line, trailing spaces and all, is left alone")
+    compare(apply(text, function(l) { return Writer.setStatus(l, "active") }), "---\ntitle: T\nstatus: active\n---\n")
+  }
+
+  // A blank status would read as "remove the key", and a goal with no
+  // status reads as active: a silent reopen. Nothing asks for it.
+  function test_setStatus_blank_is_null() {
+    compare(apply(goal, function(l) { return Writer.setStatus(l, "") }), null)
+    compare(apply(goal, function(l) { return Writer.setStatus(l, " ") }), null)
+    compare(apply(goal, function(l) { return Writer.setStatus(l, null) }), null)
   }
 
   // ---- updateGoalFields ------------------------------------------------------
@@ -382,6 +422,46 @@ TestCase {
             "the comment survives an edit of another key")
     compare(apply(coached, function(l) { return Writer.updateGoalFields(l, fields({ estimate: "4" })) }),
             edited(goal, "estimate: 3\n", "estimate: 4\n"), "a real change replaces value and comment")
+    compare(apply(crlf(coached), function(l) { return Writer.updateGoalFields(l, fields({ estimate: "6" })) }),
+            crlf(coached), "CRLF")
+    compare(apply(coached, function(l) { return Writer.updateGoalFields(l, fields({ estimate: "" })) }),
+            edited(goal, "estimate: 3\n", ""), "clearing the estimate takes the note with it")
+  }
+
+  // The note in the other shapes a coach or a hand edit could leave. What
+  // is a note here is exactly what Parser reads as one (tst_parser.qml's
+  // test_estimate_note): "#" at the start of the value or after
+  // whitespace, on `estimate` only. `shows` is the estimate the goal detail
+  // shows; saving that number back unchanged must keep the line as it is.
+  function test_updateGoalFields_estimate_note_shapes_data() {
+    return [
+      { tag: "one space", line: "estimate: 6 # was 9", shows: 6 },
+      { tag: "tab", line: "estimate: 6\t# was 9", shows: 6 },
+      { tag: "no text after #", line: "estimate: 6   #", shows: 6 },
+      { tag: "trailing spaces", line: "estimate: 6   # was 9  ", shows: 6 },
+      { tag: "note only", line: "estimate: # was 9", shows: undefined },
+      { tag: "no space before #", line: "estimate: 6#9", shows: undefined }
+    ]
+  }
+  function test_updateGoalFields_estimate_note_shapes(row) {
+    var text = goal.replace("estimate: 3\n", row.line + "\n")
+    compare(Parser.parseGoalFile(text).estimate, row.shows, "what the detail shows")
+    if (row.shows !== undefined) {
+      compare(apply(text, function(l) { return Writer.updateGoalFields(l, fields({ estimate: String(row.shows) })) }), text,
+              "saving the value Parser read keeps the line")
+    }
+    compare(apply(text, function(l) { return Writer.updateGoalFields(l, fields({ estimate: "7" })) }),
+            edited(text, row.line + "\n", "estimate: 7\n"), "a new value replaces it")
+  }
+
+  // An estimate of 0 is "no poms left", not "no estimate" (§6 keeps absent
+  // and zero apart), so it is written, and a numeric 0 isn't mistaken for
+  // an empty field.
+  function test_updateGoalFields_zero_estimate() {
+    var want = edited(goal, "estimate: 3\n", "estimate: 0\n")
+    compare(apply(goal, function(l) { return Writer.updateGoalFields(l, fields({ estimate: 0 })) }), want)
+    compare(apply(goal, function(l) { return Writer.updateGoalFields(l, fields({ estimate: "0" })) }), want)
+    compare(Parser.parseGoalFile(want).estimate, 0)
   }
 
   function test_updateGoalFields_removes_and_inserts() {
@@ -409,36 +489,83 @@ TestCase {
     compare(apply(row.text, function(l) { return Writer.updateGoalFields(l, fields({})) }), null)
   }
 
-  // setFrontMatterValue strips a trailing "# comment" before comparing, for
-  // the coach's estimate note. It does that for every key, so a title or why
-  // that legitimately contains " #" can't be shortened to the part before
-  // it: renaming "Fix bug #12" to "Fix bug" is taken as "unchanged" and
-  // silently not written (and the dialog reports success). Expected to fail
-  // until the comment rule is limited to the estimate (or to values that
-  // differ only by the comment the file already has).
+  // setFrontMatterValue used to strip a trailing "# comment" from every key
+  // before comparing, not just the estimate, so renaming "Fix bug #12" to
+  // "Fix bug" was taken as "unchanged" and silently not written (and the
+  // dialog reported success). In title, why and done_by, "#" is text.
   function test_updateGoalFields_hash_in_title() {
     var text = "---\ntitle: Fix bug #12\nwhy: W\n---\n"
-    expectFailContinue("", "BUG: '# comment' stripping applies to title/why")
     compare(apply(text, function(l) { return Writer.updateGoalFields(l, { title: "Fix bug", why: "W" }) }),
             "---\ntitle: Fix bug\nwhy: W\n---\n")
+    compare(apply(crlf(text), function(l) { return Writer.updateGoalFields(l, { title: "Fix bug", why: "W" }) }),
+            crlf("---\ntitle: Fix bug\nwhy: W\n---\n"), "CRLF")
+  }
+
+  // A title, why or done_by with "#" in it round-trips: written whole, read
+  // back whole, and saved unchanged without a rewrite.
+  function test_updateGoalFields_hash_round_trip() {
+    var bare = "---\ntitle: Fix bug\nwhy: W\n---\n"
+    var hashed = "---\ntitle: Fix bug #12\nwhy: see # 4 # and #5\ndone_by: 2026-10-01 # soft\n---\n"
+    var f = { title: "Fix bug #12", why: "see # 4 # and #5", doneBy: "2026-10-01 # soft" }
+    compare(apply(bare, function(l) { return Writer.updateGoalFields(l, f) }), hashed)
+    var m = Parser.parseGoalFile(hashed)
+    compare(m.title, "Fix bug #12")
+    compare(m.why, "see # 4 # and #5")
+    compare(m.done_by, "2026-10-01 # soft")
+    compare(apply(hashed, function(l) { return Writer.updateGoalFields(l, f) }), hashed, "saved unchanged")
+    compare(apply(hashed, function(l) { return Writer.updateGoalFields(l, { title: "Fix bug #12", why: "see # 4 # and #5", doneBy: "2026-10-01" }) }),
+            "---\ntitle: Fix bug #12\nwhy: see # 4 # and #5\ndone_by: 2026-10-01\n---\n",
+            "done_by's \"# soft\" is text, so dropping it is a change")
+  }
+
+  // A hand edit can leave a key twice. Parser reads the last line (as
+  // notes-helper.py's dict does), so that is the line Writer edits; and
+  // clearing a key clears every line of it, or the earlier one would show.
+  function test_updateGoalFields_repeated_key() {
+    var text = "---\ntitle: A\ntitle: B\nestimate: 3\nestimate: 5\n---\n"
+    compare(Parser.parseGoalFile(text).title, "B")
+    compare(apply(text, function(l) { return Writer.updateGoalFields(l, { title: "C", estimate: "5" }) }),
+            "---\ntitle: A\ntitle: C\nestimate: 3\nestimate: 5\n---\n", "the line the reader shows")
+    compare(apply(text, function(l) { return Writer.updateGoalFields(l, { title: "B", estimate: "" }) }),
+            "---\ntitle: A\ntitle: B\n---\n", "every estimate line")
+    compare(apply(text, function(l) { return Writer.updateGoalFields(l, { title: "B", estimate: "3" }) }),
+            "---\ntitle: A\ntitle: B\nestimate: 3\nestimate: 3\n---\n")
   }
 
   // ---- appendCancelNote --------------------------------------------------------
-  // Note the result has no final newline: the trailing blank lines are
-  // trimmed and the section is appended after them. Pinned here as current
-  // behaviour; nothing reads that file by appending to it.
+  // The trailing blank lines are trimmed and the section appended after one
+  // blank line. The file's final newline is kept (it used to be trimmed
+  // along with the blank lines, leaving the file ending mid-line, where the
+  // next append would glue onto "takeaway: ..."), and a file without one
+  // doesn't gain one.
   readonly property string cancelSection:
-    "\n## Cancelled\n### 30 Sep 10:00\nreason: Lost interest\ntakeaway: Pick smaller goals"
+    "\n## Cancelled\n### 30 Sep 10:00\nreason: Lost interest\ntakeaway: Pick smaller goals\n"
+
+  function cancelNote(l) { return Writer.appendCancelNote(l, "30 Sep 10:00", "Lost interest", "Pick smaller goals") }
 
   function test_appendCancelNote() {
-    compare(apply(goal, function(l) { return Writer.appendCancelNote(l, "30 Sep 10:00", "Lost interest", "Pick smaller goals") }),
-            goal + cancelSection)
-    compare(apply(goal + "\n\n  \n", function(l) { return Writer.appendCancelNote(l, "30 Sep 10:00", "Lost interest", "Pick smaller goals") }),
-            goal + cancelSection, "trailing blank lines don't pile up")
-    compare(apply(crlf(goal), function(l) { return Writer.appendCancelNote(l, "30 Sep 10:00", "Lost interest", "Pick smaller goals") }),
-            crlf(goal + cancelSection))
+    compare(apply(goal, cancelNote), goal + cancelSection)
+    compare(apply(goal + "\n\n  \n", cancelNote), goal + cancelSection, "trailing blank lines don't pile up")
+    compare(apply(crlf(goal), cancelNote), crlf(goal + cancelSection))
+    compare(apply(crlf(goal) + "\r\n\r\n", cancelNote), crlf(goal + cancelSection), "CRLF, trailing blank lines")
     compare(apply(goal, function(l) { return Writer.appendCancelNote(l, "30 Sep 10:00", " Lost\ninterest ", "Pick\r\nsmaller goals") }),
             goal + cancelSection, "newlines collapse")
+  }
+
+  function test_appendCancelNote_no_final_newline() {
+    var text = goal.replace(/\n$/, "")
+    var want = goal + cancelSection.replace(/\n$/, "")
+    compare(apply(text, cancelNote), want)
+    compare(apply(crlf(text), cancelNote), crlf(want), "CRLF")
+  }
+
+  function test_appendCancelNote_refuses_non_goal_files_data() {
+    return test_setStatus_refuses_non_goal_files_data()
+  }
+  function test_appendCancelNote_refuses_non_goal_files(row) {
+    compare(apply(row.text, cancelNote), null)
+    compare(Writer.appendCancelNote(null, "30 Sep 10:00", "r", "t"), null,
+            "chained after a refused setStatus, it refuses too instead of throwing")
   }
 
   // Cancelling a goal is two Writer edits in one write: setStatus to
@@ -577,14 +704,23 @@ TestCase {
   }
 
   // NewGoalDialog passes the estimate as a Number, so typing 0 hands
-  // buildNewGoalFile a numeric 0. The presence check lets it through, but
-  // fmLine() formats `String(value || "")`, and 0 is falsy: the file gets
-  // "estimate: " with no value, which Parser reads as no estimate at all.
-  // Expected to fail until fmLine tests for null/undefined instead.
+  // buildNewGoalFile a numeric 0. fmLine() used to format it with
+  // `String(value || "")`, and 0 is falsy: the file got "estimate: " with no
+  // value, which Parser reads as no estimate at all. §6 keeps "absent" and
+  // "zero" apart, so 0 is written, not omitted.
   function test_buildNewGoalFile_zero_estimate() {
-    expectFailContinue("", "BUG: estimate 0 is written as an empty value")
-    compare(Writer.buildNewGoalFile({ title: "T", why: "W", estimate: 0 }),
-            "---\ntitle: T\nwhy: W\nstatus: active\nestimate: 0\n---\n## Tasks\n")
+    var want = "---\ntitle: T\nwhy: W\nstatus: active\nestimate: 0\n---\n## Tasks\n"
+    compare(Writer.buildNewGoalFile({ title: "T", why: "W", estimate: 0 }), want)
+    compare(Writer.buildNewGoalFile({ title: "T", why: "W", estimate: "0" }), want)
+    compare(Parser.parseGoalFile(want).estimate, 0)
+  }
+
+  // A "#" in a new goal's title or why is text, and reads back whole.
+  function test_buildNewGoalFile_hash_in_title() {
+    var text = Writer.buildNewGoalFile({ title: "Fix bug #12", why: "per #34 # and more" })
+    compare(text, "---\ntitle: Fix bug #12\nwhy: per #34 # and more\nstatus: active\n---\n## Tasks\n")
+    compare(Parser.parseGoalFile(text).title, "Fix bug #12")
+    compare(Parser.parseGoalFile(text).why, "per #34 # and more")
   }
 
   function test_buildNewGoalFile_parses_and_takes_a_task() {

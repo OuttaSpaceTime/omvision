@@ -92,16 +92,72 @@ TestCase {
 
   // goal-files.md §6 spells the coach's rewrite as
   // `estimate: 6   # was 9 — session 2`, and Writer.js goes out of its way
-  // to keep that comment. Parser reads the whole value with Number(), gets
-  // NaN, and reports no estimate: after a coach session the Goal detail
-  // header loses its "≈ N poms left" and the Goals list its estimate.
-  // (NewGoalDialog already works around this by reading raw.estimate.)
-  // Expected to fail until parseGoalFile reads the leading number.
+  // to keep that note. Parser used to read the whole value with Number(),
+  // get NaN, and report no estimate: after a coach session the Goal detail
+  // header lost its "≈ N poms left" and the Goals list its estimate. raw
+  // keeps the line's value as written.
   function test_parseGoalFile_coach_estimate_comment() {
-    var m = Parser.parseGoalFile(goal.replace("estimate: 3\n", "estimate: 6   # was 9 — session 2\n"))
+    var text = goal.replace("estimate: 3\n", "estimate: 6   # was 9 — session 2\n")
+    var m = Parser.parseGoalFile(text)
     compare(m.raw.estimate, "6   # was 9 — session 2")
-    expectFailContinue("", "BUG: `estimate: 6   # was 9` reads as no estimate")
     compare(m.estimate, 6)
+    compare(Parser.parseGoalFile(crlf(text)).estimate, 6, "CRLF")
+  }
+
+  // Which values carry a note: "#" at the start of the value or after
+  // whitespace (YAML's rule), and only on `estimate`, the one key §6 shows
+  // with a note and the only one where "#" can't be content.
+  function test_estimate_note_data() {
+    return [
+      { tag: "bare", v: "6", est: 6 },
+      { tag: "coach", v: "6   # was 9 — session 2", est: 6 },
+      { tag: "one space", v: "6 # was 9", est: 6 },
+      { tag: "tab", v: "6\t# was 9", est: 6 },
+      { tag: "empty note", v: "6 #", est: 6 },
+      { tag: "zero with a note", v: "0   # done, was 2", est: 0 },
+      { tag: "note only", v: "# was 9", est: undefined },
+      { tag: "no space before #", v: "6#9", est: undefined },
+      { tag: "a word, then a note", v: "six # was 9", est: undefined },
+      { tag: "two numbers", v: "6 7 # was 9", est: undefined }
+    ]
+  }
+  function test_estimate_note(row) {
+    compare(Parser.parseGoalFile("---\ntitle: T\nestimate: " + row.v + "\n---\n").estimate, row.est)
+  }
+
+  // In every other key "#" is text: a title like "Fix bug #12" is read whole.
+  function test_parseGoalFile_hash_is_text_elsewhere() {
+    var m = Parser.parseGoalFile("---\ntitle: Fix bug #12\nwhy: see # 4\nstatus: active # no\ndone_by: 2026-10-01 # soft\n---\n")
+    compare(m.title, "Fix bug #12")
+    compare(m.why, "see # 4")
+    compare(m.status, "active # no")
+    compare(m.done_by, "2026-10-01 # soft")
+    compare(Parser.parseGoalFile("---\ntitle: # not a note\n---\n").title, "# not a note")
+  }
+
+  function test_frontMatterValue() {
+    compare(Parser.frontMatterValue("estimate", "6   # was 9"), "6")
+    compare(Parser.frontMatterValue("estimate", " 6 "), "6")
+    compare(Parser.frontMatterValue("estimate", undefined), "")
+    compare(Parser.frontMatterValue("title", "Fix bug #12"), "Fix bug #12")
+    compare(Parser.frontMatterValue("why", " a # b "), "a # b")
+  }
+
+  // The one "is this a goal file" rule, which Writer.js also asks before
+  // every edit. Lines may carry trailing whitespace (Writer hands them over
+  // unrtrimmed); a repeated key's last line wins.
+  function test_goalFrontMatter() {
+    compare(Parser.goalFrontMatter(null), null)
+    compare(Parser.goalFrontMatter([]), null)
+    compare(Parser.goalFrontMatter(["", "---  ", "title: T ", "k: v", "---", "## Tasks"]), {
+      open: 1, close: 4, fields: { title: "T", k: "v" },
+      lineOf: { title: 2, k: 3 }, keyAt: { 2: "title", 3: "k" } })
+    var twice = Parser.goalFrontMatter(["---", "title: A", "title: B", "---"])
+    compare(twice.fields.title, "B")
+    compare(twice.lineOf.title, 2)
+    compare(Parser.goalFrontMatter(["---", "title: T", "prose", "---"]), null, "a line that isn't key: value")
+    compare(Parser.goalFrontMatter(["---", "why: W", "---"]), null, "no title")
+    compare(Parser.goalFrontMatter(["---", "title: T"]), null, "never closed")
   }
 
   // ---- tasks, coaching, cancelled ------------------------------------------------
@@ -116,6 +172,26 @@ TestCase {
       { done: false, text: "e ≈ 5", estimate: undefined }
     ])
     compare(Parser.parseTasks(["no", "tasks"]), [])
+  }
+
+  // text + suffix is always the whole body; Writer.editTask replaces the
+  // text and keeps the suffix, so this split is what an edit touches.
+  function test_splitTaskBody_data() {
+    return [
+      { tag: "coach alignment", b: "Write docs/goal-files.md   ≈2", text: "Write docs/goal-files.md", est: 2, suffix: "   ≈2" },
+      { tag: "no estimate", b: "plain", text: "plain", est: undefined, suffix: "" },
+      { tag: "trailing space", b: "plain  ", text: "plain", est: undefined, suffix: "  " },
+      { tag: "no space", b: "d≈4", text: "d", est: 4, suffix: "≈4" },
+      { tag: "after ≈N", b: "a ≈12  ", text: "a", est: 12, suffix: " ≈12  " },
+      { tag: "not an estimate", b: "e ≈ 5", text: "e ≈ 5", est: undefined, suffix: "" },
+      { tag: "two, the last counts", b: "a ≈3 ≈4", text: "a ≈3", est: 4, suffix: " ≈4" },
+      { tag: "only an estimate", b: "≈2", text: "", est: 2, suffix: "≈2" },
+      { tag: "empty", b: "", text: "", est: undefined, suffix: "" },
+      { tag: "null", b: null, text: "", est: undefined, suffix: "" }
+    ]
+  }
+  function test_splitTaskBody(row) {
+    compare(Parser.splitTaskBody(row.b), { text: row.text, estimate: row.est, suffix: row.suffix })
   }
 
   function test_parseCoaching() {

@@ -1,4 +1,5 @@
 .pragma library
+.import "Parser.js" as Parser
 
 // Write-path helpers for the ompom/Omvision file contract -- see
 // ~/Code/ompom-engine/docs/goal-files.md. Parser.js reads tolerantly;
@@ -10,6 +11,12 @@
 // caller (omvision.qml) must treat null as "do not write" (same posture
 // as every reader in Parser.js, and the same rule goal-files.md §6 sets
 // for a reader that can't parse a file).
+//
+// What counts as a goal file, and how a task line splits into text and
+// estimate, are Parser.js's rules, imported rather than copied: Writer
+// may only edit what the reader would show, and two copies of a rule
+// drift (they did -- see setFrontMatterValue and editTask). The
+// dependency runs one way, so Parser.js stays free of imports.
 //
 // `<slug>.md` is the only thing this file edits in place. `<slug>.log.md`
 // and the day files are append-only per the contract (§2) -- Writer.js
@@ -47,58 +54,63 @@ function rtrim(line) {
 }
 
 // ---- front matter ----------------------------------------------------------
-// Same restricted-YAML shape Parser.parseGoalFile reads (goal-files.md §6):
-// a "---" line (after any leading blank lines), then a closing "---" line.
-function findFrontMatter(lines) {
-  var i = 0
-  while (i < lines.length && rtrim(lines[i]) === "") i++
-  if (i >= lines.length || rtrim(lines[i]) !== "---") return null
-  var open = i
-  for (var j = i + 1; j < lines.length; j++) {
-    if (rtrim(lines[j]) === "---") return { open: open, close: j }
-  }
-  return null
-}
+// Whether a file is a goal file at all, and where its front matter is, is
+// Parser.goalFrontMatter()'s call, not this file's: every entry point below
+// that edits <slug>.md in place asks it first and returns null when it says
+// no (goal-files.md §6: "not a goal file ... leave it alone, drop the
+// operation, don't guess"). Writer used to keep its own fence-only check,
+// which passed files the parser skips (a stray line that isn't "key:
+// value", a missing title), and the task edits skipped the check entirely,
+// so a half-hand-edited file still got tasks ticked, rewritten, or a "##
+// Tasks" section stuck on top. Asking the reader means Writer never edits
+// a file the app can't show.
 
-// Sets (or, if absent, inserts) the `status:` front-matter key. Returns a
-// new lines array, or null if the file has no parseable front matter --
-// the caller must not write in that case (goal-files.md §6).
+// Sets `status:`, inserting it before the closing fence if absent. Goes
+// through setFrontMatterValue(), so closing an already-closed goal leaves
+// the line (and any trailing space on it) alone. A blank status is refused
+// rather than taken as setFrontMatterValue's "remove the key": nothing asks
+// for that, and a missing status reads as `active`, so it would be a silent
+// reopen.
 function setStatus(lines, newStatus) {
-  var fm = findFrontMatter(lines)
-  if (!fm) return null
-  var out = lines.slice()
-  for (var i = fm.open + 1; i < fm.close; i++) {
-    if (/^status:\s?/.test(rtrim(out[i]))) {
-      out[i] = "status: " + newStatus
-      return out
-    }
-  }
-  out.splice(fm.close, 0, "status: " + newStatus)
-  return out
+  if (String(newStatus === undefined || newStatus === null ? "" : newStatus).trim() === "") return null
+  return setFrontMatterValue(lines, "status", newStatus)
 }
 
 // Sets `key: value` in the front matter, inserting it before the closing
 // fence if absent; an empty value removes the key (estimate and done_by
-// are optional, and "absent" is how §6 spells "not set"). A line whose
-// value already equals `value` -- as written, or ignoring a trailing
-// "# comment" -- is left untouched, so saving the Edit goal dialog without
-// changing the estimate keeps the coach's "estimate: 6   # was 9" note.
+// are optional, and "absent" is how §6 spells "not set"). The line edited
+// is the one Parser read the value from (Parser.goalFrontMatter's lineOf:
+// the last one, if a hand edit left the key twice), and removing a key
+// removes every line of it, or clearing the later one would bring the
+// earlier one back.
+//
+// A line whose value already equals `value` is left untouched, so saving
+// the Edit goal dialog without changing anything rewrites nothing. "Equal"
+// ignores a trailing "# note" only where Parser.frontMatterValue() does,
+// which is `estimate` alone: saving the dialog keeps the coach's
+// "estimate: 6   # was 9" note, while a title of "Fix bug #12" is all
+// title, so renaming it "Fix bug" is a change and gets written. Applying
+// the note rule to every key was the old behaviour, and it swallowed that
+// rename without a word.
 function setFrontMatterValue(lines, key, value) {
-  var fm = findFrontMatter(lines)
+  var fm = Parser.goalFrontMatter(lines)
   if (!fm) return null
   var out = lines.slice()
   var v = (value === undefined || value === null) ? "" : String(value).replace(/[\r\n]+/g, " ").trim()
-  var re = new RegExp("^" + key + ":\\s?(.*)$")
-  for (var i = fm.open + 1; i < fm.close; i++) {
-    var m = rtrim(out[i]).match(re)
-    if (!m) continue
-    if (v === "") { out.splice(i, 1); return out }
-    var current = m[1].trim()
-    if (current === v || current.replace(/\s*#.*$/, "") === v) return out
-    out[i] = key + ": " + v
+  if (v === "") {
+    for (var i = fm.close - 1; i > fm.open; i--) {
+      if (fm.keyAt[i] === key) out.splice(i, 1)
+    }
     return out
   }
-  if (v !== "") out.splice(fm.close, 0, key + ": " + v)
+  var at = fm.lineOf[key]
+  if (at === undefined) {
+    out.splice(fm.close, 0, key + ": " + v)
+    return out
+  }
+  var current = fm.fields[key].trim()
+  if (current === v || Parser.frontMatterValue(key, current) === v) return out
+  out[at] = key + ": " + v
   return out
 }
 
@@ -115,8 +127,10 @@ function updateGoalFields(lines, fields) {
 }
 
 // ---- tasks -------------------------------------------------------------
-function findTasksSection(lines) {
-  for (var i = 0; i < lines.length; i++) {
+// Searches from `from`, the line after the front matter's closing fence:
+// the same lines Parser.parseTasks() is handed.
+function findTasksSection(lines, from) {
+  for (var i = from || 0; i < lines.length; i++) {
     if (/^##\s+Tasks\s*$/.test(rtrim(lines[i]))) {
       var start = i + 1
       var end = lines.length
@@ -132,10 +146,13 @@ function findTasksSection(lines) {
 // Flips the Nth task line's "[ ]"/"[x]" marker, 0-indexed in the same
 // top-to-bottom order Parser.parseTasks() reads them in -- that's what
 // keeps a UI row index and a file line in agreement. Returns null (do not
-// write) if there's no "## Tasks" section or the index is out of range,
-// e.g. because the file changed under us since the screen last read it.
+// write) if the file isn't a goal file, there's no "## Tasks" section or
+// the index is out of range, e.g. because the file changed under us since
+// the screen last read it.
 function toggleTask(lines, taskIndex) {
-  var sec = findTasksSection(lines)
+  var fm = Parser.goalFrontMatter(lines)
+  if (!fm) return null
+  var sec = findTasksSection(lines, fm.close + 1)
   if (!sec) return null
   var out = lines.slice()
   var seen = -1
@@ -162,13 +179,16 @@ function toggleTask(lines, taskIndex) {
 // exists but Tasks doesn't -- when the goal has none yet (§6: "no ##
 // Tasks section yet -> zero tasks, not an error", the state a
 // freshly-created or hand-written goal can be in). Returns null (no-op)
-// for blank input, matching the UI spec ("empty input is a no-op").
+// for blank input, matching the UI spec ("empty input is a no-op"), and
+// for a file that isn't a goal file, which gets no section added either.
 function addTask(lines, taskText) {
   var text = String(taskText || "").replace(/[\r\n]+/g, " ").trim()
   if (text === "") return null
+  var fm = Parser.goalFrontMatter(lines)
+  if (!fm) return null
 
   var out = lines.slice()
-  var sec = findTasksSection(out)
+  var sec = findTasksSection(out, fm.close + 1)
   if (sec) {
     var insertAt = sec.start
     for (var i = sec.start; i < sec.end; i++) {
@@ -178,8 +198,7 @@ function addTask(lines, taskText) {
     return out
   }
 
-  var fm = findFrontMatter(out)
-  var anchor = fm ? fm.close + 1 : 0
+  var anchor = fm.close + 1
   for (var k = anchor; k < out.length; k++) {
     if (/^##\s+Coaching\s*$/.test(rtrim(out[k]))) { anchor = k; break }
   }
@@ -187,17 +206,23 @@ function addTask(lines, taskText) {
   return out
 }
 
-// Replaces the Nth task line's text (same 0-indexed order as toggleTask),
-// keeping its "[ ]"/"[x]" marker and any trailing "≈N" estimate untouched
-// -- Parser.parseTasks() strips the estimate into its own field, so an
-// edit driven from that field's .text must not clobber it. Blank text
-// deletes the task line: emptying a task and saving it means "remove it".
-// Returns null (do not write) for an out-of-range index, same as
-// toggleTask.
+// Replaces the Nth task line's text (same 0-indexed order as toggleTask)
+// and nothing else. The "[ ]"/"[x]" marker and the spaces after it stay,
+// and so does the suffix Parser.splitTaskBody() cuts off the text -- a
+// "≈N" estimate with the run of spaces before it, and any trailing
+// whitespace -- byte for byte. Parser.parseTasks() shows the text without
+// that suffix, so an edit driven from the row's .text must not clobber it.
+// This used to rebuild the suffix as " ≈N", which collapsed the "   ≈2"
+// alignment the coach skill writes (and asks every writer to keep) on
+// each edit. Blank text deletes the task line: emptying a task and saving
+// it means "remove it". Returns null (do not write) for a file that isn't
+// a goal file or an out-of-range index, same as toggleTask.
 function editTask(lines, taskIndex, newText) {
   var text = String(newText || "").replace(/[\r\n]+/g, " ").trim()
 
-  var sec = findTasksSection(lines)
+  var fm = Parser.goalFrontMatter(lines)
+  if (!fm) return null
+  var sec = findTasksSection(lines, fm.close + 1)
   if (!sec) return null
   var out = lines.slice()
   var seen = -1
@@ -207,10 +232,7 @@ function editTask(lines, taskIndex, newText) {
     seen++
     if (seen === taskIndex) {
       if (text === "") { out.splice(i, 1); return out }
-      var body = m[4].replace(/\s+$/, "")
-      var em = body.match(/\s*≈\d+\s*$/)
-      var suffix = em ? em[0].replace(/^\s+/, " ") : ""
-      out[i] = m[1] + m[2] + m[3] + text + suffix
+      out[i] = m[1] + m[2] + m[3] + text + Parser.splitTaskBody(m[4]).suffix
       return out
     }
   }
@@ -225,14 +247,24 @@ function editTask(lines, taskIndex, newText) {
 // section: inert, never fatal, never mistaken for "## Coaching" (whose
 // heading it deliberately does not reuse). Trims trailing blank lines
 // first so this doesn't accumulate a growing gap on repeated writes.
+//
+// The file keeps its final newline, if it had one. Trimming used to take
+// it along with the blank lines, so a cancelled goal ended mid-line: a
+// change nobody asked for, and a trap for the next tool that appends to
+// the file (the coach's next "## Coaching" entry, an `echo >>`) and would
+// glue its first line onto "takeaway: ...". Returns null for a file that
+// isn't a goal file, like every other in-place edit here.
 function appendCancelNote(lines, headingTs, reasonLabel, takeaway) {
+  if (!Parser.goalFrontMatter(lines)) return null
   var out = lines.slice()
+  var finalNewline = out[out.length - 1] === ""
   while (out.length > 0 && rtrim(out[out.length - 1]) === "") out.pop()
   out.push("")
   out.push("## Cancelled")
   out.push("### " + headingTs)
   out.push("reason: " + String(reasonLabel || "").replace(/[\r\n]+/g, " ").trim())
   out.push("takeaway: " + String(takeaway || "").replace(/[\r\n]+/g, " ").trim())
+  if (finalNewline) out.push("")
   return out
 }
 
@@ -329,13 +361,21 @@ function deriveSlug(title) {
 // pair per line with no multi-line values, so a value that contains a
 // newline (pasted text, a stray CR) would silently corrupt the file's
 // shape -- collapse it to spaces and trim before it ever reaches a line.
+// Only null and undefined count as "no value": a `value || ""` test here
+// once turned an estimate of 0 into "estimate: " with nothing after it.
 function fmLine(key, value) {
-  return key + ": " + String(value || "").replace(/[\r\n]+/g, " ").trim()
+  var s = (value === undefined || value === null) ? "" : String(value)
+  return key + ": " + s.replace(/[\r\n]+/g, " ").trim()
 }
 
 // Builds a brand-new <slug>.md from scratch: front matter (title, why,
 // status: active, plus estimate/done_by only when the caller supplied
 // them) and an empty "## Tasks" section, per the "New goal" dialog spec.
+// An estimate of 0 is written as "estimate: 0", not left out: §6 keeps
+// "absent" and "zero" apart ("Missing estimate -> simply absent ... not a
+// zero"), Parser reads 0 as 0, and the goal detail shows "≈ 0 poms left",
+// which is what the user typed. Omitting it would turn their answer into
+// "no estimate".
 // Always "\n" line endings -- there is no pre-existing file whose EOL
 // style this needs to match, unlike every other Writer.js entry point.
 function buildNewGoalFile(fields) {

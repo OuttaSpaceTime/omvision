@@ -30,39 +30,88 @@ function rtrim(line) {
 }
 
 // ---- §6 front matter -------------------------------------------------------
-// Restricted YAML subset: a "---" line, one "key: value" pair per line, a
-// closing "---" line. Anything else (no closing fence, a stray line that
-// isn't "key: value", no fence at all) is not a goal file: skip the whole
-// file. Missing `title` also means skip.
+// Restricted YAML subset: a "---" line (after any leading blank lines), one
+// "key: value" pair per line, a closing "---" line. Anything else (no
+// closing fence, a stray line that isn't "key: value", no fence at all) is
+// not a goal file: skip the whole file. Missing `title` also means skip.
+//
+// goalFrontMatter() is that rule, and the only copy of it: parseGoalFile()
+// reads through it, and Writer.js calls it before every in-place edit and
+// refuses (returns null) whenever it does. Writer used to carry its own
+// check that only looked for the two fences, so it would edit a file this
+// parser had already skipped -- a status set on a file the Goals screen
+// doesn't list. One function means the two can't drift apart again.
+//
+// Takes lines as Writer.splitLines() or normalize().split() give them (no
+// "\r"; trailing whitespace is ignored here, and left on the lines for
+// Writer to keep). Returns null, or:
+//   open, close  the indices of the two fence lines
+//   fields       key -> value as written (after "key:" and at most one
+//                space), for every key; a repeated key's last line wins
+//   lineOf       key -> the index of the line `fields` took the value from,
+//                so a Writer edit lands on the line the reader shows
+//   keyAt        line index -> key, for each line between the fences
+var FRONT_MATTER_LINE = /^([A-Za-z0-9_-]+):\s?(.*)$/
+
+function goalFrontMatter(lines) {
+  if (!lines) return null
+  var i = 0
+  while (i < lines.length && rtrim(lines[i]) === "") i++
+  if (i >= lines.length || rtrim(lines[i]) !== "---") return null
+
+  var fm = { open: i, close: -1, fields: {}, lineOf: {}, keyAt: {} }
+  for (var j = i + 1; j < lines.length; j++) {
+    var line = rtrim(lines[j])
+    if (line === "---") { fm.close = j; break }
+    var m = line.match(FRONT_MATTER_LINE)
+    if (!m) return null // a line that isn't key: value and isn't the fence
+    fm.fields[m[1]] = m[2]
+    fm.lineOf[m[1]] = j
+    fm.keyAt[j] = m[1]
+  }
+  if (fm.close === -1) return null
+  if (!fm.fields.title) return null
+  return fm
+}
+
+// A front-matter value with its trailing "# note" removed, for the keys
+// that may carry one. goal-files.md §6 shows exactly one such note, the
+// coach's `estimate: 6   # was 9 — session 2`, and never one on any other
+// key, so only `estimate` gets this treatment. That is also the only key
+// where it is safe: an estimate is a number and can't contain "#", while
+// title, why and done_by are free text in which "#" is content -- "Fix bug
+// #12" is a title, not "Fix bug" plus a note. (Stripping it from every key
+// was tried, in Writer.js, and made that rename impossible.) As in YAML,
+// "#" starts a note only at the start of the value or after whitespace, so
+// "6#9" is not 6.
+//
+// Writer.setFrontMatterValue() uses the same function to tell "the dialog
+// saved the estimate unchanged" (keep the note) from a real change.
+var COMMENT_KEYS = { estimate: true }
+
+function frontMatterValue(key, raw) {
+  var v = String(raw === undefined || raw === null ? "" : raw)
+  if (COMMENT_KEYS[key] === true) v = v.replace(/(^|\s)#.*$/, "")
+  return v.trim()
+}
+
 function parseGoalFile(text) {
   var lines = normalize(text).split("\n").map(rtrim)
-  var i = 0
-  while (i < lines.length && lines[i] === "") i++
-  if (i >= lines.length || lines[i] !== "---") return null
-
-  var fm = {}
-  i++
-  var closed = false
-  for (; i < lines.length; i++) {
-    if (lines[i] === "---") { closed = true; i++; break }
-    var m = lines[i].match(/^([A-Za-z0-9_-]+):\s?(.*)$/)
-    if (!m) return null // a line that isn't key: value and isn't the fence
-    fm[m[1]] = m[2]
-  }
-  if (!closed) return null
-  if (!fm.title) return null
+  var front = goalFrontMatter(lines)
+  if (!front) return null
+  var fm = front.fields
+  var est = frontMatterValue("estimate", fm.estimate)
 
   var meta = {
     title: fm.title,
     why: fm.why !== undefined ? fm.why : "",
     status: fm.status ? fm.status : "active",
-    estimate: (fm.estimate !== undefined && fm.estimate !== "" && !isNaN(Number(fm.estimate)))
-      ? Number(fm.estimate) : undefined,
+    estimate: (est !== "" && !isNaN(Number(est))) ? Number(est) : undefined,
     done_by: fm.done_by ? fm.done_by : undefined,
     raw: fm
   }
 
-  var rest = lines.slice(i)
+  var rest = lines.slice(front.close + 1)
   meta.tasks = parseTasks(rest)
   meta.coaching = parseCoaching(rest)
   meta.cancelled = parseCancelNote(rest)
@@ -85,20 +134,34 @@ function parseTasks(lines) {
     if (line.match(/^##\s+/)) break // next section
     var m = line.match(/^-\s*\[( |x|X)\]\s*(.*)$/)
     if (!m) continue
-    var body = m[2]
-    var estimate = undefined
-    var em = body.match(/^(.*?)\s*≈(\d+)\s*$/)
-    if (em) {
-      body = em[1]
-      estimate = Number(em[2])
-    }
+    var body = splitTaskBody(m[2])
     tasks.push({
       done: (m[1] === "x" || m[1] === "X"),
-      text: body.replace(/\s+$/, ""),
-      estimate: estimate
+      text: body.text,
+      estimate: body.estimate
     })
   }
   return tasks
+}
+
+// A task line's body (what follows "- [ ] ") cut into the task's text and
+// the suffix after it: an optional "≈N" with whatever spaces sit before it,
+// then any trailing whitespace. text + suffix is always the whole body, and
+// text never ends in whitespace. parseTasks() shows `text` and `estimate`;
+// Writer.editTask() replaces `text` and keeps `suffix` byte for byte, so
+// the coach's "   ≈2" alignment survives an edit. Sharing the split is what
+// makes "the text the row shows" and "the text an edit replaces" the same
+// characters. "≈ 5" (a space after the sign) is not an estimate, as before.
+function splitTaskBody(body) {
+  var s = String(body === undefined || body === null ? "" : body)
+  var m = s.match(/^(.*?)(\s*≈(\d+))?\s*$/)
+  // Only a stray line break defeats "." -- callers split lines first.
+  if (!m) return { text: s, estimate: undefined, suffix: "" }
+  return {
+    text: m[1],
+    estimate: m[3] !== undefined ? Number(m[3]) : undefined,
+    suffix: s.slice(m[1].length)
+  }
 }
 
 // ---- "## Coaching" section ----------------------------------------------------

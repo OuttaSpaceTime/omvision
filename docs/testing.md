@@ -145,15 +145,9 @@ scheduler drives the logger at every step. It borrows the real `TestResult` only
 Bugs a test has found but that aren't fixed yet are pinned with
 `expectFailContinue("", "BUG: ...")`. They report as `XFAIL` and don't fail the run. When
 one is fixed the assertion passes, which is reported as `XPASS` and fails the run, as a
-reminder to remove the `expectFailContinue`. Current ones:
+reminder to remove the `expectFailContinue`.
 
-- The Writer task edits (`toggleTask`, `addTask`, `editTask`) ignore missing or
-  unterminated front matter. `setStatus` and `updateGoalFields` refuse it.
-- `setStatus` edits front matter that Parser rejects (a line that isn't `key: value`).
-- `updateGoalFields` can't rename `Fix bug #12` to `Fix bug`: the `# comment` rule meant
-  for the coach's estimate applies to every key.
-- `buildNewGoalFile` writes an estimate of `0` as `estimate: ` with no value.
-- `Parser.parseGoalFile` reads the coach's `estimate: 6   # was 9` as no estimate.
+There are none at the moment.
 
 ## What the tests don't cover
 
