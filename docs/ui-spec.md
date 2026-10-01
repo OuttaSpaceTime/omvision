@@ -61,6 +61,12 @@ a 2px accent bar on its left edge; the others are dim. No wordmark, no labelled 
 width breakpoint and no collapse toggle: a second layout was never worth the state it needed,
 and switching between the two was behind every sidebar bug this app has had. No "Archive" row.
 
+Keyboard: Ctrl+T Today, Ctrl+G Goals, Ctrl+J Journal, and Ctrl+1–4 for the rail's rows in
+order (Coaching is only Ctrl+3: Ctrl+K deletes to the end of a text field's line). They work
+from every screen, from inside the journal and the task fields too, and do nothing while a
+dialog is open. Switching screens takes the keyboard away from the one left behind, so
+typing never lands in a hidden journal.
+
 The only screen that changes this is the Journal, which hides the rail entirely while you
 write and brings it back from its own control — see **Screen: Journal**.
 

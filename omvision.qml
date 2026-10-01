@@ -44,6 +44,14 @@ ShellRoot {
   // on a goal mid-sentence puts you back in the sentence.
   property string goalBackScreen: "goals"
 
+  // Hiding a screen does not take the keyboard from it: the journal's
+  // editor or a task field keeps active focus while invisible, so after
+  // leaving the journal by the rail, typing on Today went into the hidden
+  // day and was saved there. So every change of screen hands the keyboard
+  // back to the window's content, where the shortcuts are handled. The
+  // journal takes it again itself when it is shown (its onVisibleChanged).
+  onCurrentScreenChanged: if (currentScreen !== "journal") contentRoot.forceActiveFocus()
+
   function openGoal(slug, from) {
     root.openGoalSlug = slug
     root.goalBackScreen = from
@@ -481,11 +489,29 @@ ShellRoot {
       anchors.fill: parent
       focus: true
       Component.onCompleted: forceActiveFocus()
+      // Keys the focused item leaves unaccepted bubble up to here, so these
+      // work from every screen, the journal's editor and the task fields
+      // included: neither does anything with Ctrl+T/G/J/1-4. Ctrl+K would
+      // have been the obvious letter for Coaching, but a text field takes it
+      // as "delete to the end of the line", so Coaching is Ctrl+3 only.
+      readonly property var screenKeys: ({
+        [Qt.Key_T]: "today", [Qt.Key_G]: "goals", [Qt.Key_J]: "journal",
+        [Qt.Key_1]: "today", [Qt.Key_2]: "goals", [Qt.Key_3]: "coaching", [Qt.Key_4]: "journal"
+      })
       Keys.onPressed: function(event) {
-        if (event.key === Qt.Key_B && (event.modifiers & Qt.ControlModifier)) {
+        if (!(event.modifiers & Qt.ControlModifier)) return
+        if (event.key === Qt.Key_B) {
           root.toggleSidebar()
           event.accepted = true
+          return
         }
+        var screen = screenKeys[event.key]
+        if (screen === undefined) return
+        event.accepted = true
+        // A dialog sits over the screen it was opened from; leaving that
+        // screen from under it would strand it.
+        if (root.eventDialogOpen || root.newGoalDialogOpen || goalDetailScreen.cancelDialogOpen) return
+        root.currentScreen = screen
       }
 
       // Offscreen screenshots for bin/shot; inactive (nothing loaded) in a
