@@ -1,5 +1,4 @@
 import QtQuick
-import "../../Parser.js" as Parser
 
 // Regression test: a journal opened before its files have loaded used to
 // stay blank over a non-empty day, and typing into that blank page then
@@ -19,7 +18,6 @@ OmvisionTest {
   name: "journal_blank"
   resetBeforeEachTest: false
 
-  readonly property string today: "journal/" + Parser.dayKey(new Date()) + ".md"
   property bool openedBeforeLoad: false
 
   function started() {

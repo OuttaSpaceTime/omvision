@@ -262,6 +262,17 @@ QtObject {
   // decelerating, so a panel arrives rather than stops.
   readonly property int slideDuration: 130
   readonly property int slideEasing: Easing.OutCubic
+  // A journal page turn (the header's `‹`/`›`) moves the way Omarchy's own
+  // windows and layers do (/usr/share/omarchy/default/hypr/looknfeel.lua):
+  // the page leaves fast and linear, like `windowsOut` and `layersOut`
+  // (~150ms, linear), and the next one arrives on `easeOutQuint`, Hyprland's
+  // bezier (0.23, 1, 0.32, 1), over `windowsIn`/`layersIn`'s ~400ms. Most of
+  // the arrival is over in the first third; the rest is the settle. The
+  // sidebar's OutCubic 130 was the other candidate, but a page turn is two
+  // movements, and with one curve for both it read as a stutter.
+  readonly property int pageLeaveDuration: 140
+  readonly property int pageArriveDuration: 400
+  readonly property var pageArriveCurve: [0.23, 1, 0.32, 1, 1, 1]
   // How long the Coaching screen's `copy` button says `copied!` before it
   // goes back.
   readonly property int copiedFeedbackDuration: 1300

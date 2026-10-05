@@ -119,6 +119,7 @@ bin/shot -a event                          # a dialog: event | newgoal | cancel 
 bin/shot -s goal:<slug> -a editgoal        # also: edittask (first task's inline edit)
 bin/shot -s journal -a mention:stu         # type `@stu` (journal writes off): the goal list
 bin/shot -s journal -a opentag -f 300      # open the first `@tag`'s goal, as a click would
+bin/shot -s journal -a prevday -f 0,70,200,700  # turn a page back (also nextday; writes off)
 bin/shot -o <dir>                          # default dir: $TMPDIR/omvision-shots
 ```
 

@@ -122,12 +122,13 @@ and a refactor must keep them:
 | `closeGoalButton`, `reopenGoalButton`, `cancelGoalButton` | the goal's close, reopen and cancel |
 | `addEventButton`, `coachButton`, `editGoalButton` | the detail header's actions |
 | `backControl` | the detail's `← Goals` / `← Journal` link |
-| `journalEditor` | the journal's page |
+| `journalEditor`, `journalCanvas` | the journal's page, and the Flickable it scrolls in |
+| `prevDayButton`, `nextDayButton` | the journal's page turns, `‹` and `›` |
 
 The goal names sit in `GoalsScreen.qml`, and in `GoalDetailScreen.qml` and its parts
-(`GoalHeader.qml`, `TaskRow.qml`, `GoalEndActions.qml`), and `journalEditor` on the
-journal's TextEdit in `JournalScreen.qml`. There is no other way to find a control: a
-fallback that looked items up by their label predated the names and was removed, because
+(`GoalHeader.qml`, `TaskRow.qml`, `GoalEndActions.qml`), and the journal's in
+`JournalScreen.qml`, on its TextEdit, its Flickable and its header. There is no
+other way to find a control: a fallback that looked items up by their label predated the names and was removed, because
 it let a test pass after the objectName it asked for had been renamed away. A renamed
 control now fails its tests with `no visible item named …`, and the table above is what
 to update.

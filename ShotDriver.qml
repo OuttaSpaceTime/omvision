@@ -69,6 +69,13 @@ Rectangle {
     // day's file is never touched.
     else if (driver.action.indexOf("mention") === 0 && driver.journal)
       driver.journal.typeMentionForShot(driver.action.slice("mention".length).replace(/^:/, ""))
+    // Turns the journal one page back or forward, the way `‹`/`›` do. Writes
+    // are switched off first: leaving a day flushes it, and although an
+    // unchanged day is never written, a shot has no business finding out.
+    else if ((driver.action === "prevday" || driver.action === "nextday") && driver.journal) {
+      driver.journal.writesDisabled = true
+      driver.journal.turnPage(driver.action === "prevday" ? -1 : 1)
+    }
     // Opens the first goal the journal's tags name, the way clicking it does:
     // from the tags the highlighter styled, so only one a click could open.
     else if (driver.action === "opentag" && driver.journal) {

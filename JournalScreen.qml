@@ -35,7 +35,7 @@ import "GoalMatch.js" as GoalMatch
 // editor's buffer and decides when to save it.
 //
 // The parts: JournalStore (the write path), DayList (the list of days),
-// MentionPopup (the `@` goal list), CornerButton (the two corner controls)
+// MentionPopup (the `@` goal list), CornerButton (the header's controls)
 // and GoalMatch.js (how a query matches a goal). The root keeps the API
 // omvision.qml, ShotDriver and the tests use; functions that moved keep a
 // delegate here under their old name.
@@ -236,8 +236,26 @@ Item {
   }
 
   // ---- opening a day --------------------------------------------------------
+  // Opens a day with the cursor at the end of its text, where writing goes
+  // on. A page turn in flight is dropped: whatever asked for this day
+  // (the day list, Ctrl+N) came after the turn did, and the turn finishing
+  // later would swap the page back out from under it.
   function openDay(path) {
-    if (path === root.selectedPath) { editor.forceActiveFocus(); return }
+    root.cancelTurn()
+    root.showDay(path, false)
+  }
+
+  // `atTop` is a page turn's way in: the page starts scrolled to its top,
+  // the cursor on its first character, the way a turned page is read from
+  // the top. Otherwise the cursor goes to the end, and the page scrolls to
+  // it.
+  function showDay(path, atTop) {
+    root.pageAtTop = atTop
+    if (path === root.selectedPath) {
+      editor.forceActiveFocus()
+      if (atTop) root.placeCursor()
+      return
+    }
     root.closeMention()
     writeDebounce.stop()
     flushWrite() // the day being left is written before the buffer moves on
@@ -257,7 +275,121 @@ Item {
     else root.setBuffer("", false)
     root.writeError = ""
     editor.forceActiveFocus()
-    editor.cursorPosition = editor.text.length
+    root.placeCursor()
+  }
+
+  // Where the open day's cursor goes, once its text is in: to the end, or,
+  // for a turned page, to the top with the page scrolled up to it. Any
+  // glide still running from the last day is stopped first, or it would
+  // carry on down the new one. Called again when a day's text arrives
+  // after it was opened (syncBufferFromDisk), hence the flag.
+  function placeCursor() {
+    if (!root.pageAtTop) { editor.cursorPosition = editor.text.length; return }
+    editor.cursorPosition = 0
+    canvas.cancelFlick()
+    canvas.contentY = 0
+  }
+
+  // ---- turning pages --------------------------------------------------------
+  // The header's `‹`/`›` (and Alt+←/→, Ctrl+PgUp/PgDn) page through the
+  // journal like a notebook: one page per day that has an entry, the way
+  // the day list has one row per day, so a day nothing was written on is
+  // not a blank page to flip past. Never past today: there is nothing ahead of it to
+  // read, and a future day typed into would be a file dated wrong. A day
+  // file dated ahead of today (a hand edit, a clock that was wrong) still
+  // has its row in the day list; it is just not a page `›` reaches.
+  //
+  // A turn is two movements, after Omarchy's own (see Theme.pageLeaveDuration):
+  // the page slides a little toward where it is going and fades, then the
+  // next day is put in and slides in from the other side. The day only
+  // changes in between, at commitTurn(), so the text never swaps while it can
+  // be seen. Going back in time the pages move right, the way a notebook's
+  // pages do when you leaf back through it; going forward they move left.
+  property bool pageAtTop: false
+  property string turnTarget: ""   // the day a turn in flight will open
+  property int turnStep: 0         // -1 back in time, 1 forward
+  property real pageShift: 0
+  property real pageOpacity: 1
+
+  // Counted from the day a turn in flight is heading for, so a second click
+  // before the first page has gone turns one page further, not the same one.
+  readonly property string turnFrom: root.turnTarget !== "" ? root.turnTarget : root.selectedPath
+  readonly property string olderPath: root.neighbourPath(root.turnFrom, -1, root.entries, root.todayIso)
+  readonly property string newerPath: root.neighbourPath(root.turnFrom, 1, root.entries, root.todayIso)
+
+  // The nearest entry before (step -1) or after (step 1) the day at `path`;
+  // after stops at today. `entries` is newest first. Matched on the date,
+  // not the row, so a day that has no row (yet) still has neighbours.
+  function neighbourPath(path, step, entries, todayIso) {
+    var day = Paths.journalDateIso(path)
+    if (day === "") return ""
+    var newer = ""
+    for (var i = 0; i < entries.length; i++) {
+      var d = entries[i].dateIso
+      if (step < 0) {
+        if (d < day) return entries[i].path
+      } else {
+        if (d <= day) break
+        if (d <= todayIso) newer = entries[i].path
+      }
+    }
+    return newer
+  }
+
+  function turnPage(step) {
+    var to = step < 0 ? root.olderPath : root.newerPath
+    if (to === "") return
+    root.closeMention()
+    // While the old page is still leaving (a target is set until
+    // commitTurn), the turn just heads for the new target. Once the next
+    // page is arriving, a click sends it on out again from wherever it has
+    // got to: clicking through several days never waits for one to settle.
+    var leaving = root.turnTarget !== ""
+    root.turnTarget = to
+    root.turnStep = step
+    if (!leaving) pageTurn.restart()
+  }
+
+  function commitTurn() {
+    var path = root.turnTarget
+    root.turnTarget = ""
+    if (path !== "") root.showDay(path, true)
+  }
+
+  function cancelTurn() {
+    pageTurn.stop()
+    root.turnTarget = ""
+    root.pageShift = 0
+    root.pageOpacity = 1
+  }
+
+  SequentialAnimation {
+    id: pageTurn
+    ParallelAnimation {
+      NumberAnimation {
+        target: root; property: "pageShift"
+        to: -root.turnStep * Theme.space2xl
+        duration: Theme.pageLeaveDuration
+      }
+      NumberAnimation {
+        target: root; property: "pageOpacity"; to: 0
+        duration: Theme.pageLeaveDuration
+      }
+    }
+    ScriptAction { script: root.commitTurn() }
+    ParallelAnimation {
+      NumberAnimation {
+        target: root; property: "pageShift"
+        from: root.turnStep * Theme.space2xl; to: 0
+        duration: Theme.pageArriveDuration
+        easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.pageArriveCurve
+      }
+      NumberAnimation {
+        target: root; property: "pageOpacity"; from: 0; to: 1
+        duration: Theme.pageArriveDuration
+        easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.pageArriveCurve
+      }
+    }
   }
 
   function setBuffer(text, based) {
@@ -482,7 +614,7 @@ Item {
       var typed = root.bufferText
       if (typed === "") {
         root.setBuffer(disk, true)
-        editor.cursorPosition = editor.text.length
+        root.placeCursor()
         return
       }
       var merged = store.mergeTyped(disk, typed)
@@ -516,6 +648,7 @@ Item {
 
   onVisibleChanged: {
     if (!root.visible) {
+      root.cancelTurn()
       root.closeMention()
       writeDebounce.stop()
       flushWrite()
@@ -530,6 +663,7 @@ Item {
   // ---- the canvas -----------------------------------------------------------
   Flickable {
     id: canvas
+    objectName: "journalCanvas"
     anchors.fill: parent
     // A screenful of slack under the last line, so writing stays in the
     // middle of the window instead of creeping down to its bottom edge.
@@ -638,6 +772,11 @@ Item {
       // highlighter needs the document font to be sized the same way its
       // character formats are.
       font.pointSize: Theme.writingPointSize
+      // A page turn moves only the page: the header and the word count stay
+      // put. A Translate, so the column's own x stays where every screen
+      // puts it.
+      opacity: root.pageOpacity
+      transform: Translate { x: root.pageShift }
       color: Theme.ink
       selectionColor: Theme.accentFill
       selectedTextColor: Theme.ink
@@ -667,6 +806,16 @@ Item {
             root.closeMention()
           }
         }
+        // Alt+←/→ turn a page, as well as Ctrl+PgUp/PgDn below: the browser's
+        // back and forward, and on a laptop PgUp/PgDn sit behind Fn. The
+        // editor does nothing with Alt+arrows, and Omarchy binds them only
+        // together with Super, so neither loses anything to this.
+        if (event.modifiers === Qt.AltModifier
+            && (event.key === Qt.Key_Left || event.key === Qt.Key_Right)) {
+          root.turnPage(event.key === Qt.Key_Left ? -1 : 1)
+          event.accepted = true
+          return
+        }
         // After the key has gone into the text, not now: the `@` is not
         // there yet.
         if (event.text === "@") Qt.callLater(root.maybeOpenMention)
@@ -683,6 +832,8 @@ Item {
         if (event.key === Qt.Key_O) { root.openList(!root.listOpen); event.accepted = true }
         else if (event.key === Qt.Key_N) { root.openToday(); event.accepted = true }
         else if (event.key === Qt.Key_B) { root.toggleSidebar(); event.accepted = true }
+        else if (event.key === Qt.Key_PageUp) { root.turnPage(-1); event.accepted = true }
+        else if (event.key === Qt.Key_PageDown) { root.turnPage(1); event.accepted = true }
       }
 
       // Live styling, attached to this editor's own QTextDocument. Held at
@@ -727,11 +878,19 @@ Item {
       // so the TextEdit still places the cursor and a drag still selects --
       // DragThreshold drops the tap once the pointer moves -- and coming back
       // from the goal finds the cursor on the tag you left from.
+      //
+      // Any other click on the text is starting to write, like a click on the
+      // paper around it (the MouseArea above): the sidebar and the day list
+      // go away. The TextEdit takes its own clicks, so that MouseArea only
+      // ever saw the margins and the space under the last line, and a click
+      // into the words left the sidebar out. A drag that selects is reading,
+      // not writing, and DragThreshold already keeps it from being a tap.
       TapHandler {
         acceptedButtons: Qt.LeftButton
         onTapped: function(eventPoint) {
           var slug = root.mentionAt(eventPoint.position.x, eventPoint.position.y)
           if (slug !== "") root.openGoal(slug)
+          else root.settleIntoWriting()
         }
       }
       HoverHandler {
@@ -763,12 +922,12 @@ Item {
   }
 
   // ---- corner controls ------------------------------------------------------
-  // The only chrome on the screen: two quiet squares in the top-left corner
-  // (CornerButton). Both live at the corner of the window itself (this
-  // screen fills it while writing), clear of the text column, which starts
-  // further down.
+  // The only chrome on the screen: quiet squares (CornerButton), two in the
+  // top-left corner and the page turns in the top-right. They live at the
+  // corners of the window itself (this screen fills it while writing), clear
+  // of the text column, which starts further down.
   //
-  // One sticky row: both controls and the day's date, floating over the text
+  // One sticky row: the controls and the day's date, floating over the text
   // rather than scrolling with it. Opaque (paper, not translucent) so lines
   // scrolled past disappear behind it the way a normal editor's header
   // works -- the text used to slide straight through the controls.
@@ -780,6 +939,16 @@ Item {
     height: Theme.journalHeaderHeight
     color: Theme.paper
     z: 20
+
+    // The header takes its own clicks and hover. Without this, anything
+    // that missed a control -- the gap between them, the date, a disabled
+    // page turn -- fell through to the text scrolled underneath it: the
+    // cursor jumped into a line hidden behind the header, or a goal tag
+    // there opened. First in the header, so the controls sit above it.
+    MouseArea {
+      anchors.fill: parent
+      hoverEnabled: true
+    }
 
     Row {
       anchors.left: parent.left
@@ -820,6 +989,38 @@ Item {
         font.family: Theme.fontFamily
         font.pixelSize: Theme.captionSize
         color: Theme.faint
+      }
+    }
+
+    // The page turns, at the right end of the same row: on the controls'
+    // line and as far in from the right edge as `»` is from the left, so
+    // the header's chrome sits in its two corners and nowhere between.
+    // Spaced like the left pair. `‹` and `›` are the single guillemets, the
+    // same chevron as `»` at the same stroke and height, so the two corners
+    // read as one set of controls. `←`/`→` read as a sign rather than a
+    // button, plain `<`/`>` were thinner and taller than `»`, and the Nerd
+    // Font angles were heavier than anything else up here. `›` stays in
+    // place on today, unavailable, rather than disappearing: `‹` would jump
+    // right if it went.
+    Row {
+      anchors.right: parent.right
+      anchors.rightMargin: Theme.spaceLg
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: Theme.spaceXs
+
+      CornerButton {
+        objectName: "prevDayButton"
+        glyph: "‹"
+        tip: "Previous day (Alt+←)"
+        enabled: root.olderPath !== ""
+        onActivated: root.turnPage(-1)
+      }
+      CornerButton {
+        objectName: "nextDayButton"
+        glyph: "›"
+        tip: "Next day (Alt+→)"
+        enabled: root.newerPath !== ""
+        onActivated: root.turnPage(1)
       }
     }
   }

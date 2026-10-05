@@ -26,6 +26,10 @@ import "../../Parser.js" as Parser
 //   type(text), key(key, mods)    real key events to the focused item
 //   notesPath(rel)                "$HOME/Notes/Omvision/" + rel
 //   readFile(rel)                 the file's text now, or null if missing
+//   writeFile(rel, text)          write a file the way an outside editor
+//                                 would (the reset deletes what isn't fixture)
+//   today                         "journal/<today>.md", the fixture's entry
+//   openJournal()                 the Journal screen, on today, its text in
 //   expectFile(rel, want)         wait until the file says `want` (a string,
 //                                 or a function(text) -> bool)
 //   expectFileUnchanged(rel)      the file stays as the fixture left it
@@ -303,6 +307,25 @@ TestCase {
   function readFile(rel) {
     var r = run(["/usr/bin/cat", "--", rel.charAt(0) === "/" ? rel : notesPath(rel)])
     return r.code === 0 ? r.out : null
+  }
+
+  function writeFile(rel, text) {
+    var path = rel.charAt(0) === "/" ? rel : notesPath(rel)
+    var r = run(["/usr/bin/sh", "-c", 'printf "%s" "$1" > "$2"', "sh", text, path])
+    compare(r.code, 0, "wrote " + path)
+  }
+
+  // ---- the journal --------------------------------------------------------------
+  // Today's entry: the fixture's journal/TODAY.md, installed under today's
+  // date by seed-home.sh.
+  readonly property string today: "journal/" + Parser.dayKey(new Date()) + ".md"
+
+  // The open day carries over from the last test, so this opens today
+  // rather than trusting the journal to be on it.
+  function openJournal() {
+    base.app.currentScreen = "journal"
+    base.journal.openToday()
+    tryCompare(base.journal, "bufferText", fixtureText(base.today), 5000)
   }
 
   // rel -> text, as the fixture left it at the start of this test.

@@ -147,12 +147,32 @@ Entering the Journal **is** entering writing mode:
 - The list of days starts collapsed and opens as an overlay from the left edge, 260px, over
   the text, so opening it never reflows the text column. It slides out from the edge of the
   journal's own area (clipped there), never across the sidebar.
-- Starting to write puts both away: a click on the paper, or any keystroke that edits the
-  text, closes the day list and hides the sidebar again. Arrows and Escape don't count.
-- The screen's own chrome is two 24px controls, `»` (sidebar, hidden while the sidebar is
-  out) and `≡` (days), in `faint` with no border and no fill until hovered. Ctrl+O opens the
-  days, Ctrl+N jumps to today, Ctrl+B toggles the sidebar (handled here because the editor
-  would otherwise swallow it).
+- Starting to write puts both away: a click on the paper or into the text (a drag that
+  selects doesn't count), or any keystroke that edits the text, closes the day list and
+  hides the sidebar again. Arrows and Escape don't count.
+- The screen's own chrome is four 24px controls, in `faint` with no border and no fill
+  until hovered: `»` (sidebar, hidden while the sidebar is out) and `≡` (days) at the left,
+  and the page turns `‹` and `›` at the right, as far in from the right edge as `»` is
+  from the left. Ctrl+O opens the days, Ctrl+N jumps to today, Ctrl+B toggles the sidebar
+  (handled here because the editor would otherwise swallow it), Alt+←/→ and Ctrl+PgUp/PgDn
+  turn a page (the tooltips name Alt+←/→, which needs no Fn on a laptop). The header takes
+  its own clicks: one that misses a control never reaches the text scrolled under it.
+
+**Turning pages.** `‹` goes to the previous day with an entry, `›` to the next one, the
+way you leaf through a notebook: one page per row of the day list, so a day nothing was
+written on is skipped, not shown blank. Never past today: on today `›` stays where it is,
+drawn in `markup` (2:1) and inert, and so does `‹` on the oldest day. A day file dated after
+today is in the day list but is not a page `›` reaches. A turned page opens at its top, with
+the cursor on its first character, wherever the last visit to it left off. (The day list and
+Ctrl+N still put the cursor at the end of the day's text, where writing goes on.)
+
+The turn moves only the text column, the way Omarchy's windows move: the page slides
+`space2xl` toward where it is going and fades, linear over 140ms (`windowsOut`), then the
+next day slides in from the other side on Hyprland's `easeOutQuint`, bezier (0.23, 1, 0.32,
+1), over 400ms (`windowsIn`). Back in time the pages move right, forward they move left.
+The day changes only between the two, while nothing is visible. A click while the next page
+is arriving sends it on out again from where it is, so flipping through several days never
+waits for one to settle.
 
 The text column is the app's page column (see Tokens): `Theme.writingColumns` (70)
 monospace characters wide, measured off the live font, on the same vertical line as every
