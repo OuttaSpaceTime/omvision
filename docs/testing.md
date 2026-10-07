@@ -21,7 +21,9 @@ drifted from the file contract.
 
 `bin/check` runs four steps, all of them even when one fails, prints a summary and exits
 non-zero if any failed. `bin/check lint px` runs only the steps named; `-v` prints each
-step's full output.
+step's full output. The steps live in `~/Code/qs-kit/bin/qs-check`, shared with Omvida;
+`bin/check` runs it with this repo's `.qs-kit` (the app name, the steps, and how the load
+step starts the app). A rule change for both apps goes there.
 
 - **lint** — `qmllint` over every `.qml` file git tracks or would add. qmllint can't see
   the `qmldir` Quickshell synthesizes, so on the repo itself it takes `Theme` and `Paths`

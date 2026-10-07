@@ -1,0 +1,16 @@
+# What ~/Code/qs-kit/bin/qs-check (run by bin/check) needs to know about
+# Omvision. Sourced by bash.
+APP=omvision
+STEPS=(lint px load test)
+SKIP_DIRS=()
+
+# Offscreen against a throwaway HOME seeded from tests/fixtures/home, so the
+# real ~/Notes is never read.
+kit_load() {
+  local home="$1/home"
+  mkdir -p "$home"
+  touch "$home/.omvision-test-home"
+  "$ROOT/tests/app/seed-home.sh" "$ROOT/tests/fixtures/home" "$home" >/dev/null || { echo "ERROR: couldn't seed the temp HOME"; return 1; }
+  env -u OMVISION_TEST -u OMVISION_SHOT_DIR -u OMVISION_SHOT_WIDTH -u OMVISION_SHOT_HEIGHT \
+    HOME="$home" "$ROOT/bin/omvision" --no-color
+}

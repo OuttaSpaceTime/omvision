@@ -126,4 +126,5 @@ Everything is QML or plain JS in the top directory, which Quickshell loads as on
 Quickshell, Qt 6, and a monospace Nerd Font (JetBrainsMono by default). Building the
 highlighter needs `g++`, `pkg-config` and Qt's `moc` (`qt6-base`). `bin/test` and
 `bin/check` need Python 3 and `qmltestrunner`/`qmllint` from `qt6-declarative`, at
-`/usr/lib/qt6/bin`.
+`/usr/lib/qt6/bin`. `bin/check` also needs a checkout of qs-kit beside this repo
+(`~/Code/qs-kit`, or `QS_KIT` pointing at one).
