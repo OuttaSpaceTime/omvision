@@ -1,0 +1,7 @@
+#!/bin/sh
+# Stands in for kitty while bin/test runs the app (bin/test puts this
+# directory first on PATH): the Coaching screen's `start in kitty` runs its
+# real Quickshell.execDetached, and this records the argv it got instead of
+# opening a window with claude in it. One argument per line, in the test
+# HOME, for tests/app/tst_coaching.qml to read back.
+printf '%s\n' "$@" > "$HOME/kitty.argv"

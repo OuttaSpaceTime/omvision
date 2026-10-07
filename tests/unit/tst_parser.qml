@@ -380,19 +380,27 @@ TestCase {
   function test_formatHCaption(row) { compare(Parser.formatHCaption(row.m), row.s) }
 
   // ---- journal ------------------------------------------------------------------------
-  function test_firstMeaningfulLine_data() {
+  function test_journalPreview_data() {
     return [
-      { tag: "heading", t: "\n\n## A day  \nbody", s: "A day" },
-      { tag: "list", t: "- item one", s: "item one" },
+      { tag: "heading", t: "\n\n## A day  \nbody", s: "A day body" },
+      { tag: "list", t: "- item one\n- item two", s: "item one item two" },
       { tag: "star list", t: "* item", s: "item" },
       { tag: "quote", t: "> quoted", s: "quoted" },
       { tag: "code and link", t: "`code` and [a link](https://x)", s: "code and a link" },
-      { tag: "CRLF", t: "\r\n\r\nfirst\r\nsecond", s: "first" },
+      { tag: "CRLF", t: "\r\n\r\nfirst\r\n\r\nsecond", s: "first second" },
+      { tag: "empty quote line", t: ">\nnext", s: "next" },
       { tag: "blank", t: "  \n\t\n", s: "" },
       { tag: "null", t: null, s: "" }
     ]
   }
-  function test_firstMeaningfulLine(row) { compare(Parser.firstMeaningfulLine(row.t), row.s) }
+  function test_journalPreview(row) { compare(Parser.journalPreview(row.t), row.s) }
+
+  function test_journalPreview_capped() {
+    var line = new Array(101).join("x")
+    var lines = []
+    for (var i = 0; i * line.length <= Parser.JOURNAL_PREVIEW_MAX; i++) lines.push(line)
+    compare(Parser.journalPreview(lines.join("\n")).length, Parser.JOURNAL_PREVIEW_MAX)
+  }
 
   function test_escapeHtml() {
     compare(Parser.escapeHtml("<a & b>"), "&lt;a &amp; b&gt;")

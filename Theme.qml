@@ -308,8 +308,9 @@ QtObject {
   readonly property int journalHeaderHeight: 56
   // The day list overlay's width.
   readonly property int journalDayListWidth: 260
-  // One day's row in the list.
-  readonly property int journalDayRowHeight: 60
+  // How many lines of a day's text its row in the list shows before it
+  // elides.
+  readonly property int journalPreviewLines: 3
   // Empty page under the last line, so the line being written sits up in
   // the window instead of on its bottom edge. Counted as a size, not
   // spacing: it is how far the page scrolls past its text, measured against
@@ -366,12 +367,13 @@ QtObject {
     return out
   }
 
+  // Unparseable text only means the fallback when no theme has loaded yet.
+  // Once one has, it is kept: a reload mid-switch can find the file
+  // half-written, and dropping to Flexoki for that instant would flash the
+  // wrong palette between two right ones.
   function loadColors(text) {
     var t = parseToml(text)
-    if (!t.background || !t.foreground || !t.accent) {
-      themeLoaded = false
-      return
-    }
+    if (!t.background || !t.foreground || !t.accent) return
     background = t.background
     foreground = t.foreground
     accent = t.accent
@@ -381,12 +383,34 @@ QtObject {
     themeLoaded = true
   }
 
+  // A theme switch is pushed, as it is to omarchy-shell: Omarchy's theme-set
+  // hook (~/Code/system, dot_config/omarchy/hooks/theme-set.d/omvision)
+  // calls `theme reload` below on every running Omvision.
+  //
+  // Watching colors.toml can't follow a switch on its own: the script swaps
+  // the whole theme directory (`rm -rf theme; mv next-theme theme`), the rm
+  // takes the watch with the file, and the mv that brings the new theme is
+  // never seen. Watching theme.name, which the script rewrites in place after
+  // the swap, did work and needed no hook; it was dropped for the hook
+  // because the hook is Omarchy's own way in for apps it doesn't name, and
+  // one mechanism is easier to trust than two. The cost is timing: hooks run
+  // last, after the terminals, browsers and editors have been retinted.
+  //
+  // colors.toml keeps its watch for a theme edited in place, which no hook
+  // announces. watchChanges only emits fileChanged, so it asks for the
+  // reload itself. No onLoadFailed: a reload that finds the file gone keeps
+  // the last theme, for the same reason loadColors() does.
   property FileView colorsFile: FileView {
     id: colorsFile
     path: root.themePath
     watchChanges: true
     printErrors: false
+    onFileChanged: reload()
     onLoaded: root.loadColors(text())
-    onLoadFailed: function(error) { root.themeLoaded = false }
+  }
+
+  property IpcHandler themeIpc: IpcHandler {
+    target: "theme"
+    function reload(): void { colorsFile.reload() }
   }
 }

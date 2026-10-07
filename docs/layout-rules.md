@@ -42,6 +42,10 @@ Flickable {
 The selection bar sits at the bled row's own left edge, in the margin, so the
 padding between it and the text is what gives the fill breathing room.
 
+This is for lists on a page. A narrow side panel that doesn't bleed, like the
+journal's day list, insets its rows by `Theme.rowPadding` instead: the page's
+gutter there spent a quarter of its 260px on empty margin.
+
 ## 4. Reserve width for controls; never let two things both size to content
 
 A button beside a text field must have its width reserved in the layout, with the

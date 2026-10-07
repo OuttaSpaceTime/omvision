@@ -15,6 +15,32 @@ OmvisionTest {
     expectFile(today, fixtureText(today) + "Then the charts.")
   }
 
+  // Deleting a day's whole text deletes its file, and typing again
+  // afterwards writes the day afresh.
+  function test_emptying_a_day_deletes_its_file() {
+    openJournal()
+    key(Qt.Key_A, Qt.ControlModifier)
+    key(Qt.Key_Delete)
+    compare(journal.bufferText, "", "the page is empty")
+    expectFile(today, null, undefined, "the emptied day's file is gone")
+    type("Again.")
+    expectFile(today, "Again.")
+  }
+
+  // An emptied day drops out of the day list (today keeps its row whatever
+  // is on disk, so this is a past day).
+  function test_an_emptied_past_day_leaves_the_day_list() {
+    var path = addDays({ 3: "An old day.\n" })[3]
+    app.currentScreen = "journal"
+    journal.openDay(path)
+    tryCompare(journal, "bufferText", "An old day.\n", 5000)
+    key(Qt.Key_A, Qt.ControlModifier)
+    key(Qt.Key_Backspace)
+    expectFile(path, null, undefined, "the emptied day's file is gone")
+    tryVerify(function() { return journal.findEntry(path) === null }, 8000,
+              "the day left the day list")
+  }
+
   // A click into the words is starting to write, as a click on the paper
   // around them is: the sidebar brought out with `»` goes away. It used to
   // stay, because the editor takes its own clicks and only the margins

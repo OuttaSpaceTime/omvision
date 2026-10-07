@@ -71,7 +71,9 @@ The real app, driven from inside. `omvision.qml` has a test hook: when `OMVISION
 names a `.qml` file, a Loader beside the screenshot driver's loads it and hands it `app`,
 `journal`, `goalDetail`, `coaching`, `target` (the window's content item) and `window`.
 bin/test starts the app once per `tests/app/tst_*.qml` through `bin/omvision`, with a fresh
-temp HOME seeded from `tests/fixtures/home`.
+temp HOME seeded from `tests/fixtures/home`. `tests/bin` goes first on its PATH: a program the app
+launches is found there as a stub that records its arguments, not run for real. `kitty`
+writes its argv, one per line, to `$HOME/kitty.argv` (`tst_coaching.qml` reads it back).
 
 A test file is an `OmvisionTest` (`tests/app/OmvisionTest.qml`), which is a Qt `TestCase`
 with these helpers. Each one waits by itself and fails with what it last saw:
@@ -126,10 +128,12 @@ and a refactor must keep them:
 | `backControl` | the detail's `← Goals` / `← Journal` link |
 | `journalEditor`, `journalCanvas` | the journal's page, and the Flickable it scrolls in |
 | `prevDayButton`, `nextDayButton` | the journal's page turns, `‹` and `›` |
+| `coachMethod:<mi\|polya>`, `coachStartButton` | the Coaching screen's method chips, `start in kitty` |
 
 The goal names sit in `GoalsScreen.qml`, and in `GoalDetailScreen.qml` and its parts
 (`GoalHeader.qml`, `TaskRow.qml`, `GoalEndActions.qml`), and the journal's in
-`JournalScreen.qml`, on its TextEdit, its Flickable and its header. There is no
+`JournalScreen.qml`, on its TextEdit, its Flickable and its header, and the coaching ones
+in `CoachingScreen.qml`. There is no
 other way to find a control: a fallback that looked items up by their label predated the names and was removed, because
 it let a test pass after the objectName it asked for had been renamed away. A renamed
 control now fails its tests with `no visible item named …`, and the table above is what

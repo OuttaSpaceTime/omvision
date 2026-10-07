@@ -452,22 +452,37 @@ function formatHCaption(totalMinutes) {
 }
 
 // ---- Journal --------------------------------------------------------------
-// First non-blank line of a journal entry, markdown syntax stripped, for use
-// as a list preview. Tolerant of anything: an entry is free-form markdown
-// (goal-files.md, journal section) with no grammar to fail to parse.
-function firstMeaningfulLine(text) {
+// A journal entry as one run of text for the day list's preview: every
+// non-blank line, markdown syntax stripped, joined with spaces. Not just the
+// first line: a day opened with a heading (`## 07:38`) or a one-word greeting
+// then showed nothing of what was written. The list wraps this to
+// Theme.journalPreviewLines and elides the rest; the cap only spares it
+// laying out a long day to cut it, and sits well past what three lines of
+// the 260px list hold. It also stops the loop there: the day list rebuilds
+// every day's preview after each journal save, so a long journal must cost
+// about the cap per day, not its whole length. Tolerant of anything: an
+// entry is free-form markdown (goal-files.md, journal section) with no
+// grammar to fail to parse.
+var JOURNAL_PREVIEW_MAX = 300
+
+function journalPreview(text) {
   var lines = normalize(text).split("\n")
-  for (var i = 0; i < lines.length; i++) {
+  var out = []
+  var length = 0
+  for (var i = 0; i < lines.length && length < JOURNAL_PREVIEW_MAX; i++) {
     var t = lines[i].trim()
     if (t === "") continue
     t = t.replace(/^#{1,6}\s+/, "")
-    t = t.replace(/^[-*]\s+/, "")
-    t = t.replace(/^>\s?/, "")
-    t = t.replace(/`([^`]+)`/g, "$1")
-    t = t.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    return t
+      .replace(/^[-*]\s+/, "")
+      .replace(/^>\s?/, "")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    // A bare `>` or `-` strips to nothing.
+    if (t === "") continue
+    out.push(t)
+    length += t.length + 1
   }
-  return ""
+  return out.join(" ").slice(0, JOURNAL_PREVIEW_MAX)
 }
 
 function escapeHtml(s) {

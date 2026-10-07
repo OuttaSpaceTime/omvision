@@ -475,6 +475,15 @@ ShellRoot {
     onTriggered: root.writeError = ""
   }
 
+  // Closing the window ends the app. Quickshell is built for shells, which
+  // outlive their windows, so it keeps running with none, and each launch
+  // left another windowless Omvision behind. Quitting here is what its docs
+  // give for an app that should end with its window.
+  Connections {
+    target: Quickshell
+    function onLastWindowClosed() { Qt.quit() }
+  }
+
   FloatingWindow {
     id: window
     title: "Omvision"

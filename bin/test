@@ -116,8 +116,11 @@ run_app_file() {
   # setup aborts without a display to connect to, and with
   # QT_QPA_PLATFORM=offscreen nothing is ever shown on it (bin/shot runs the
   # same way). --no-color keeps Quickshell's log lines plain for the sed below.
+  # tests/bin goes first on PATH so a command the app launches (kitty, for
+  # the Coaching screen's `start in kitty`) is a stub that records its argv,
+  # never the real program.
   env -u OMVISION_SHOT_DIR -u OMVISION_SHOT_WIDTH -u OMVISION_SHOT_HEIGHT \
-    HOME="$dir/home" QT_QPA_PLATFORM=offscreen \
+    HOME="$dir/home" QT_QPA_PLATFORM=offscreen PATH="$ROOT/tests/bin:$PATH" \
     OMVISION_TEST="$file" OMVISION_TEST_OUT="$dir/out" OMVISION_TEST_ONLY="$only_test" \
     OMVISION_TEST_FIXTURES="$ROOT/tests/fixtures/home" \
     timeout "$APP_TIMEOUT" "$ROOT/bin/omvision" --no-color >"$dir/app.log" 2>&1

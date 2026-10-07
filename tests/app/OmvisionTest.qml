@@ -30,6 +30,9 @@ import "../../Parser.js" as Parser
 //                                 would (the reset deletes what isn't fixture)
 //   today                         "journal/<today>.md", the fixture's entry
 //   openJournal()                 the Journal screen, on today, its text in
+//   dayPath(back)                 the journal file `back` days before today
+//   addDays({back: text})         write older days, wait until the journal
+//                                 lists them; returns back -> path
 //   expectFile(rel, want)         wait until the file says `want` (a string,
 //                                 or a function(text) -> bool)
 //   expectFileUnchanged(rel)      the file stays as the fixture left it
@@ -326,6 +329,31 @@ TestCase {
     base.app.currentScreen = "journal"
     base.journal.openToday()
     tryCompare(base.journal, "bufferText", fixtureText(base.today), 5000)
+  }
+
+  function dayPath(back) {
+    var d = new Date()
+    d.setDate(d.getDate() - back)
+    return notesPath("journal/" + Parser.dayKey(d) + ".md")
+  }
+
+  // days: { daysBack: text }. Writes them all, then waits once for the
+  // journal's next listing to show them, rather than a poll per file.
+  // Returns daysBack -> path.
+  function addDays(days) {
+    var paths = {}
+    for (var back in days) {
+      paths[back] = dayPath(back)
+      writeFile(paths[back], days[back])
+    }
+    tryVerify(function() {
+      for (var b in days) {
+        var e = base.journal.findEntry(paths[b])
+        if (e === null || e.content !== days[b]) return false
+      }
+      return true
+    }, 8000, "the journal lists the new days")
+    return paths
   }
 
   // rel -> text, as the fixture left it at the start of this test.

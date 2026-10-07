@@ -30,8 +30,9 @@ import "GoalMatch.js" as GoalMatch
 // File discovery/loading happens in omvision.qml (same idiom as the goal
 // loaders); this screen receives that already-read data as props. Writing is
 // JournalStore's: it creates a day's file the first time it is typed into,
-// saves the debounced text through a SerialFileWriter, and never writes a day
-// whose disk text it does not know (see its header). This screen owns the
+// saves the debounced text through a SerialFileWriter, deletes the file when
+// the day's text is all deleted, and never writes a day whose disk text it
+// does not know (see its header). This screen owns the
 // editor's buffer and decides when to save it.
 //
 // The parts: JournalStore (the write path), DayList (the list of days),
@@ -133,7 +134,7 @@ Item {
         path: f.path,
         dateIso: f.dateIso,
         dateLabel: root.labelFor(f.dateIso),
-        firstLine: Parser.firstMeaningfulLine(text),
+        preview: Parser.journalPreview(text),
         content: text
       })
     }
@@ -145,7 +146,7 @@ Item {
         path: Paths.journalFile(todayIso),
         dateIso: todayIso,
         dateLabel: "Today",
-        firstLine: "",
+        preview: "",
         content: ""
       })
     }
@@ -224,7 +225,8 @@ Item {
       path: path,
       dateIso: dateIso,
       dateLabel: root.labelFor(dateIso),
-      firstLine: w !== undefined ? Parser.firstMeaningfulLine(w) : "",
+      // Only the day list reads previews, and this entry isn't in it.
+      preview: "",
       content: w !== undefined ? w : ""
     }
   }

@@ -9,6 +9,7 @@ CancelDialog.qml	Quick.layout-positioning	Detected width on an item that is mana
 CancelDialog.qml	unqualified	Unqualified access	onClicked: root.reasonIndex = reasonRow.index
 CancelDialog.qml	unqualified	Unqualified access	readonly property bool selected: root.reasonIndex === index
 CoachingScreen.qml	unqualified	Unqualified access	Item { width: parent.width; height: index > 0 ? Theme.spaceSm : 0 }
+CoachingScreen.qml	unqualified	Unqualified access	objectName: "coachMethod:" + root.methodFlag(modelData)
 CoachingScreen.qml	unqualified	Unqualified access	onClicked: root.selectedMethod = parent.modelData
 CoachingScreen.qml	unqualified	Unqualified access	onClicked: root.selectedSlug = parent.modelData.slug
 CoachingScreen.qml	unqualified	Unqualified access	readonly property bool isSelected: root.selectedMethod === modelData
@@ -62,6 +63,7 @@ MentionPopup.qml	unqualified	Unqualified access	onClicked: mentionPopup.accept(m
 MentionPopup.qml	unqualified	Unqualified access	onEntered: mentionPopup.highlight(mentionRow.index)
 MentionPopup.qml	unqualified	Unqualified access	readonly property bool current: index === mentionPopup.currentIndex
 MentionPopup.qml	unqualified	Unqualified access	width: mentionList.width
+SerialFileWriter.qml	signal-handler-parameters	Type QProcess::ExitStatus of parameter exitStatus in signal called exited was not found, but is required to compile onExited. Did you add all imports and dependencies?	onExited: function(exitCode, exitStatus) {
 Sidebar.qml	unqualified	Unqualified access	onClicked: root.navigate(navRow.modelData.id)
 Sidebar.qml	unqualified	Unqualified access	readonly property bool selected: root.currentScreen === modelData.id
 Timeline.qml	unqualified	Unqualified access	+ root.formatDayDuration(Parser.pomodoroMinutes(dayBlock.modelData.entries))

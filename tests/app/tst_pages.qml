@@ -1,5 +1,4 @@
 import QtQuick
-import "../../Parser.js" as Parser
 
 // The journal's page turns: `‹`/`›` in its header, Alt+←/→ and Ctrl+PgUp/PgDn.
 // One page per day with an entry, never past today, and each turned page
@@ -14,31 +13,6 @@ OmvisionTest {
     var t = "# A long day\n"
     for (var i = 1; i <= 60; i++) t += "\nParagraph " + i + ", and a line or two more of what happened.\n"
     return t
-  }
-
-  function dayPath(back) {
-    var d = new Date()
-    d.setDate(d.getDate() - back)
-    return notesPath("journal/" + Parser.dayKey(d) + ".md")
-  }
-
-  // days: { daysBack: text }. Writes them all, then waits once for the
-  // journal's next listing to show them, rather than a poll per file.
-  // Returns daysBack -> path.
-  function addDays(days) {
-    var paths = {}
-    for (var back in days) {
-      paths[back] = dayPath(back)
-      writeFile(paths[back], days[back])
-    }
-    tryVerify(function() {
-      for (var b in days) {
-        var e = journal.findEntry(paths[b])
-        if (e === null || e.content !== days[b]) return false
-      }
-      return true
-    }, 8000, "the journal lists the new days")
-    return paths
   }
 
   // A disabled control can't be click()ed (it waits for it to be enabled),

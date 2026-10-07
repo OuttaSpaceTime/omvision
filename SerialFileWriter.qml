@@ -64,12 +64,21 @@ import Quickshell.Io
 //     Only reads. onDone(exists, text): whether `path` could be loaded, and
 //     its text if so ("" if not). The new-goal slug search uses it.
 //
+//   remove(path, onDone, options)
+//     Delete `path` (`rm -f`, so a file already gone is a success). A job in
+//     the queue like the others, so it lands after every write to `path`
+//     queued before it and before every one queued after it -- a separate
+//     `rm` run beside the queue could delete a write that came later. The
+//     journal uses it for a day whose text was all deleted.
+//     onDone(ok, reason): ok=true, reason "" removed (or already gone)
+//                         ok=false, reason "removeFailed"
+//
 //   options (all optional):
-//     supersede: true -- write() only. If the last job still waiting in the
-//       queue is a write to the same path, replace it with this one instead
-//       of queueing behind it: the older text would be overwritten a moment
-//       later anyway. The replaced job's onDone is never called. A job
-//       already in flight is never replaced.
+//     supersede: true -- write() and remove() only. If the last job still
+//       waiting in the queue is a write or remove of the same path, replace
+//       it with this one instead of queueing behind it: whatever it would
+//       leave on disk is replaced a moment later anyway. The replaced job's
+//       onDone is never called. A job already in flight is never replaced.
 //     next: true -- put this job at the head of the queue instead of the
 //       tail. For a multi-step operation: queued from inside the previous
 //       step's onDone, the follow-up runs before anything anyone else queued
@@ -80,8 +89,9 @@ import Quickshell.Io
 //   busy                 -- true while any job is queued or in flight.
 //   hasPending(path)     -- a job for `path` is queued or in flight.
 //   pendingTextFor(path) -- the text of the newest write() for `path` that
-//                           is queued or in flight, or undefined: what the
-//                           file is about to say, before it says it.
+//                           is queued or in flight ("" for a remove()), or
+//                           undefined: what the file is about to say, before
+//                           it says it.
 //
 // onDone runs once per job, after the job's FileView work is over. By then
 // the job no longer counts toward busy, hasPending() or pendingTextFor(), so
@@ -97,7 +107,8 @@ QtObject {
   // place, so `busy` and anything else bound to it re-evaluates.
   property var queue: []
   // The job being worked on, or null. Its `phase` is "read" while its
-  // reload() is out and "save" while its setText() is.
+  // reload() is out, "save" while its setText() is and "remove" while its
+  // `rm` runs.
   property var current: null
 
   readonly property bool busy: current !== null || queue.length > 0
@@ -114,6 +125,10 @@ QtObject {
     enqueue({ kind: "probe", path: path, onDone: onDone }, options)
   }
 
+  function remove(path, onDone, options) {
+    enqueue({ kind: "remove", path: path, text: "", onDone: onDone }, options)
+  }
+
   function hasPending(path) {
     if (writer.current && writer.current.path === path) return true
     for (var i = 0; i < writer.queue.length; i++) if (writer.queue[i].path === path) return true
@@ -123,19 +138,23 @@ QtObject {
   function pendingTextFor(path) {
     for (var i = writer.queue.length - 1; i >= 0; i--) {
       var q = writer.queue[i]
-      if (q.kind === "write" && q.path === path) return q.text
+      if (writer.changesText(q) && q.path === path) return q.text
     }
     var c = writer.current
-    if (c && c.kind === "write" && c.path === path) return c.text
+    if (c && writer.changesText(c) && c.path === path) return c.text
     return undefined
   }
+
+  // A job that decides the file's whole text by itself: a write() or a
+  // remove(). Only these can supersede each other or answer pendingTextFor.
+  function changesText(job) { return job.kind === "write" || job.kind === "remove" }
 
   function enqueue(job, options) {
     var opts = options || {}
     job.phase = ""
     var q = writer.queue.slice()
     var last = q.length > 0 ? q[q.length - 1] : null
-    if (opts.supersede && job.kind === "write" && last && last.kind === "write" && last.path === job.path) {
+    if (opts.supersede && writer.changesText(job) && last && writer.changesText(last) && last.path === job.path) {
       q[q.length - 1] = job
     } else if (opts.next) {
       q.unshift(job)
@@ -156,8 +175,15 @@ QtObject {
     var q = writer.queue.slice()
     var job = q.shift()
     writer.queue = q
-    job.phase = "read"
     writer.current = job
+    if (job.kind === "remove") {
+      // Nothing to read first: the file goes whatever it says.
+      job.phase = "remove"
+      rmProc.command = ["/usr/bin/rm", "-f", "--", job.path]
+      rmProc.running = true
+      return
+    }
+    job.phase = "read"
     // Setting a new path starts a load of it by itself (FileView preloads);
     // reload() on top of that would start a second one. Only an unchanged
     // path needs the explicit reload() to read the file fresh.
@@ -207,6 +233,13 @@ QtObject {
     }
     onSaveFailed: function(error) {
       if (writer.current && writer.current.phase === "save") writer.finish(false, "saveFailed")
+    }
+  }
+
+  property Process rmProc: Process {
+    onExited: function(exitCode, exitStatus) {
+      var ok = exitCode === 0
+      writer.finish(ok, ok ? "" : "removeFailed")
     }
   }
 

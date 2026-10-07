@@ -59,7 +59,8 @@ import "Util.js" as Util
 //   openPath         in: the day open in the editor
 //   writesDisabled   in: bin/shot's `mention` typing; nothing is written
 //   written          path -> the text this store last knows is on disk: from
-//                    its own confirmed write or its own read. Newer than
+//                    its own confirmed write or its own read ("" for a day
+//                    it deleted). Newer than
 //                    journalContents until omvision.qml's FileView catches up.
 //   busy             a write, read or file creation is under way
 //   knownText(path)       what the day's file says, or undefined if unknown
@@ -67,7 +68,8 @@ import "Util.js" as Util
 //   waitingTextFor(path)  text typed into that day before its disk text was
 //                         known, not yet written, or undefined
 //   hasPending(path)      any of the above is under way for `path`
-//   save(path, text, based)
+//   save(path, text, based)   writes the day, or deletes its file when `text`
+//                             is blank and the day had text
 //   mergeTyped(diskText, typed)  the text a based save writes after a merge
 //   prune()               forget `written` entries omvision.qml has caught up on
 //   signals: saved(path, text), failed(path, message), diskTextKnown(path)
@@ -140,31 +142,46 @@ QtObject {
     }
     store.setWaiting(path, undefined)
     if (text === known) return
-    // Never let a blank buffer clobber a day that had text.
-    if (text.length === 0 && known.length > 0) return
-    files.write(path, text, function(ok, reason) {
+    // A page whose text was all deleted deletes the day: a day nothing is
+    // written on has no file, the way a day never opened has none, so it
+    // drops out of the day list and the page turns. Refusing to write a
+    // blank page over a day with text, as this used to, kept the emptied
+    // day's old text on disk; that guard was for a page opened before its
+    // file was read, which is unbased now and never gets here. Only
+    // whitespace left counts as blank too -- a lone newline is not an entry.
+    var blank = text.trim() === ""
+    if (blank && known.trim() === "") return
+    var onDisk = blank ? "" : text
+    var done = function(ok) {
       if (ok) {
-        store.setWritten(path, text)
-        store.saved(path, text)
+        store.setWritten(path, onDisk)
+        store.saved(path, onDisk)
+      } else if (blank) {
+        store.failed(path, "Couldn't delete the emptied day -- its old text is still on disk.")
       } else {
         // The text is not lost: it is still in the screen's buffer if this
         // is the open day, and `written` still disagrees with it, so the
         // next keystroke or reopening the day tries again.
         store.failed(path, "Couldn't save the last change -- it's still here, not on disk.")
       }
-    }, { supersede: true })
+    }
+    if (blank) files.remove(path, done, { supersede: true })
+    else files.write(path, text, done, { supersede: true })
   }
 
   function prune() {
     var d = {}
     var changed = false
     for (var k in store.written) {
-      // Never drop the open day or one with work under way -- only a path
-      // this store has no live interest in any more, and only once
-      // omvision.qml's own read says the same thing.
-      if (k === store.openPath || store.hasPending(k)) { d[k] = store.written[k]; continue }
-      if (store.journalContents[k] === store.written[k]) { changed = true; continue }
-      d[k] = store.written[k]
+      // Kept while work on the day is under way, and until omvision.qml's own
+      // read says the same thing; then that read answers knownText() alike.
+      // The open day is dropped too: its record kept for good would hide
+      // a change made to the file from outside, which syncBufferFromDisk()
+      // is there to take. A file `find` does not list reads as "", which is
+      // how a day this store deleted stops being kept.
+      var disk = store.journalContents[k] !== undefined ? store.journalContents[k] : ""
+      if (store.hasPending(k) || disk !== store.written[k]) { d[k] = store.written[k]; continue }
+      changed = true
     }
     if (changed) store.written = d
   }

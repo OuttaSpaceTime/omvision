@@ -1,14 +1,15 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import Quickshell.Io
 
 import "Util.js" as Util
 
 // Coaching — the hand-off screen, minus anything that writes (plan.md
 // Milestone 4 / C2). Goal + method are local UI state only (they pick which
-// command is shown, never touch disk). The `copy` control mirrors Goal
-// detail's own NEXT SESSION box: it actually copies the command to the
-// clipboard, since the ompom-coach skill now exists to receive it.
+// command is shown, never touch disk). `start in kitty` opens the session
+// itself; `copy` stays for running it somewhere else (another terminal, a
+// tmux pane), since the ompom-coach skill receives it either way.
 Item {
   id: root
 
@@ -27,9 +28,28 @@ Item {
 
   function methodFlag(m) { return m === "how to solve it" ? "polya" : "mi" }
 
-  // One source for the command: the box shows exactly what the button copies.
-  readonly property string command:
-    "claude /ompom-coach " + root.selectedSlug + " --method " + methodFlag(root.selectedMethod)
+  // One source for the command: the box shows exactly what `copy` copies and
+  // `start in kitty` runs. The prompt is one argument, quoted, so claude
+  // can't take `--method` for an option of its own and the skill gets the
+  // whole line as its ARGUMENTS. The slug needs no escaping: goal slugs are
+  // [a-z0-9-] (goal-files.md), and the skill refuses anything else.
+  readonly property string prompt:
+    "/ompom-coach " + root.selectedSlug + " --method " + methodFlag(root.selectedMethod)
+  readonly property string command: "claude '" + root.prompt + "'"
+
+  // kitty, not the omarchy default terminal, because that's where the
+  // sessions are run by hand. It starts in the notes directory so the
+  // session's project is the notes it reads and rewrites, not wherever
+  // Omvision happened to be launched from. No --hold: when the session ends,
+  // the window goes with it.
+  readonly property var launchArgv: [
+    "kitty", "--directory", Paths.notesDir, "--title", "coach · " + root.selectedSlug,
+    "claude", root.prompt
+  ]
+
+  // Detached, so closing Omvision doesn't take a running session with it.
+  // `kitty` by bare name, from PATH: bin/test puts a stub ahead of it.
+  function startSession() { Quickshell.execDetached(root.launchArgv) }
 
   readonly property var goalList: Util.goalsByTitle(root.goalsData)
 
@@ -180,6 +200,7 @@ Item {
               model: root.methods
               delegate: Text {
                 required property string modelData
+                objectName: "coachMethod:" + root.methodFlag(modelData)
                 readonly property bool isSelected: root.selectedMethod === modelData
                 text: modelData
                 font.family: Theme.fontFamily
@@ -252,6 +273,18 @@ Item {
                 }
               }
             }
+          }
+
+          // Its own row, under the box, at full control height: the screen's one
+          // primary action, filled like Goal detail's `Coach this goal` that
+          // leads here. In the box beside `copy` it would have had to shrink to
+          // the small height, and read as a secondary.
+          Button {
+            objectName: "coachStartButton"
+            label: "start in kitty"
+            filled: true
+            inert: false
+            onActivated: root.startSession()
           }
         }
 
@@ -378,7 +411,7 @@ Item {
         Text {
           width: parent.width
           wrapMode: Text.WordWrap
-          text: "Runs in your own terminal. It reads all of this and rewrites what's next."
+          text: "Opens in kitty, in ~/Notes/Omvision. It reads all of this and rewrites what's next."
           font.family: Theme.fontFamily
           font.pixelSize: Theme.captionSize
           color: Theme.faint

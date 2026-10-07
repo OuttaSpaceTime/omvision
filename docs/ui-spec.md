@@ -12,7 +12,9 @@ standalone config. Omvision carries its own `Theme.qml` singleton with the same 
 read where possible from the live omarchy theme at
 `~/.local/state/omarchy/current/theme/colors.toml` (keys `background`, `foreground`,
 `accent`, `muted`, plus `mode = "light"|"dark"`), with the hardcoded fallback below if the
-file is missing or unparseable. Never crash on a missing theme.
+file is missing or unparseable. Never crash on a missing theme. A theme switch or an edit
+to `colors.toml` in place recolours the open app; a reload that finds the file gone or
+half-written keeps the last theme rather than falling back.
 
 - Corners: **0 radius everywhere.** Hyprland's `decoration:rounding` is 0 on this machine.
 - Font: `monospace` (resolves to JetBrainsMono Nerd Font). One family for the whole app.
@@ -134,6 +136,16 @@ finished pom never ticks one off — you do, or the coach does." At the bottom, 
 back to active. The coaching hand-off lives on the Coaching screen
 only.
 
+## Screen: Coaching
+
+Goal chips and method chips (`motivational interviewing`, `how to solve it`, the two the
+ompom-coach skill accepts), then the command they make, `claude '/ompom-coach <slug> --method
+mi|polya'`, in a bordered box with a small `copy` (it reads `copied!` for a moment). Under the box,
+a filled `start in kitty` opens that same session in a new kitty window, detached, started in
+`~/Notes/Omvision`; the window closes when the session ends. `Coach this goal` on Goal detail
+comes here with its goal picked. Then what a session reads and the goal's past sessions, newest
+first. Nothing on this screen writes; the skill does.
+
 ## Screen: Journal
 
 The one screen that is not a list. It is a writing surface, and the spec's ordinary chrome
@@ -146,7 +158,9 @@ Entering the Journal **is** entering writing mode:
   restores it, and coming back hides it again, so writing always starts clear.
 - The list of days starts collapsed and opens as an overlay from the left edge, 260px, over
   the text, so opening it never reflows the text column. It slides out from the edge of the
-  journal's own area (clipped there), never across the sidebar.
+  journal's own area (clipped there), never across the sidebar. Each row is the day's label
+  over up to three wrapped lines of its text (every non-blank line, markdown stripped,
+  joined), elided after that; a row is as tall as its text.
 - Starting to write puts both away: a click on the paper or into the text (a drag that
   selects doesn't count), or any keystroke that edits the text, closes the day list and
   hides the sidebar again. Arrows and Escape don't count.
@@ -242,7 +256,11 @@ A day opened before its file has been read (right after launch, or a file not ye
 shows an empty page and fills in with the day's text when it arrives. A day is never written
 until its text on disk is known: if something was typed onto that empty page first, the
 day's text is put back above it, as its own paragraph, and that is what is saved. Nothing on
-disk and nothing typed is lost. An empty page is never saved over a day that has text.
+disk and nothing typed is lost.
+
+Deleting all of a day's text deletes its file: the day leaves the day list and the page
+turns, the way a day nothing was written on has no row. Only whitespace left counts as
+empty. The page stays open, and typing on it again writes the day afresh.
 
 ## Data
 
