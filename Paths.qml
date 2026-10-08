@@ -3,7 +3,7 @@ import QtQuick
 import Quickshell
 
 // Where Omvision's files live, in one place. The layout is the goal file
-// contract's (~/Code/ompom-engine/docs/goal-files.md):
+// contract's (docs/goal-files.md):
 //   ~/Notes/Omvision/goals/<slug>.md       the goal: front matter, tasks
 //   ~/Notes/Omvision/goals/<slug>.log.md   its pomodoros and events, append-only
 //   ~/Notes/Omvision/days/YYYY-MM-DD.md    runs and events with no goal, append-only

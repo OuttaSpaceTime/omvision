@@ -44,14 +44,16 @@ reading and writing files under `~/Notes/Omvision/`.
   steps: never type a pixel number (`bin/check px` enforces it; a number that must stay
   takes `// check: allow-px <reason>` on its line). Don't import `qs.Commons`.
 - `~/Notes/Omvision/` holds the user's real notes. Don't write to it to test anything. The
-  file contract is `~/Code/ompom-engine/docs/goal-files.md`:
+  file contract is `docs/goal-files.md`:
   - `<slug>.log.md` and `days/*.md` are append-only (`tee -a`).
   - Goal files are re-read right before each change and written one at a time through a
     queue.
   - The journal is written only by this app.
-- The ompom engine and bar (`~/Code/ompom-engine`, `~/Code/ompom-bar`) run the user's live
-  pomodoro. Deploy them only with `~/Code/ompom-engine/bin/ompom-deploy` (the `ompom-deploy`
-  skill): it keeps the running timer. See `~/Code/ompom-engine/CLAUDE.md`.
+- `plugins/ompom.engine` and `plugins/ompom.bar` are the omarchy-shell plugins that run the
+  user's live pomodoro. Deploy them only with `bin/ompom-deploy` (the `ompom-deploy` skill):
+  it keeps the running timer. See `plugins/ompom.engine/CLAUDE.md`. They live here rather
+  than in repos of their own, so they can't be installed with `omarchy plugin add` (it wants
+  `manifest.json` at a repo's root), and `bin/check`'s lint and px steps skip them.
 - Quickshell's `FileView` fails silently in four ways in this build:
   1. `setText()` called synchronously inside `onLoaded` writes the file but drops
      `onSaved`/`onSaveFailed`, stalling any queue waiting on it. Defer it with a

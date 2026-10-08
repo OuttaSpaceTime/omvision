@@ -1,6 +1,6 @@
 # Ompom Bar
 
-The bar icon for [Ompom](https://github.com/OuttaSpaceTime/ompom-engine) — an Omarchy shell plugin that shows the pomodoro timer's state in the top bar. Requires **[ompom-engine](https://github.com/OuttaSpaceTime/ompom-engine)** to actually run the timer; this plugin only displays and controls it.
+The bar icon for Ompom — an Omarchy shell plugin that shows the pomodoro timer's state in the top bar. Requires **[ompom.engine](../ompom.engine)** to actually run the timer; this plugin only displays and controls it.
 
 ## What it does
 
@@ -11,10 +11,18 @@ The bar icon for [Ompom](https://github.com/OuttaSpaceTime/ompom-engine) — an 
 
 ## Install
 
+The engine and the bar live in the [omvision](https://github.com/OuttaSpaceTime/omvision)
+repo, under `plugins/`. `omarchy plugin add` can't install them from there (it wants
+`manifest.json` at a repo's root), so copy them into place and enable them:
+
 ```bash
-omarchy plugin add https://github.com/OuttaSpaceTime/ompom-engine.git --enable --yes
-omarchy plugin add https://github.com/OuttaSpaceTime/ompom-bar.git --enable --yes
+git clone https://github.com/OuttaSpaceTime/omvision.git ~/Code/omvision
+cp -r ~/Code/omvision/plugins/ompom.engine ~/Code/omvision/plugins/ompom.bar ~/.config/omarchy/plugins/
+omarchy plugin enable ompom.engine
+omarchy plugin enable ompom.bar
 ```
+
+Later changes go in with `bin/ompom-deploy`, which keeps a running pomodoro.
 
 ## Icons
 

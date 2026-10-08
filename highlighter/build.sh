@@ -30,7 +30,7 @@ mkdir -p "$BUILD" "$OUT"
 #
 # Linked to a temporary name and renamed into place: a running app has the old
 # .so mapped, and overwriting that file in place can hand it pages of the new
-# one (ompom-engine's native/README.md, "The crash"). A rename leaves the
+# one (plugins/ompom.engine/native/README.md, "The crash"). A rename leaves the
 # mapped file untouched.
 g++ -std=c++17 -fPIC -shared -O2 -Wall \
   -fvisibility=hidden -fvisibility-inlines-hidden \

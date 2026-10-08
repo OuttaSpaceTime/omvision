@@ -1,7 +1,8 @@
 # CLAUDE.md
 
 Ompom's pomodoro engine: a `keepLoaded` omarchy-shell service (`Service.qml`) with a
-fullscreen overlay. The bar icon lives in `~/Code/ompom-bar`.
+fullscreen overlay. The bar icon lives in `../ompom.bar`. Paths below are from the
+omvision repo root.
 
 ## Deploying: never reset the running timer
 
@@ -16,7 +17,7 @@ fullscreen overlay. The bar icon lives in `~/Code/ompom-bar`.
 - A new piece of cycle state (a property that must outlive a restart) goes into
   both `snapshotJson()` and `restore()`. Otherwise the next deploy drops it.
 - Replace live files atomically (temp file, then rename), never with `cp` in
-  place: see `native/README.md`, "The crash".
+  place: see `plugins/ompom.engine/native/README.md`, "The crash".
 
 ## Testing
 

@@ -1,7 +1,7 @@
 # Omvision
 
-A goals, tasks and journal viewer/editor for the [ompom-engine](https://github.com/OuttaSpaceTime)
-plain-text file contract, written as a standalone [Quickshell](https://quickshell.org/) QML
+A goals, tasks and journal viewer/editor for the ompom plain-text file contract
+([`docs/goal-files.md`](docs/goal-files.md)), written as a standalone [Quickshell](https://quickshell.org/) QML
 config. It reads and writes markdown files on disk directly. The only compiled part is
 the journal's markdown highlighter, which is one shell script and no build system.
 

@@ -1,6 +1,6 @@
 # Ompom Engine
 
-The pomodoro timer engine behind [Ompom](https://github.com/OuttaSpaceTime/ompom-bar) — an Omarchy shell plugin that runs the focus/break state machine and renders the fullscreen block overlay. Pair it with **[ompom-bar](https://github.com/OuttaSpaceTime/ompom-bar)** for the bar icon; this plugin alone has no visible controls.
+The pomodoro timer engine behind Ompom — an Omarchy shell plugin that runs the focus/break state machine and renders the fullscreen block overlay. Pair it with **[ompom.bar](../ompom.bar)** for the bar icon; this plugin alone has no visible controls.
 
 ## What it does
 
@@ -8,14 +8,22 @@ The pomodoro timer engine behind [Ompom](https://github.com/OuttaSpaceTime/ompom
 - **Normal**: 25 min focus / 5 min break. **Long Focus**: 50 min focus / 10 min break. **Off**: disabled.
 - When focus ends, a fullscreen popup blocks input and offers **+1 minute** (up to 3 times) or **Start break** — the extension minutes are blocked too, same as the break itself.
 - **Take notes** is available any time the popup is up. It opens a blank box (Save/Discard); Save appends a timestamped entry to `~/Notes/Ompom/today/ompom.md`. The first save of a new day archives the previous day's file into `~/Notes/Ompom/grave/YYYY-MM-DD.md` first.
-- No settings screen — mode and pause are controlled entirely from the bar icon (see ompom-bar).
+- No settings screen — mode and pause are controlled entirely from the bar icon (see [ompom.bar](../ompom.bar)).
 
 ## Install
 
+The engine and the bar live in the [omvision](https://github.com/OuttaSpaceTime/omvision)
+repo, under `plugins/`. `omarchy plugin add` can't install them from there (it wants
+`manifest.json` at a repo's root), so copy them into place and enable them:
+
 ```bash
-omarchy plugin add https://github.com/OuttaSpaceTime/ompom-engine.git --enable --yes
-omarchy plugin add https://github.com/OuttaSpaceTime/ompom-bar.git --enable --yes
+git clone https://github.com/OuttaSpaceTime/omvision.git ~/Code/omvision
+cp -r ~/Code/omvision/plugins/ompom.engine ~/Code/omvision/plugins/ompom.bar ~/.config/omarchy/plugins/
+omarchy plugin enable ompom.engine
+omarchy plugin enable ompom.bar
 ```
+
+Later changes go in with `bin/ompom-deploy`, which keeps a running pomodoro.
 
 ## IPC
 

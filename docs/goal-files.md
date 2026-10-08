@@ -1,15 +1,15 @@
 # Goal files — the ompom / Omvision / coach contract
 
 This is the file contract between three programs that never share a process:
-`ompom-engine` (this repo — the timer, runs inside the Omarchy shell), **Omvision**
-(a separate goals/tasks/journal app, not built yet), and the `ompom-coach` Claude
+the ompom engine (`plugins/ompom.engine/` in this repo — the timer, runs inside the
+Omarchy shell), **Omvision** (the goals/tasks/journal app at this repo's root), and the `ompom-coach` Claude
 Code skill (also not built yet). None of them can call into each other directly —
 the shell plugin can't import an app, the coach skill runs in a terminal the shell
 never sees — so the filesystem is the only thing all three agree on. This document
 is that agreement. It has to be precise enough that a second implementer can write
 Omvision or the coach skill against it without opening this repo's source.
 
-`notes-helper.py` in this repo is the reference implementation of the ompom-engine
+`plugins/ompom.engine/notes-helper.py` is the reference implementation of the ompom-engine
 side of the contract (`list-goals`, `append-log`, `append-day`, `read-active`,
 `write-active`). Omvision will read and write these files directly, in its own
 language, following the same rules.

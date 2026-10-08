@@ -275,7 +275,7 @@ Read the files directly, in QML, without shelling out to ompom's helper:
 - `~/Notes/Omvision/journal/YYYY-MM-DD.md` — free-form markdown, one file per calendar day,
   no grammar to fail to parse. Omvision is its only writer.
 - The full contract, including every tolerance rule, is
-  `~/Code/ompom-engine/docs/goal-files.md`. **Read it before writing a parser.**
+  `docs/goal-files.md`. **Read it before writing a parser.**
 
 Anything that fails to parse is skipped, never fatal — a broken file must not blank the app.
 Edits appear without a restart: Quickshell has no directory watcher, so the goals and journal

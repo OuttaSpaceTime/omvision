@@ -61,7 +61,7 @@ own runner: `qmltestrunner -platform offscreen -input tests/unit`.
 - `tst_parser.qml` covers goal files, tasks, coaching, log entries (`else:`, dedupe, year
   wrap, the `[+time]` marker), `estimate:` as poms *left*, and the small formatters.
 - `tst_util.qml` covers Util.js's list helpers (`goalsByTitle`).
-- `workedexample.js` is the worked example from `~/Code/ompom-engine/docs/goal-files.md`,
+- `workedexample.js` is the worked example from `docs/goal-files.md`,
   as JS strings (a test can't read files). bin/test checks it against the contract on
   every run.
 

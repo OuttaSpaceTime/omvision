@@ -6,14 +6,15 @@
 # is never started or blocked by it. Ctrl+Q quits from any screen; a hard
 # timeout ends it regardless.
 #
-#   ompom-demo                    this repo's working tree, 5s focus, 5s break
+#   ompom-demo                    this repo's plugins/ompom.engine, 5s focus, 5s break
 #   ompom-demo --break 60         a longer break, to try the notes screen
 #   ompom-demo --live             the copy omarchy-shell loads, not the repo
 set -euo pipefail
 
 focus=5
 brk=5
-src="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+src="$root/plugins/ompom.engine"
 live="$HOME/.config/omarchy/plugins/ompom.engine"
 
 usage() { sed -n '2,12s/^# \{0,1\}//p' "$0"; }
@@ -59,9 +60,10 @@ EOF
 echo "ompom demo: $src, focus ${focus}s, break ${brk}s. Ctrl+Q quits."
 # The writing surfaces use omvision's MarkdownHighlight module, which resolves
 # through QML2_IMPORT_PATH, not the plugin's own directory (see
-# native/README.md). The deployed plugin carries a copy in native/; the repo
-# demo uses omvision's own build, so it always shows the current highlighter.
+# plugins/ompom.engine/native/README.md). The deployed plugin carries a copy
+# in native/; the repo demo uses omvision's own build (highlighter/), so it
+# always shows the current highlighter.
 imports="$src/native"
-[ "$src" = "$live" ] || imports="$imports:${OMVISION_DIR:-$HOME/Code/omvision}"
+[ "$src" = "$live" ] || imports="$imports:$root"
 QML2_IMPORT_PATH="$imports${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}" \
   timeout "${OMPOM_DEMO_TIMEOUT:-600}" qs -p "$cfg" --no-color

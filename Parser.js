@@ -1,7 +1,7 @@
 .pragma library
 
 // Parsing for the ompom / Omvision / coach file contract.
-// See ~/Code/ompom-engine/docs/goal-files.md §6 for the tolerance rules this
+// See docs/goal-files.md §6 for the tolerance rules this
 // file implements. Nothing here throws: a file that doesn't fit the grammar
 // is skipped (front matter) or has the offending piece skipped (tasks, log
 // entries) — never fatal to the caller.

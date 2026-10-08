@@ -8,7 +8,7 @@ import "Writer.js" as Writer
 import "Util.js" as Util
 
 // Omvision -- goals, tasks, a daily journal and coaching, over the ompom
-// engine's file contract (~/Code/ompom-engine/docs/goal-files.md). A
+// engine's file contract (docs/goal-files.md). A
 // standalone Quickshell config, launched with bin/omvision rather than
 // `qs -p` by hand: the launcher puts the journal's compiled markdown
 // highlighter on the import path (see bin/omvision for why it has to).

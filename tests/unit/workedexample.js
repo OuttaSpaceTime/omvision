@@ -1,6 +1,6 @@
 .pragma library
 
-// The worked example from ~/Code/ompom-engine/docs/goal-files.md, as the
+// The worked example from docs/goal-files.md, as the
 // exact bytes of each file. Kept here as JS strings because qmltestrunner
 // can't read files from a test (QML's XMLHttpRequest refuses local files
 // unless an environment switch is set, and is asynchronous anyway).

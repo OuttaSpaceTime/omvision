@@ -2,7 +2,10 @@
 # Omvision. Sourced by bash.
 APP=omvision
 STEPS=(lint px load test)
-SKIP_DIRS=()
+# plugins/ holds the ompom omarchy-shell plugins: they import the shell's
+# qs.Commons, not this app's Theme, so neither the lint baseline nor the px
+# rule applies to them.
+SKIP_DIRS=(plugins)
 
 # Offscreen against a throwaway HOME seeded from tests/fixtures/home, so the
 # real ~/Notes is never read.

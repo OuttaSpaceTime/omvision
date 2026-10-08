@@ -27,7 +27,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 QMLTESTRUNNER=/usr/lib/qt6/bin/qmltestrunner
-CONTRACT="$HOME/Code/ompom-engine/docs/goal-files.md"
+CONTRACT="$ROOT/docs/goal-files.md"
 APP_TIMEOUT="${OMVISION_TEST_TIMEOUT:-120}"
 
 keep=0 verbose=0

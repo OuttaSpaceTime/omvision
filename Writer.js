@@ -2,7 +2,7 @@
 .import "Parser.js" as Parser
 
 // Write-path helpers for the ompom/Omvision file contract -- see
-// ~/Code/ompom-engine/docs/goal-files.md. Parser.js reads tolerantly;
+// docs/goal-files.md. Parser.js reads tolerantly;
 // this file writes precisely, and does it by surgical line edits rather
 // than reparse-and-reserialize, so anything not being changed -- unknown
 // front-matter keys, section order, blank lines, the user's own prose in
