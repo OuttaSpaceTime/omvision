@@ -4,8 +4,8 @@ import MarkdownHighlight
 
 // Omvision's journal highlighter, on the overlay's two writing surfaces (the
 // intent line and the break notes), so writing here looks exactly like
-// writing in the journal: same module, same settings. The module is
-// ~/Code/omvision/highlighter, built there and deployed into this plugin's
+// writing in the journal: same module, same settings. The module is the
+// repo root's highlighter/, built there and deployed into this plugin's
 // native/ directory, which is already on omarchy-shell's QML2_IMPORT_PATH
 // (see native/README.md). It replaces this plugin's own Ompom.Highlight,
 // which drew markdown differently; keeping two highlighters meant the

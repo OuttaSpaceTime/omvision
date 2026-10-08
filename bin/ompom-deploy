@@ -2,7 +2,7 @@
 # Deploys this repo's plugins/ompom.engine and plugins/ompom.bar to the copies
 # omarchy-shell loads, without resetting the pomodoro that is running.
 #
-#   ompom-deploy              deploy whatever differs in either repo
+#   ompom-deploy              deploy whatever differs in either plugin
 #   ompom-deploy --dry-run    list what differs, change nothing
 #
 # The bar and the engine behave differently, which is the whole reason this
@@ -17,6 +17,9 @@
 # failed restore can be retried by hand while the engine still accepts it
 # (see handoffMaxAgeMs in Service.qml):
 #   omarchy-shell ompom restore "$(cat "$XDG_RUNTIME_DIR/ompom-handoff.json")"
+#
+# With no engine deployed yet it is a first install: there is no timer to
+# keep, so it only copies the files, and enabling is left to omarchy.
 #
 # Every file is replaced atomically (temp file, then rename), never with a
 # plain cp over the live path: a running process can have the old file mapped,
@@ -47,9 +50,9 @@ handoff="${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR is not set}/ompom-handoff.json"
 # are the decision: top-level QML and Python, the manifest, and the bar's
 # icons. native/ is left out on purpose: the MarkdownHighlight library there
 # needs its own build and deploy (see plugins/ompom.engine/native/README.md).
-shipped() {  # <repo> <pathspec...>
-  local repo="$1"; shift
-  git -C "$repo" ls-files --cached --others --exclude-standard -- "$@"
+shipped() {  # <dir> <pathspec...>
+  local dir="$1"; shift
+  git -C "$dir" ls-files --cached --others --exclude-standard -- "$@"
 }
 mapfile -t engine_files < <(shipped "$engine_src" manifest.json ':(glob)*.qml' ':(glob)*.py')
 mapfile -t bar_files < <(shipped "$bar_src" manifest.json ':(glob)*.qml' ':(glob)icons/*')
@@ -73,6 +76,12 @@ put() {  # <src> <dst>: atomic replace, keeping the source's mode
 
 status() { omarchy-shell ompom status 2>/dev/null; }
 
+copy_changed() {
+  local f
+  for f in "${bar_changed[@]}"; do put "$bar_src/$f" "$bar_dst/$f"; done
+  for f in "${engine_changed[@]}"; do put "$engine_src/$f" "$engine_dst/$f"; done
+}
+
 mapfile -t engine_changed < <(changed "$engine_src" "$engine_dst" "${engine_files[@]}")
 mapfile -t bar_changed < <(changed "$bar_src" "$bar_dst" "${bar_files[@]}")
 
@@ -84,6 +93,12 @@ fi
 (( ${#bar_changed[@]} )) && echo "bar:    ${bar_changed[*]}"
 (( dry_run )) && exit 0
 
+if [[ ! -f $engine_dst/manifest.json ]]; then
+  copy_changed
+  echo "ompom-deploy: installed. Enable with: omarchy plugin enable ompom.engine && omarchy plugin enable ompom.bar"
+  exit 0
+fi
+
 before="$(status)" || { echo "ompom-deploy: the engine isn't answering (omarchy-shell ompom status)" >&2; exit 1; }
 echo "before: $before"
 
@@ -92,8 +107,7 @@ if (( ${#engine_changed[@]} )); then
   (umask 077; printf '%s\n' "$snap" > "$handoff")
 fi
 
-for f in "${bar_changed[@]}"; do put "$bar_src/$f" "$bar_dst/$f"; done
-for f in "${engine_changed[@]}"; do put "$engine_src/$f" "$engine_dst/$f"; done
+copy_changed
 
 if (( ${#engine_changed[@]} == 0 )); then
   # Give the hot reload a moment, then show that the timer went on untouched.

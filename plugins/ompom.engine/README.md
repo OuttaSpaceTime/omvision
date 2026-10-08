@@ -14,16 +14,16 @@ The pomodoro timer engine behind Ompom — an Omarchy shell plugin that runs the
 
 The engine and the bar live in the [omvision](https://github.com/OuttaSpaceTime/omvision)
 repo, under `plugins/`. `omarchy plugin add` can't install them from there (it wants
-`manifest.json` at a repo's root), so copy them into place and enable them:
+`manifest.json` at a repo's root); `bin/ompom-deploy` copies both into place:
 
 ```bash
 git clone https://github.com/OuttaSpaceTime/omvision.git ~/Code/omvision
-cp -r ~/Code/omvision/plugins/ompom.engine ~/Code/omvision/plugins/ompom.bar ~/.config/omarchy/plugins/
+~/Code/omvision/bin/ompom-deploy
 omarchy plugin enable ompom.engine
 omarchy plugin enable ompom.bar
 ```
 
-Later changes go in with `bin/ompom-deploy`, which keeps a running pomodoro.
+Run `bin/ompom-deploy` again for later changes: it keeps a running pomodoro.
 
 ## IPC
 

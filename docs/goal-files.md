@@ -1,18 +1,18 @@
 # Goal files — the ompom / Omvision / coach contract
 
 This is the file contract between three programs that never share a process:
-the ompom engine (`plugins/ompom.engine/` in this repo — the timer, runs inside the
-Omarchy shell), **Omvision** (the goals/tasks/journal app at this repo's root), and the `ompom-coach` Claude
-Code skill (also not built yet). None of them can call into each other directly —
-the shell plugin can't import an app, the coach skill runs in a terminal the shell
-never sees — so the filesystem is the only thing all three agree on. This document
-is that agreement. It has to be precise enough that a second implementer can write
-Omvision or the coach skill against it without opening this repo's source.
+the ompom engine (`plugins/ompom.engine/` in this repo — the timer, runs inside
+the Omarchy shell), **Omvision** (the goals/tasks/journal app at this repo's root),
+and the `ompom-coach` Claude Code skill. None of them can call into each other
+directly — the shell plugin can't import an app, the coach skill runs in a terminal
+the shell never sees — so the filesystem is the only thing all three agree on. This
+document is that agreement. It has to be precise enough that a second implementer
+can write any of the three against it without opening the others' source.
 
-`plugins/ompom.engine/notes-helper.py` is the reference implementation of the ompom-engine
-side of the contract (`list-goals`, `append-log`, `append-day`, `read-active`,
-`write-active`). Omvision will read and write these files directly, in its own
-language, following the same rules.
+`plugins/ompom.engine/notes-helper.py` is the reference implementation of the
+engine's side of the contract (`list-goals`, `append-log`, `append-day`,
+`read-active`, `write-active`). Omvision reads and writes these files directly, in
+its own language, following the same rules.
 
 A pomodoro note lives in exactly one place: the active goal's log if a goal is
 set, or the day file if not. There is no third copy and no daily-notes file with
@@ -67,7 +67,7 @@ writers do it to the same file without coordination, and a coach session and a
 practice.
 
 **The fix is structural, not a rule to remember.** `notes-helper.py`'s
-`write_atomic()` — the function every existing write in this repo goes through —
+`write_atomic()` — the function every write in `notes-helper.py` goes through —
 is itself read-whole-file → temp file → `rename()`. That's a read-modify-write by
 construction: it's what makes a single write atomic (the rename can't land a
 half-written file), but it does nothing about two *separate* read-modify-write
@@ -451,7 +451,7 @@ left: still drafting the parsing-rules section
 ```
 
 `~/Notes/Omvision/goals/ship-goal-files-doc/journal/2026-09-20.md` — free-form,
-owned entirely by Omvision (M3/O5, not built yet); this contract fixes only its
+owned entirely by Omvision (M3/O5); this contract fixes only its
 path, one file per calendar day under the goal's own `journal/` subdirectory.
 The coach reads whatever's in it for the date range since its last session and
 must tolerate arbitrary markdown, same as any other reader here.

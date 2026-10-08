@@ -2,7 +2,7 @@
 
 > **Superseded (2026-09-24).** The overlay no longer imports this module.
 > `NoteHighlighterHost.qml` now loads omvision's `MarkdownHighlight`
-> (built from `~/Code/omvision/highlighter/`), so the overlay's writing
+> (built from this repo's `highlighter/`), so the overlay's writing
 > looks exactly like omvision's journal. The deployed plugin carries that
 > module at `native/MarkdownHighlight/`, which the `QML2_IMPORT_PATH` below
 > already covers. Deploy it the same atomic way described here, then

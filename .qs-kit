@@ -1,11 +1,25 @@
 # What ~/Code/qs-kit/bin/qs-check (run by bin/check) needs to know about
 # Omvision. Sourced by bash.
 APP=omvision
-STEPS=(lint px load test)
+STEPS=(lint px plugins load test)
 # plugins/ holds the ompom omarchy-shell plugins: they import the shell's
 # qs.Commons, not this app's Theme, so neither the lint baseline nor the px
-# rule applies to them.
+# rule applies to them. The plugins step checks them instead.
 SKIP_DIRS=(plugins)
+
+# omarchy's own manifest check, the one the shell applies when it loads a
+# plugin, so a broken manifest or entry point shows up here and not in the
+# live shell that runs the pomodoro.
+run_plugins() {
+  if ! command -v omarchy >/dev/null; then note plugins "not run: no omarchy"; return; fi
+  local d
+  for d in "$ROOT"/plugins/*/; do
+    if ! omarchy plugin validate "$d" >"$scratch/plugins.log" 2>&1; then
+      cat "$scratch/plugins.log"; failed=1; note plugins "FAILED: omarchy plugin validate ${d#"$ROOT"/}"; return
+    fi
+  done
+  note plugins "ok: omarchy plugin validate"
+}
 
 # Offscreen against a throwaway HOME seeded from tests/fixtures/home, so the
 # real ~/Notes is never read.

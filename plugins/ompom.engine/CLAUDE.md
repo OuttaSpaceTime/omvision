@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Ompom's pomodoro engine: a `keepLoaded` omarchy-shell service (`Service.qml`) with a
-fullscreen overlay. The bar icon lives in `../ompom.bar`. Paths below are from the
+fullscreen overlay. The bar icon lives in `plugins/ompom.bar`. Paths are from the
 omvision repo root.
 
 ## Deploying: never reset the running timer

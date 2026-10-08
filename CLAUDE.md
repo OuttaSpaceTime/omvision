@@ -53,7 +53,7 @@ reading and writing files under `~/Notes/Omvision/`.
   user's live pomodoro. Deploy them only with `bin/ompom-deploy` (the `ompom-deploy` skill):
   it keeps the running timer. See `plugins/ompom.engine/CLAUDE.md`. They live here rather
   than in repos of their own, so they can't be installed with `omarchy plugin add` (it wants
-  `manifest.json` at a repo's root), and `bin/check`'s lint and px steps skip them.
+  `manifest.json` at a repo's root). `bin/check` validates their manifests instead of linting them.
 - Quickshell's `FileView` fails silently in four ways in this build:
   1. `setText()` called synchronously inside `onLoaded` writes the file but drops
      `onSaved`/`onSaveFailed`, stalling any queue waiting on it. Defer it with a
