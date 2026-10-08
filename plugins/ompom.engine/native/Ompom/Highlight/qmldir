@@ -1,0 +1,3 @@
+module Ompom.Highlight
+plugin ompomhighlight
+typeinfo plugins.qmltypes

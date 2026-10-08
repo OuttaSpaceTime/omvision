@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Runs the ompom overlay as a live demo: the real Service.qml, loaded in its
+# own qs process with `demo: true`, so it cycles intent -> focus -> "Focus
+# complete" -> break on short timers. It never writes notes or the active
+# goal, and it doesn't touch the engine inside omarchy-shell, so a real break
+# is never started or blocked by it. Ctrl+Q quits from any screen; a hard
+# timeout ends it regardless.
+#
+#   ompom-demo                    this repo's working tree, 5s focus, 5s break
+#   ompom-demo --break 60         a longer break, to try the notes screen
+#   ompom-demo --live             the copy omarchy-shell loads, not the repo
+set -euo pipefail
+
+focus=5
+brk=5
+src="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+live="$HOME/.config/omarchy/plugins/ompom.engine"
+
+usage() { sed -n '2,12s/^# \{0,1\}//p' "$0"; }
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --focus) focus="${2:-}"; shift 2 ;;
+    --break) brk="${2:-}"; shift 2 ;;
+    --live)  src="$live"; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "ompom-demo: unknown option $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+for n in "$focus" "$brk"; do
+  [[ "$n" =~ ^[1-9][0-9]*$ ]] || { echo "ompom-demo: durations are whole seconds, got '$n'" >&2; exit 2; }
+done
+
+# An older Service.qml has no demo flag and would run as a real engine: real
+# timers, real writes. Refuse rather than do that.
+if ! grep -q 'property bool demo:' "$src/Service.qml"; then
+  echo "ompom-demo: $src/Service.qml has no demo mode (deploy the repo's copy first)" >&2
+  exit 1
+fi
+
+# qs needs a config directory whose shell.qml is the entry point, with the
+# plugin's files beside it so `Service` resolves as a same-directory type and
+# `qs.Commons` resolves to the shell's own module. Symlinks, not copies, so
+# the demo is always the file as it is on disk right now.
+cfg="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/ompom-demo.XXXXXX")"
+trap 'rm -rf -- "$cfg"' EXIT
+ln -s /usr/share/omarchy/shell/Commons "$cfg/Commons"
+for f in Service.qml OverlayButton.qml NoteHighlighterHost.qml notes-helper.py; do
+  ln -s "$src/$f" "$cfg/$f"
+done
+cat > "$cfg/shell.qml" <<EOF
+import Quickshell
+ShellRoot {
+  Service { demo: true; demoFocusSec: $focus; demoBreakSec: $brk }
+}
+EOF
+
+echo "ompom demo: $src, focus ${focus}s, break ${brk}s. Ctrl+Q quits."
+# The writing surfaces use omvision's MarkdownHighlight module, which resolves
+# through QML2_IMPORT_PATH, not the plugin's own directory (see
+# native/README.md). The deployed plugin carries a copy in native/; the repo
+# demo uses omvision's own build, so it always shows the current highlighter.
+imports="$src/native"
+[ "$src" = "$live" ] || imports="$imports:${OMVISION_DIR:-$HOME/Code/omvision}"
+QML2_IMPORT_PATH="$imports${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}" \
+  timeout "${OMPOM_DEMO_TIMEOUT:-600}" qs -p "$cfg" --no-color
