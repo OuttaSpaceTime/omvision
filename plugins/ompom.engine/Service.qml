@@ -247,7 +247,7 @@ Item {
   // hot-reloads, which is what lets the bar widget be redeployed without
   // touching the timer. The price is that a new Service.qml only loads on
   // a whole-shell restart, which would start every deploy on a fresh 25
-  // minutes. bin/ompom-deploy bridges that: snapshot() before the restart,
+  // minutes. bin/omvision-deploy bridges that: snapshot() before the restart,
   // restore() into the new engine after it. PersistentProperties was the
   // obvious alternative and doesn't apply: it carries state across a
   // Quickshell reload, but a restart is a new process, and even a plugin
@@ -950,7 +950,7 @@ Item {
     function status(): string { return root.statusJson() }
     function togglePause(): string { return root.togglePause() }
     function cycleMode(): string { return root.cycleMode() }
-    // For bin/ompom-deploy only -- see snapshotJson().
+    // For bin/omvision-deploy only -- see snapshotJson().
     function snapshot(): string { return root.snapshotJson() }
     function restore(json: string): string { return root.restore(json) }
   }

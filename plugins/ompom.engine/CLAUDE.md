@@ -7,8 +7,8 @@ omvision repo root.
 ## Deploying: never reset the running timer
 
 - The user's real pomodoro runs in the deployed copy under
-  `~/.config/omarchy/plugins/ompom.engine`. Deploy only with `bin/ompom-deploy`
-  (the `ompom-deploy` skill). Never copy files into the plugin folder by hand, and
+  `~/.config/omarchy/plugins/ompom.engine`. Deploy only with `bin/omvision-deploy`
+  (the `omvision-deploy` skill). Never copy files into the plugin folder by hand, and
   never run `omarchy-restart-shell` on its own: either one loses the running cycle.
 - How it works: bar-only changes hot-reload, and `keepLoaded` keeps the engine
   untouched through that. A new `Service.qml` only loads on a shell restart, so

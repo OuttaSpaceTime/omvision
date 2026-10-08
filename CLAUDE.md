@@ -50,7 +50,7 @@ reading and writing files under `~/Notes/Omvision/`.
     queue.
   - The journal is written only by this app.
 - `plugins/ompom.engine` and `plugins/ompom.bar` are the omarchy-shell plugins that run the
-  user's live pomodoro. Deploy them only with `bin/ompom-deploy` (the `ompom-deploy` skill):
+  user's live pomodoro. Deploy them only with `bin/omvision-deploy` (the `omvision-deploy` skill):
   it keeps the running timer. See `plugins/ompom.engine/CLAUDE.md`. They live here rather
   than in repos of their own, so they can't be installed with `omarchy plugin add` (it wants
   `manifest.json` at a repo's root). `bin/check` validates their manifests instead of linting them.

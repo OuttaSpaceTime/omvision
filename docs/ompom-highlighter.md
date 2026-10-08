@@ -14,14 +14,14 @@ deployed plugin's `native/Ompom/` still holds its build, which nothing imports.
 
 ## Deploying it
 
-`bin/ompom-deploy` does not ship the module. Build it with
+`bin/omvision-deploy` does not ship the module. Build it with
 `highlighter/build.sh`, then copy `MarkdownHighlight/` into the deployed
 plugin's `native/MarkdownHighlight/`, replacing every file atomically (see "The
 crash" below), and restart the whole shell rather than relying on a hot reload:
 the retired library also exports a class named `MarkdownHighlighter`, and a
 fresh process never has both loaded. A restart loses the running pomodoro
 unless you take `omarchy-shell ompom snapshot` first and `restore` it after, as
-`bin/ompom-deploy` does.
+`bin/omvision-deploy` does.
 
 ## Why a compiled module needs QML2_IMPORT_PATH
 

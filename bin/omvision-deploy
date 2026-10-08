@@ -2,8 +2,8 @@
 # Deploys this repo's plugins/ompom.engine and plugins/ompom.bar to the copies
 # omarchy-shell loads, without resetting the pomodoro that is running.
 #
-#   ompom-deploy              deploy whatever differs in either plugin
-#   ompom-deploy --dry-run    list what differs, change nothing
+#   omvision-deploy              deploy whatever differs in either plugin
+#   omvision-deploy --dry-run    list what differs, change nothing
 #
 # The bar and the engine behave differently, which is the whole reason this
 # script exists. Any write under ~/.config/omarchy/plugins makes the shell
@@ -34,7 +34,7 @@ case "${1:-}" in
   "") ;;
   --dry-run) dry_run=1 ;;
   -h|--help) usage; exit 0 ;;
-  *) echo "ompom-deploy: unknown option $1" >&2; usage >&2; exit 2 ;;
+  *) echo "omvision-deploy: unknown option $1" >&2; usage >&2; exit 2 ;;
 esac
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -86,7 +86,7 @@ mapfile -t engine_changed < <(changed "$engine_src" "$engine_dst" "${engine_file
 mapfile -t bar_changed < <(changed "$bar_src" "$bar_dst" "${bar_files[@]}")
 
 if (( ${#engine_changed[@]} == 0 && ${#bar_changed[@]} == 0 )); then
-  echo "ompom-deploy: nothing differs, nothing to do."
+  echo "omvision-deploy: nothing differs, nothing to do."
   exit 0
 fi
 (( ${#engine_changed[@]} )) && echo "engine: ${engine_changed[*]}"
@@ -95,15 +95,15 @@ fi
 
 if [[ ! -f $engine_dst/manifest.json ]]; then
   copy_changed
-  echo "ompom-deploy: installed. Enable with: omarchy plugin enable ompom.engine && omarchy plugin enable ompom.bar"
+  echo "omvision-deploy: installed. Enable with: omarchy plugin enable ompom.engine && omarchy plugin enable ompom.bar"
   exit 0
 fi
 
-before="$(status)" || { echo "ompom-deploy: the engine isn't answering (omarchy-shell ompom status)" >&2; exit 1; }
+before="$(status)" || { echo "omvision-deploy: the engine isn't answering (omarchy-shell ompom status)" >&2; exit 1; }
 echo "before: $before"
 
 if (( ${#engine_changed[@]} )); then
-  snap="$(omarchy-shell ompom snapshot)" || { echo "ompom-deploy: the engine gave no snapshot" >&2; exit 1; }
+  snap="$(omarchy-shell ompom snapshot)" || { echo "omvision-deploy: the engine gave no snapshot" >&2; exit 1; }
   (umask 077; printf '%s\n' "$snap" > "$handoff")
 fi
 
@@ -122,13 +122,13 @@ omarchy-restart-shell
 # services such as the engine load only after the plugin scan that follows.
 tries=0
 until status >/dev/null; do
-  (( ++tries < 100 )) || { echo "ompom-deploy: the engine didn't come back; the snapshot is in $handoff" >&2; exit 1; }
+  (( ++tries < 100 )) || { echo "omvision-deploy: the engine didn't come back; the snapshot is in $handoff" >&2; exit 1; }
   sleep 0.2
 done
 
 result="$(omarchy-shell ompom restore "$snap" 2>&1)" || true
 if [[ $result != \{* ]]; then
-  echo "ompom-deploy: restore failed: $result" >&2
+  echo "omvision-deploy: restore failed: $result" >&2
   echo "retry soon: omarchy-shell ompom restore \"\$(cat $handoff)\"" >&2
   exit 1
 fi
