@@ -7,9 +7,9 @@ import MarkdownHighlight
 // writing in the journal: same module, same settings. The module is the
 // repo root's highlighter/, built there and deployed into this plugin's
 // native/ directory, which is already on omarchy-shell's QML2_IMPORT_PATH
-// (see native/README.md). It replaces this plugin's own Ompom.Highlight,
-// which drew markdown differently; keeping two highlighters meant the
-// overlay and the journal never quite matched.
+// (see docs/ompom-highlighter.md). It replaced this plugin's own
+// Ompom.Highlight, which drew markdown differently; keeping two highlighters
+// meant the overlay and the journal never quite matched.
 //
 // In a file of its own, loaded through a Loader, because a QML import
 // failure takes the whole importing file down: if the module is missing,

@@ -17,7 +17,7 @@ omvision repo root.
 - A new piece of cycle state (a property that must outlive a restart) goes into
   both `snapshotJson()` and `restore()`. Otherwise the next deploy drops it.
 - Replace live files atomically (temp file, then rename), never with `cp` in
-  place: see `plugins/ompom.engine/native/README.md`, "The crash".
+  place: see `docs/ompom-highlighter.md`, "The crash".
 
 ## Testing
 

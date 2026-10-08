@@ -1,64 +1,42 @@
-# Ompom.Highlight (native)
+# The ompom overlay's markdown highlighter
 
-> **Superseded (2026-09-24).** The overlay no longer imports this module.
-> `NoteHighlighterHost.qml` now loads omvision's `MarkdownHighlight`
-> (built from this repo's `highlighter/`), so the overlay's writing
-> looks exactly like omvision's journal. The deployed plugin carries that
-> module at `native/MarkdownHighlight/`, which the `QML2_IMPORT_PATH` below
-> already covers. Deploy it the same atomic way described here, then
-> restart the whole shell (`omarchy restart shell`) rather than relying on
-> a hot reload: this library also exports a class named
-> `MarkdownHighlighter`, and a fresh process never has both loaded.
-> The sources here are kept until someone decides to remove them.
+The overlay's two writing surfaces (the intent line and the break notes) are
+styled by `MarkdownHighlight`, the module built from this repo's `highlighter/`,
+so writing there looks exactly like writing in the journal.
+`plugins/ompom.engine/NoteHighlighterHost.qml` loads it.
 
-> **Status: wired in and stable.** It crashed the entire Quickshell
-> compositor process once, during development — root-caused and fixed,
-> see "The crash" below. If you're deploying an updated `.so` (or any
-> file) to the *installed*, currently-running plugin, always replace it
-> atomically (write to a temp file in the same directory, then rename
-> over the real path) — never overwrite the destination file in place.
+The engine once had its own module, `Ompom.Highlight` (a `NoteHighlighter`
+wrapping a `MarkdownHighlighter` copied from
+[omacom-io/omawrite](https://github.com/omacom-io/omawrite)). It drew markdown
+differently from the journal and was retired on 2026-09-24. Its sources were
+removed when the plugin moved into this repo and are in the git history. The
+deployed plugin's `native/Ompom/` still holds its build, which nothing imports.
 
-A native QML plugin providing `NoteHighlighter`, a thin wrapper around
-`MarkdownHighlighter` (copied from
-[omacom-io/omawrite](https://github.com/omacom-io/omawrite), MIT — see
-`../THIRD_PARTY_NOTICES.md`) that attaches to a `TextEdit`'s
-`textDocument` and applies real live markdown syntax highlighting as you
-type — headings, bold, italic, blockquotes, list markers, inline code.
+## Deploying it
 
-This exists because QML's own `TextEdit.MarkdownText` format only
-converts markdown to rich text when its `text` property is assigned
-wholesale; it does not re-parse as you type into it, so it never
-actually renders live (verified by hand — see the Service.qml git
-history for the failed pure-QML attempts).
+`bin/ompom-deploy` does not ship the module. Build it with
+`highlighter/build.sh`, then copy `MarkdownHighlight/` into the deployed
+plugin's `native/MarkdownHighlight/`, replacing every file atomically (see "The
+crash" below), and restart the whole shell rather than relying on a hot reload:
+the retired library also exports a class named `MarkdownHighlighter`, and a
+fresh process never has both loaded. A restart loses the running pomodoro
+unless you take `omarchy-shell ompom snapshot` first and `restore` it after, as
+`bin/ompom-deploy` does.
 
-## Why this is here instead of in the plugin root
+## Why a compiled module needs QML2_IMPORT_PATH
 
 Quickshell's third-party plugin model is "drop a folder of `.qml` files,
 they're interpreted directly, no build step" — that's how `omarchy plugin
-add` works (a plain `git clone`). This directory breaks that model: it's
-a compiled Qt/C++ QML extension plugin, built with `qmake`, and only
-works because Quickshell's underlying `QQmlApplicationEngine` honors the
+add` works (a plain `git clone`). `MarkdownHighlight` breaks that model:
+it's a compiled Qt/C++ QML extension module, built by
+`highlighter/build.sh`, and only works because Quickshell's underlying `QQmlApplicationEngine` honors the
 standard `QML2_IMPORT_PATH` environment variable like any Qt app.
-
-## Building
-
-```bash
-cd native
-qmake6 ompomhighlight.pro
-make
-```
-
-Produces `native/Ompom/Highlight/{libompomhighlight.so,qmldir,plugins.qmltypes}`.
-Copy that `Ompom/` directory into the *installed* plugin's own directory
-(`~/.config/omarchy/plugins/ompom.engine/native/Ompom/`) — an
-`import Ompom.Highlight 1.0` line resolves against whatever
-`QML2_IMPORT_PATH` points at, not against its own plugin directory.
 
 ## Required: QML2_IMPORT_PATH
 
-`omarchy-shell` (Quickshell) needs `QML2_IMPORT_PATH` to include this
-plugin's `native/` directory *before* it loads `ompom.engine`, or
-`import Ompom.Highlight 1.0` fails.
+`omarchy-shell` (Quickshell) needs `QML2_IMPORT_PATH` to include the
+deployed plugin's `native/` directory *before* it loads `ompom.engine`, or
+`import MarkdownHighlight` fails.
 
 For the current session:
 
@@ -116,7 +94,7 @@ ticking correctly throughout, single process, no crash) — see the git
 history around the second wiring-in commit for the exact commands.
 
 Separately: the `Loader { source: "NoteHighlighterHost.qml" }`
-indirection (rather than importing `Ompom.Highlight` directly in
+indirection (rather than importing the module directly in
 Service.qml) is still worth keeping regardless of the above — it turns
 a *missing* native plugin (e.g. `QML2_IMPORT_PATH` not set yet) into a
 graceful `Loader.status === Loader.Error` instead of a whole-file load
@@ -125,7 +103,6 @@ doesn't substitute for it; both are needed.
 
 ## Compiled artifact, not portable
 
-`libompomhighlight.so` is compiled against this machine's exact Qt 6.11.2
-ABI/architecture. It is not distributable via `omarchy plugin add` the
-way the rest of this plugin is — it would need rebuilding on any other
-machine.
+`libmarkdownhighlight.so` is compiled against this machine's exact Qt
+ABI/architecture. It can't travel with the plugin's QML the way plain
+files do — it needs rebuilding on any other machine.

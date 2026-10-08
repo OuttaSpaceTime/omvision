@@ -37,4 +37,4 @@ omarchy-shell ompom cycleMode      # Normal -> Long Focus -> Off -> Normal
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](../../LICENSE).

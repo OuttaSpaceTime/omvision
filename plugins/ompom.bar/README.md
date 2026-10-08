@@ -19,4 +19,4 @@ See [icons/ATTRIBUTION.md](icons/ATTRIBUTION.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](../../LICENSE).

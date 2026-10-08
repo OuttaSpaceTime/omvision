@@ -60,9 +60,9 @@ EOF
 echo "ompom demo: $src, focus ${focus}s, break ${brk}s. Ctrl+Q quits."
 # The writing surfaces use omvision's MarkdownHighlight module, which resolves
 # through QML2_IMPORT_PATH, not the plugin's own directory (see
-# plugins/ompom.engine/native/README.md). The deployed plugin carries a copy
-# in native/; the repo demo uses this repo's own build (highlighter/), so it
-# always shows the current highlighter.
+# docs/ompom-highlighter.md). The deployed plugin carries a copy in native/;
+# the repo demo uses this repo's own build (highlighter/), so it always shows
+# the current highlighter.
 imports="$root"
 [ "$src" = "$live" ] && imports="$live/native"
 QML2_IMPORT_PATH="$imports${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}" \
