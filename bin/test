@@ -2,9 +2,10 @@
 # Runs Omvision's tests. Nothing here opens a window: everything is offscreen,
 # and nothing reads or writes ~/Notes -- the app tests get a throwaway HOME.
 #
-#   bin/test              both layers
+#   bin/test              every layer
 #   bin/test unit         layer 1 only: Writer.js and Parser.js (qmltestrunner)
 #   bin/test app          layer 2 only: the whole app, driven from inside qs
+#   bin/test engine       the ompom engine's break cycle (tests/engine)
 #   bin/test app tasks    one app test file (tests/app/tst_tasks.qml)
 #   bin/test app tasks test_add_a_task
 #                         one test in it
@@ -18,7 +19,9 @@
 # at the file. Each run gets a fresh temp HOME seeded from
 # tests/fixtures/home; the test file resets it between its own tests. A run
 # that fails keeps its temp dir, with the app's log and a screenshot of each
-# failed test, and says where. See docs/testing.md.
+# failed test, and says where. The engine layer runs the pomodoro engine
+# (plugins/ompom.engine) the same way, offscreen with a throwaway HOME; see
+# tests/engine/run.sh. See docs/testing.md.
 #
 # Exits non-zero if any test fails, a known failure starts passing (XPASS),
 # an app run times out or crashes, or the worked-example fixture has drifted
@@ -36,14 +39,14 @@ for a in "$@"; do
   case "$a" in
     -k) keep=1 ;;
     -v) verbose=1 ;;
-    -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) args+=("$a") ;;
   esac
 done
 layer="${args[0]:-all}"
 only_file="${args[1]:-}"
 only_test="${args[2]:-}"
-case "$layer" in all|unit|app) ;; *) echo "bin/test: unknown layer '$layer' (all, unit, app)" >&2; exit 2 ;; esac
+case "$layer" in all|unit|app|engine) ;; *) echo "bin/test: unknown layer '$layer' (all, unit, app, engine)" >&2; exit 2 ;; esac
 
 failed=0
 summary=()
@@ -171,8 +174,40 @@ run_app() {
   done
 }
 
+# ---- engine ------------------------------------------------------------------
+run_engine() {
+  if ! command -v qs >/dev/null; then
+    echo "bin/test: qs (Quickshell) not found" >&2
+    failed=1; summary+=("engine   not run: no qs"); return
+  fi
+  # One sequence in one file (see tests/engine/tst_break.qml), so there is
+  # no file or test to pick.
+  if [ -n "$only_file" ]; then
+    echo "bin/test: the engine layer is one sequence; it takes no file or test name" >&2
+    failed=1; summary+=("engine   not run: unexpected argument '$only_file'"); return
+  fi
+  local dir out
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/omvision-test.engine.XXXXXX")"
+  out="$("$ROOT/tests/engine/run.sh" "$dir")"
+  local code=$?
+  if [ "$verbose" = 1 ]; then printf '%s\n' "$out"
+  else printf '%s\n' "$out" | grep -E '^FAIL' | sed 's/^/  /' || true
+  fi
+  local passed done_line
+  passed="$(printf '%s\n' "$out" | grep -c '^ok ' || true)"
+  done_line="$(printf '%s\n' "$out" | sed -n 's/^DONE //p' | tail -1)"
+  if [ "$code" = 0 ]; then
+    summary+=("engine   $passed passed, ${done_line:-0 failed}")
+    if [ "$keep" = 1 ]; then summary+=("           kept $dir"); else rm -rf -- "$dir"; fi
+  else
+    failed=1
+    summary+=("engine   ${done_line:-did not finish} -- log, screenshots and HOME kept in $dir")
+  fi
+}
+
 if [ "$layer" = all ] || [ "$layer" = unit ]; then echo "unit: tests/unit"; run_unit; fi
 if [ "$layer" = all ] || [ "$layer" = app ]; then run_app; fi
+if [ "$layer" = all ] || [ "$layer" = engine ]; then echo "engine: tests/engine"; run_engine; fi
 
 echo
 printf '%s\n' "${summary[@]}"

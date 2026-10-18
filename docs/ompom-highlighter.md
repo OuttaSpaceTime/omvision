@@ -1,6 +1,6 @@
 # The ompom overlay's markdown highlighter
 
-The overlay's two writing surfaces (the intent line and the break notes) are
+The overlay's break notes (each section's heading and text) are
 styled by `MarkdownHighlight`, the module built from this repo's `highlighter/`,
 so writing there looks exactly like writing in the journal.
 `plugins/ompom.engine/NoteHighlighterHost.qml` loads it.
@@ -95,7 +95,7 @@ history around the second wiring-in commit for the exact commands.
 
 Separately: the `Loader { source: "NoteHighlighterHost.qml" }`
 indirection (rather than importing the module directly in
-Service.qml) is still worth keeping regardless of the above — it turns
+NoteSection.qml) is still worth keeping regardless of the above — it turns
 a *missing* native plugin (e.g. `QML2_IMPORT_PATH` not set yet) into a
 graceful `Loader.status === Loader.Error` instead of a whole-file load
 failure. That's a different failure mode than the crash and this fix

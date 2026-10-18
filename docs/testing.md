@@ -1,14 +1,15 @@
 # Testing
 
-`bin/test` runs everything, offscreen, in about 15 seconds. No window opens and
+`bin/test` runs everything, offscreen, in about 25 seconds. No window opens and
 nothing under `~/Notes` is read or written.
 
 ```bash
-bin/test                    # both layers
+bin/test                    # every layer
 bin/test unit               # Writer.js and Parser.js only (under a second)
 bin/test app                # the whole-app tests only
 bin/test app tasks          # one file: tests/app/tst_tasks.qml
 bin/test app tasks test_add_a_task
+bin/test engine             # the ompom engine's break cycle (tests/engine)
 bin/test -v                 # the runners' full output
 bin/test -k                 # keep every app run's temp dir, not only failed ones
 ```
@@ -149,6 +150,27 @@ scheduler drives the logger at every step. It borrows the real `TestResult` only
 `wait()`. All of this is private Qt API (`QtTest/TestCase.qml`, Qt 6.11), and it lives in
 `OmvisionTest.qml` alone, so a Qt upgrade that changes it breaks only that file.
 
+## The engine layer: `tests/engine`
+
+The ompom engine (`plugins/ompom.engine`) runs inside omarchy-shell, not the app, so it
+has a layer of its own. `tests/engine/run.sh` builds a `qs` config in a temp dir with the
+plugin's files linked in, omarchy-shell's own `Commons`, and a `shell.qml` that puts the
+plugin's `Overlay.qml` over its `Engine.qml` in a `FloatingWindow`. That is
+`Service.qml`'s whole job too, except that it uses a layer-shell `PanelWindow`, which
+offscreen `qs` has no backend for; every other file is the one that ships. It is not
+the demo mode: the real helper writes real log entries, into a throwaway HOME seeded from
+`tests/fixtures/home`, and the test reads them back with the app's `Parser.js`.
+
+`tst_break.qml` sits inside the overlay window, so `keyClick` and `mouseClick` reach the
+overlay's fields and shortcuts. It is one sequence rather than separate tests, since each
+step starts from the cycle the one before left: a mode switch at the prompt, the break's
+extensions, Ctrl+G, the notes (list continuation, folding, arrows across sections,
+scrolling with Return, Escape keeping the text), the log entry the break's end writes, the long break, a
+refused write, an oversized note, and snapshots from older engines. Time moves by
+setting `remaining` to 0 and calling the engine's `tick()`, the function its one-second
+timer calls. A failure keeps the temp dir, with
+`engine.log`, a screenshot of each failed check and the HOME.
+
 ## Known failures
 
 Bugs a test has found but that aren't fixed yet are pinned with
@@ -167,13 +189,14 @@ There are none at the moment.
   `QInputMethodEvent`s) reproduced the compose bug, but it is not in this repo, and it
   is out of scope for this suite.
 - The journal's kinetic trackpad glide, and anything else about timing and feel.
-- Everything that needs a real session: the ompom engine and bar, the live omarchy theme,
-  and the user's own notes. Those stay with the user.
+- Everything that needs a real session: the engine's layer-shell surface and exclusive
+  keyboard grab, the bar, the live omarchy theme, and the user's own notes. Those stay with the user.
 
 ## Adding a test
 
 - A change to Writer.js or Parser.js gets a case in `tests/unit`, stated as the whole
   expected file.
+- A change to the ompom engine's cycle or overlay gets a step in `tests/engine/tst_break.qml`.
 - A change to what a click or a key does gets a flow in `tests/app`: act through
   `click`/`type`/`key`, then check the file with `expectFile`, not only the screen.
 - Then break the feature on purpose, check that the test fails, and restore it.

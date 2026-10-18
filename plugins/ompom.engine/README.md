@@ -5,9 +5,12 @@ The pomodoro timer engine behind Ompom — an Omarchy shell plugin that runs the
 ## What it does
 
 - Starts automatically with the Omarchy shell (every login), always in **Normal** mode by default.
-- **Normal**: 25 min focus / 5 min break. **Long Focus**: 50 min focus / 10 min break. **Off**: disabled.
+- **Normal**: 25 min focus / 5 min break, and every fourth break is a long one of 15 min (the count starts over each day and on a mode switch). **Long Focus**: 50 min focus / 10 min break. **Off**: disabled.
 - When focus ends, a fullscreen popup blocks input and offers **+1 minute** (up to 3 times) or **Start break** — the extension minutes are blocked too, same as the break itself.
-- **Take notes** is available any time the popup is up. It opens a blank box (Save/Discard); Save appends a timestamped entry to `~/Notes/Ompom/today/ompom.md`. The first save of a new day archives the previous day's file into `~/Notes/Ompom/grave/YYYY-MM-DD.md` first.
+- The break shows its countdown with **+1 / +2 / +3 min** to lengthen it, **Take notes**, and **Ctrl+G** to pick the next run's goal (done, cancelled and `focusable: no` goals aren't offered).
+- **Take notes** opens one page with three sections, *What's done?*, *What's left?* and *What else?*, each headed like a markdown heading; click a heading to fold it. The arrows move through the page as through one markdown file, stopping on the headings, where Return folds and unfolds. Esc or ← goes back to the countdown, and the notes stay as written until the break ends.
+- When the break ends, the run is logged with its notes — to the goal's `<slug>.log.md`, or `~/Notes/Omvision/days/<date>.md` without a goal — and the next focus run starts straight away. If the write is refused, the break holds at 0:00 with **Try again** and **Skip**.
+- **Bedtime**: at 22:15 whatever is running stops (a finished run is logged, a focus run cut off part-way isn't) and **Time to sleep** comes up, with **+1 minute** (up to 3 times) and **Good night**. From 22:20 until 05:30 the laptop shows only the night's screen: a countdown to 05:30 and **Take notes**. Logging in during that time lands straight on it. The night's notes stay on the page all night and go to the day file each time the page is closed with changes, as one 0-minute entry. At 05:30 a fresh run starts. This holds in every mode, Off too, and with the timer paused.
 - No settings screen — mode and pause are controlled entirely from the bar icon (see [ompom.bar](../ompom.bar)).
 
 ## Install
@@ -30,10 +33,14 @@ Run `bin/omvision-deploy` again for later changes: it keeps a running pomodoro.
 Exposes an `ompom` IPC target for the bar widget (and anything else) to use:
 
 ```bash
-omarchy-shell ompom status        # JSON: mode, phase, remaining, paused, extensionsUsed
+omarchy-shell ompom status        # JSON: mode, phase, remaining, paused, extensionsUsed, breakIsLong
 omarchy-shell ompom togglePause    # pause/resume the current focus run
 omarchy-shell ompom cycleMode      # Normal -> Long Focus -> Off -> Normal
+omarchy-shell ompom skipSleep      # ends tonight's bedtime screen, for when the laptop is really needed
 ```
+
+`skipSleep` is the only way out of the night, and nothing on the overlay offers it.
+With the overlay up, run it from a TTY (Ctrl+Alt+F3, log in).
 
 ## License
 

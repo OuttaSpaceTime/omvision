@@ -24,4 +24,30 @@ OmvisionTest {
               "the screen shows the goal active again")
     item("closeGoalButton")
   }
+
+  // The Edit goal dialog's "can be focused on at the laptop" box: unticking
+  // it adds one `focusable: no` line, ticking it again puts back the file
+  // as it was.
+  function test_mark_a_goal_not_focusable() {
+    var text = fixtureText(goal)
+    // Before the closing fence, after done_by.
+    var off = text.replace("done_by: 2026-10-09\n", "done_by: 2026-10-09\nfocusable: no\n")
+    verify(off !== text)
+    toggleFocusable()
+    expectFile(goal, off)
+    tryVerify(function() { return app.goalsData["write-the-report"].meta.focusable === false }, 5000,
+              "the app reads the goal back as not focusable")
+
+    toggleFocusable()
+    expectFile(goal, text)
+  }
+
+  function toggleFocusable() {
+    openGoal("write-the-report")
+    click("editGoalButton")
+    tryCompare(app, "newGoalDialogOpen", true)
+    click("goalFocusableToggle")
+    key(Qt.Key_Return)
+    tryCompare(app, "newGoalDialogOpen", false)
+  }
 }

@@ -84,7 +84,10 @@ Hovering a goal row shows the pencil (`PencilIcon.qml`: Font Awesome U+F040 at i
 its width is always reserved, so it shifts nothing. Clicking it opens the New goal dialog as `Edit goal`, pre-filled, with `Save`. Saving
 rewrites only the front-matter keys that changed (a coach's `# was 9` note on an untouched
 estimate survives); clearing estimate or done-by removes the key. The slug and file name
-never change.
+never change. Under the fields, a tick box `can be focused on at the laptop` (EventDialog's
+square mark, ticked by default): unticked writes `focusable: no`, ticked removes the line
+again, and the ompom break's goal picker leaves those goals out (goal-files.md §6), along
+with done and cancelled ones.
 
 One row per goal, hairline-separated, sized to its text. Each row bleeds a page margin past
 the column on both sides, padding restored inside, so a fill runs past the text. Selected or

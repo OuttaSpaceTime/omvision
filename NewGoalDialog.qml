@@ -3,8 +3,9 @@ import QtQuick.Layouts
 
 // "New goal" (the last inert control in a fresh install, plan.md O2):
 // title + one-line why, optionally an estimate in poms and a done_by
-// date. Submitting hands the raw fields up to omvision.qml as one
-// payload -- this dialog never touches the filesystem itself, it only
+// date, and whether the goal can be focused on at the laptop.
+// Submitting hands the raw fields up to omvision.qml as one payload --
+// this dialog never touches the filesystem itself, it only
 // knows how to validate what the user typed (goal-files.md has nothing
 // to say about *input* validation, only about the file shape once
 // something is about to be written).
@@ -32,6 +33,9 @@ FocusScope {
   property string whyText: ""
   property string estimateText: ""
   property string doneByText: ""
+  // Ticked by default, a new goal's and every old goal's state: a goal
+  // the picker should skip is the exception (goal-files.md §6).
+  property bool focusable: true
   property string localError: ""
   property var previousFocusItem: null
 
@@ -49,6 +53,7 @@ FocusScope {
     whyText = g ? g.why : ""
     estimateText = g ? root.leadingNumber(g.raw.estimate) : ""
     doneByText = g && g.done_by ? g.done_by : ""
+    focusable = g ? g.focusable !== false : true
     localError = ""
     titleInput.forceActiveFocus()
   }
@@ -86,7 +91,7 @@ FocusScope {
     }
 
     root.localError = ""
-    root.submitted({ title: t, why: root.whyText.trim(), estimate: estimate, doneBy: doneBy })
+    root.submitted({ title: t, why: root.whyText.trim(), estimate: estimate, doneBy: doneBy, focusable: root.focusable })
   }
 
   Keys.onEscapePressed: root.dismissed()
@@ -285,6 +290,45 @@ FocusScope {
               Keys.onEnterPressed: root.submit()
             }
           }
+        }
+      }
+
+      // ---- focusable ----------------------------------------------------
+      // EventDialog's "count the time" box, same mark and wording style.
+      Item {
+        objectName: "goalFocusableToggle"
+        Layout.fillWidth: true
+        Layout.preferredHeight: Theme.smallControlHeight
+        RowLayout {
+          anchors.fill: parent
+          spacing: Theme.spaceSm
+          Rectangle {
+            Layout.preferredWidth: Theme.optionMarkSize
+            Layout.preferredHeight: Theme.optionMarkSize
+            border.color: Theme.border
+            border.width: Theme.borderWidth
+            color: "transparent"
+            Rectangle {
+              visible: root.focusable
+              anchors.centerIn: parent
+              width: Theme.optionDotSize
+              height: Theme.optionDotSize
+              color: Theme.accentColor
+            }
+          }
+          Text {
+            Layout.fillWidth: true
+            elide: Text.ElideRight
+            text: "can be focused on at the laptop"
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.bodySmallSize
+            color: Theme.dim
+          }
+        }
+        MouseArea {
+          anchors.fill: parent
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.focusable = !root.focusable
         }
       }
 

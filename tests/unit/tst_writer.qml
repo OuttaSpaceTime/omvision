@@ -407,6 +407,22 @@ TestCase {
             crlf(edited(goal, "done_by: 2026-09-21\n", "done_by: 2026-10-01\n")))
   }
 
+  // The dialog's box writes only `focusable: no`; ticking it again removes
+  // the line, and a save that leaves the box as the file has it touches
+  // nothing, a hand-written `focusable: yes` included.
+  function test_updateGoalFields_focusable() {
+    var off = edited(goal, "done_by: 2026-09-21\n", "done_by: 2026-09-21\nfocusable: no\n")
+    compare(apply(goal, function(l) { return Writer.updateGoalFields(l, fields({ focusable: false })) }), off)
+    compare(apply(off, function(l) { return Writer.updateGoalFields(l, fields({ focusable: true })) }), goal)
+    compare(apply(off, function(l) { return Writer.updateGoalFields(l, fields({ focusable: false })) }), off)
+    compare(apply(goal, function(l) { return Writer.updateGoalFields(l, fields({ focusable: true })) }), goal)
+    compare(apply(off, function(l) { return Writer.updateGoalFields(l, fields({})) }), off,
+            "a caller that doesn't send the box leaves the key alone")
+    var yes = edited(goal, "status: active\n", "status: active\nfocusable: yes\n")
+    compare(apply(yes, function(l) { return Writer.updateGoalFields(l, fields({ focusable: true })) }), yes)
+    compare(apply(crlf(goal), function(l) { return Writer.updateGoalFields(l, fields({ focusable: false })) }), crlf(off))
+  }
+
   // The coach rewrites the estimate as "6   # was 9 — session 2"
   // (goal-files.md §6). Saving the Edit goal dialog without touching the
   // estimate must keep that note.
@@ -701,6 +717,10 @@ TestCase {
             "---\ntitle: Ship it\nwhy: two lines\nstatus: active\nestimate: 3\ndone_by: 2026-10-01\n---\n## Tasks\n")
     compare(Writer.buildNewGoalFile({ title: "T", why: "", estimate: "", doneBy: "" }),
             "---\ntitle: T\nwhy: \nstatus: active\n---\n## Tasks\n", "\"\" is no estimate")
+    compare(Writer.buildNewGoalFile({ title: "T", why: "W", focusable: true }),
+            "---\ntitle: T\nwhy: W\nstatus: active\n---\n## Tasks\n", "focusable is the default, not written")
+    compare(Writer.buildNewGoalFile({ title: "T", why: "W", estimate: 2, focusable: false }),
+            "---\ntitle: T\nwhy: W\nstatus: active\nestimate: 2\nfocusable: no\n---\n## Tasks\n")
   }
 
   // NewGoalDialog passes the estimate as a Number, so typing 0 hands

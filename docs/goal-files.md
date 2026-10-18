@@ -129,23 +129,38 @@ entry by a blank line.
 
 ```
 ### 20 Sep 14:25 · 25m
-focus: Wire the goal picker into the IPC
-done: status call wired through the IPC
+done: - status call wired through the IPC
+  - picker opens on Ctrl+G
 left: picker still caches the list on load
 else: kept getting pulled into Slack, worth guarding the next run
 ```
 
 Heading: `### <D Mon HH:MM> · <N>m` — day of month with no leading zero,
 three-letter month, 24-hour clock, then the pomodoro's length in minutes.
-Body: a `focus:` line (what the run was for, captured at `intent`), then
-`done:`, `left:` and `else:` lines captured at break time. `done:` and `left:`
-are each optional — omit the line entirely if the field was left blank, don't
-write it empty.
+Body: `done:`, `left:` and `else:` lines, the three sections of the break's
+notes ("What's done?", "What's left?", "What else?"). Each is optional — omit
+the line entirely if the section was left blank, don't write it empty. An entry
+for a break where nothing was written is just its heading.
 
-`else:` is the break screen's open question ("What else?"), and is written
-**only when it was answered**. Every entry written before this line existed is
-still valid, and a reader that doesn't know the key sees the three-line body it
-always saw. Like `done:` and `left:`, it is a note and never task state.
+**A 0-minute entry** (`### 16 Oct 22:31 · 0m`) holds notes with no run behind them:
+the ompom engine's night notes. The night has one notes page, kept all night. Each
+time it is closed with changes (22:15 to 05:30) the whole page is appended to the
+day file again, under one heading stamped at that night's first save. Readers
+show its notes like any pomodoro's, but don't count it as a pomodoro, and show
+only the last of such re-saves: a 0-minute entry is hidden when a later one under
+the same heading still contains each of its notes. Entries written before
+2026-10-17 are separate lots, each cleared from the page once saved, and can
+share a minute; that rule keeps both, since neither contains the other.
+
+**A multi-line note** continues on lines indented two spaces, which belong to the
+key above them; a blank line inside a note is kept when an indented line follows
+it. Any line that is neither ends the note. The indent is what keeps a note's
+own lines from reading as a key, or as a `###` heading, of their own.
+
+`focus:` (what the run was for) appears in entries from before 2026-10-13, when
+the engine asked for it on a screen before every run. Readers keep reading it;
+nothing writes it any more. Every entry written before a key existed is still
+valid, and a reader that doesn't know a key skips its line.
 
 **`done:` and `left:` are notes, not task state.** Finishing a pomodoro never
 ticks a task off in `<slug>.md`. A reader that auto-completes a task because its
@@ -217,10 +232,14 @@ to stdout, sorted by slug:
 
 ```json
 [
-  {"slug": "deep-work-book", "title": "Finish the deep work book"},
-  {"slug": "ship-goal-files-doc", "title": "Ship the goal files doc"}
+  {"slug": "deep-work-book", "title": "Finish the deep work book", "status": "active", "focusable": true},
+  {"slug": "ship-goal-files-doc", "title": "Ship the goal files doc", "status": "active", "focusable": true}
 ]
 ```
+
+`status` is the raw front-matter value (`null` when the key is missing).
+`focusable` is §6's reading of the `focusable:` key, always a boolean. A reader
+of an older helper's output, which has neither, takes a goal as focusable.
 
 A file that fails to parse (§6) is left out of the array, not treated as an
 error — `list-goals` always exits 0 and prints `[]` if the directory doesn't
@@ -230,21 +249,22 @@ a file, not a directory) is a 1.
 ### `append-log <slug>`
 
 Stdin: one JSON object, UTF-8, under the same 20 000-byte cap used throughout
-this contract. Two shapes, told apart by which of `focus`/`kind` is present —
-an object with both or neither is malformed and dropped.
+this contract. Two shapes, told apart by `kind`: an object with it is an event,
+one without it a pomodoro.
 
 Pomodoro shape:
 
 ```json
 {"started": "2026-09-20T14:25:00", "minutes": 25,
- "focus": "Wire the goal picker into the IPC",
- "done": "status call wired through the IPC",
- "left": "picker still caches the list on load"}
+ "done": "status call wired through the IPC\npicker opens on Ctrl+G",
+ "left": "picker still caches the list on load",
+ "else": ""}
 ```
 
-`started`, `minutes`, and `focus` are required; `done` and `left` are optional
-strings (omit the key, or send `""`, and the corresponding line is left out of
-the written entry — see §4). `started` is a local-time ISO-8601 timestamp; the
+`started` and `minutes` are required; `done`, `left`, `else` and `focus` are
+optional strings (omit the key, or send `""`, and the corresponding line is left
+out of the written entry; a value's own newlines become §4's indented
+continuation lines). Only an older engine sends `focus`. `started` is a local-time ISO-8601 timestamp; the
 helper reformats it into the heading's `<D Mon HH:MM>`, it does not use
 wall-clock "now", so a delayed write (e.g. the process was slow to spawn)
 doesn't skew the logged time.
@@ -339,6 +359,14 @@ should be fatal.
   testing (as M1's acceptance step does) won't necessarily set every field.
 - **Missing `estimate` / `done_by` → simply absent**, not an error and not a
   zero. Downstream JSON just omits the key.
+- **`focusable: no` → the goal is no run's goal.** Some goals can't be worked
+  on at the laptop (training, sleep, a habit). They still take events and
+  tasks, but ompom's goal picker doesn't offer them. Only `no`, `false` or
+  `off` (any case, trimmed) mean no; a missing key or any other value means
+  yes, so every goal written before the key existed stays pickable, and a
+  typo can't hide one. Omvision writes only `focusable: no`, and removes the
+  line to make a goal focusable again. A goal already active when it's
+  marked stays active; it just isn't offered next time.
 - **`estimate` is poms *remaining*, not the goal's total.** It answers "how much
   is still left", it shrinks as the work is done, and it should equal the sum of
   the open tasks' `≈N` markers. The coach rewrites it at the end of a session —

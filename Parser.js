@@ -95,6 +95,17 @@ function frontMatterValue(key, raw) {
   return v.trim()
 }
 
+// `focusable: no` marks a goal that can't be worked on at the laptop
+// (training, sleep, a habit): the ompom engine's break picker leaves it out.
+// Absent means focusable, so every goal written before the key existed
+// keeps its place in the picker. "no", "false" and "off" all read as no, the
+// spellings a hand edit is likely to use; anything else is yes, because a
+// typo hiding a goal from the picker is worse than one leaving it in.
+// notes-helper.py's list-goals reads it the same way.
+function isFocusable(raw) {
+  return ["no", "false", "off"].indexOf(String(raw === undefined ? "" : raw).trim().toLowerCase()) === -1
+}
+
 function parseGoalFile(text) {
   var lines = normalize(text).split("\n").map(rtrim)
   var front = goalFrontMatter(lines)
@@ -108,6 +119,7 @@ function parseGoalFile(text) {
     status: fm.status ? fm.status : "active",
     estimate: (est !== "" && !isNaN(Number(est))) ? Number(est) : undefined,
     done_by: fm.done_by ? fm.done_by : undefined,
+    focusable: isFocusable(fm.focusable),
     raw: fm
   }
 
@@ -273,23 +285,31 @@ function parseLogEntries(text, now) {
         // `else:` is goal-files.md §4's "Anything else?" line, written only
         // when the break's open question was answered -- so its absence is
         // the normal case and never an error.
-        var focus = "", done = "", left = "", other = ""
+        // A line indented two spaces continues the key above it (a
+        // multi-line note, §4), and a blank line between two of those is
+        // part of the note. Anything else ends the key.
+        var notes = { focus: "", done: "", left: "", "else": "" }
+        var key = null, blanks = 0
         for (var b = 0; b < body.length; b++) {
-          var fm2 = body[b].match(/^focus:\s?(.*)$/)
-          var dm = body[b].match(/^done:\s?(.*)$/)
-          var lm = body[b].match(/^left:\s?(.*)$/)
-          var om = body[b].match(/^else:\s?(.*)$/)
-          if (fm2) focus = fm2[1]
-          else if (dm) done = dm[1]
-          else if (lm) left = lm[1]
-          else if (om) other = om[1]
+          var km = body[b].match(/^(focus|done|left|else):\s?(.*)$/)
+          if (km) {
+            key = km[1]; blanks = 0
+            notes[key] = km[2]
+          } else if (key !== null && body[b] === "") {
+            blanks++
+          } else if (key !== null && body[b].substring(0, 2) === "  ") {
+            notes[key] += "\n".repeat(blanks + 1) + body[b].substring(2)
+            blanks = 0
+          } else {
+            key = null
+          }
         }
         entries.push({
           type: "pomodoro",
           date: resolveDate(day, monIdx, hh, mm, referenceNow),
           minutes: minutes,
           heading: pm[1] + " " + pm[2] + " " + pm[3] + ":" + pm[4],
-          focus: focus, done: done, left: left, other: other
+          focus: notes.focus, done: notes.done, left: notes.left, other: notes["else"]
         })
       } else if (em) {
         var day2 = Number(em[1]), monIdx2 = monthIndex(em[2])
@@ -323,6 +343,12 @@ function parseLogEntries(text, now) {
   return dedupePomodoros(entries)
 }
 
+// A pomodoro entry that is a run. One of 0 minutes is notes with no run
+// behind them (the ompom engine's night notes, goal-files.md §4): read like
+// any pomodoro's notes, but not counted as one, and deduplicated by their
+// own rule (dedupePomodoros()).
+function isRun(e) { return e.type === "pomodoro" && e.minutes > 0 }
+
 // One pomodoro, one entry.
 //
 // `.log.md` and `days/*.md` are append-only by contract, so a writer that
@@ -338,19 +364,41 @@ function parseLogEntries(text, now) {
 // pomodoro -- two runs cannot start in the same minute -- and the last one
 // wins, because each re-save carried the fuller note. Display only; the file
 // is untouched.
+//
+// Night notes (0m, not runs) are re-saved whole under one heading each time
+// the page is closed, so they collapse too -- but only into a later copy
+// that still holds all of their text. The engine's first night notes
+// cleared the page after each save, and wrote separate lots, two of them
+// in one minute on the user's own disk: keeping the last per heading, as
+// for runs, would hide the first lot. A text edited down shows both copies,
+// which repeats words but never loses any.
 function dedupePomodoros(entries) {
   var lastIndexByKey = {}
   for (var i = 0; i < entries.length; i++) {
-    if (entries[i].type !== "pomodoro") continue
+    if (!isRun(entries[i])) continue
     lastIndexByKey[entries[i].heading + "·" + entries[i].minutes] = i
   }
   var out = []
   for (var j = 0; j < entries.length; j++) {
     var e = entries[j]
-    if (e.type === "pomodoro" && lastIndexByKey[e.heading + "·" + e.minutes] !== j) continue
+    if (isRun(e) && lastIndexByKey[e.heading + "·" + e.minutes] !== j) continue
+    if (isNightNote(e) && entries.some(function(later, k) { return k > j && holdsNotes(later, e) })) continue
     out.push(e)
   }
   return out
+}
+
+function isNightNote(e) { return e.type === "pomodoro" && e.minutes === 0 }
+
+// `later` is a re-save of `earlier`: another night note under the same
+// heading, with each of its notes still in it. An empty note is in any
+// other, but tested as such: Qt's engine has "".indexOf("") as -1, not the
+// 0 the standard (and Node) give.
+function holdsNotes(later, earlier) {
+  return isNightNote(later) && later.heading === earlier.heading
+    && ["focus", "done", "left", "other"].every(function(k) {
+      return earlier[k] === "" || later[k].indexOf(earlier[k]) !== -1
+    })
 }
 
 // Total minutes actually invested in a goal: every pomodoro, plus any
@@ -375,7 +423,7 @@ function investedMinutes(entries) {
 // get one day's figures.
 function pomodoroCount(entries) {
   var n = 0
-  for (var i = 0; i < entries.length; i++) if (entries[i].type === "pomodoro") n++
+  for (var i = 0; i < entries.length; i++) if (isRun(entries[i])) n++
   return n
 }
 

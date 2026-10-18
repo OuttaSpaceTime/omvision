@@ -123,7 +123,20 @@ function updateGoalFields(lines, fields) {
   if (out) out = setFrontMatterValue(out, "why", fields.why)
   if (out) out = setFrontMatterValue(out, "estimate", fields.estimate)
   if (out) out = setFrontMatterValue(out, "done_by", fields.doneBy)
+  if (out && fields.focusable !== undefined) out = setFocusable(out, fields.focusable)
   return out
+}
+
+// Only `focusable: no` is ever written; making a goal focusable again
+// removes the line, since absent already means yes (Parser.isFocusable).
+// A goal whose file already reads the way the box is ticked is left alone,
+// so a hand-written `focusable: yes` (or `false`) survives a save of the
+// dialog that didn't touch the box.
+function setFocusable(lines, focusable) {
+  var fm = Parser.goalFrontMatter(lines)
+  if (!fm) return null
+  if (Parser.isFocusable(fm.fields.focusable) === !!focusable) return lines.slice()
+  return setFrontMatterValue(lines, "focusable", focusable ? "" : "no")
 }
 
 // ---- tasks -------------------------------------------------------------
@@ -370,7 +383,8 @@ function fmLine(key, value) {
 
 // Builds a brand-new <slug>.md from scratch: front matter (title, why,
 // status: active, plus estimate/done_by only when the caller supplied
-// them) and an empty "## Tasks" section, per the "New goal" dialog spec.
+// them, and `focusable: no` only for a goal that isn't) and an empty
+// "## Tasks" section, per the "New goal" dialog spec.
 // An estimate of 0 is written as "estimate: 0", not left out: §6 keeps
 // "absent" and "zero" apart ("Missing estimate -> simply absent ... not a
 // zero"), Parser reads 0 as 0, and the goal detail shows "≈ 0 poms left",
@@ -389,6 +403,7 @@ function buildNewGoalFile(fields) {
   if (fields.doneBy !== undefined && fields.doneBy !== null && fields.doneBy !== "") {
     lines.push(fmLine("done_by", fields.doneBy))
   }
+  if (fields.focusable === false) lines.push("focusable: no")
   lines.push("---")
   lines.push("## Tasks")
   lines.push("")

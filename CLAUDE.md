@@ -21,13 +21,14 @@ reading and writing files under `~/Notes/Omvision/`.
   that, and fails only on warnings not in `.qmllint-baseline`.
 - `bin/check` runs everything a change should pass: lint, the no-pixel-numbers rule, the
   load check and `bin/test`. Run it before you stop. See `docs/testing.md`.
-- Tests: `bin/test` runs both layers offscreen in about 15s. Run it before and after a
+- Tests: `bin/test` runs every layer offscreen in about 25s. Run it before and after a
   change. `tests/unit` (qmltestrunner) covers Writer.js and Parser.js. `tests/app` runs the
   real app inside `qs` with a throwaway HOME, clicks and types through `OmvisionTest.qml`'s
-  helpers, and checks the bytes on disk. `bin/test app tasks` runs one file. See
-  `docs/testing.md`.
+  helpers, and checks the bytes on disk. `tests/engine` does the same for the ompom
+  engine's break cycle. `bin/test app tasks` runs one file. See `docs/testing.md`.
 - A change to the write path, or to what a click or key does, comes with a test: a
-  whole-file Writer/Parser case in `tests/unit`, or a flow in `tests/app`. Pin a bug you
+  whole-file Writer/Parser case in `tests/unit`, a flow in `tests/app`, or a step in
+  `tests/engine/tst_break.qml` for the engine. Pin a bug you
   aren't fixing with `expectFailContinue("", "BUG: …")`. Keep the objectNames listed in
   `docs/testing.md` through refactors.
 - Launch with `bin/omvision`, not `qs -p omvision.qml`. The journal's markdown styling is a
@@ -54,6 +55,11 @@ reading and writing files under `~/Notes/Omvision/`.
   it keeps the running timer. See `plugins/ompom.engine/CLAUDE.md`. They live here rather
   than in repos of their own, so they can't be installed with `omarchy plugin add` (it wants
   `manifest.json` at a repo's root). `bin/check` validates their manifests instead of linting them.
+- A change to either plugin isn't done until it's deployed: once `bin/check` passes, run
+  `bin/omvision-deploy` without waiting to be asked, and confirm with `--dry-run` that
+  nothing differs. A fix once sat undeployed, and the user tested the old engine all
+  night thinking it was the new one. One exception: between 22:15 and 05:30 a deploy lands
+  straight on the bedtime or night screen, so ask first then.
 - Quickshell's `FileView` fails silently in four ways in this build:
   1. `setText()` called synchronously inside `onLoaded` writes the file but drops
      `onSaved`/`onSaveFailed`, stalling any queue waiting on it. Defer it with a

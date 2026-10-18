@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """Ompom Engine notes helper.
 
-Service.qml invokes this as a fixed interpreter/script pair
+Engine.qml invokes this as a fixed interpreter/script pair
 (["/usr/bin/python3", <this file's own resolved path>, <subcommand>, ...])
 -- never through a shell, never resolved via PATH. It owns every
 filesystem operation for ompom's notes so it can hold real, validated
@@ -36,7 +36,7 @@ or quoting limit to fight, and no argument for a shell to reinterpret
 
 Subcommands:
   list-goals              walk ~/Notes/Omvision/goals/, print a JSON array
-                          of {slug, title, status} parsed from each goal
+                          of {slug, title, status, focusable} parsed from each goal
                           file's front matter. Runs behind a fullscreen
                           overlay, so a single unparseable/unreadable/
                           non-file entry is skipped, never fatal.
@@ -207,11 +207,19 @@ def handle_list_goals(goals_fd):
                 "slug": slug,
                 "title": fields.get("title"),
                 "status": fields.get("status"),
+                "focusable": is_focusable(fields.get("focusable")),
             })
         except OSError:
             continue
 
     print(json.dumps(out))
+
+
+def is_focusable(raw):
+    # goal-files.md §6: only an explicit no hides a goal from the break's
+    # picker, so a missing key or a typo leaves it in. Parser.js's
+    # isFocusable() reads it the same way.
+    return (raw or "").strip().lower() not in ("no", "false", "off")
 
 
 def format_duration(minutes):
@@ -226,6 +234,25 @@ def format_timestamp(started):
     dt = datetime.datetime.fromisoformat(started)
     day = dt.strftime("%d").lstrip("0") or "0"
     return f"{day} {dt.strftime('%b %H:%M')}"
+
+
+def note_line(key, value):
+    """One `key: value` line of a pomodoro body, or "" for a blank answer.
+    The break's notes are multi-line (its sections continue lists on
+    Return), and a raw newline would end the value: the next line would
+    read as body text, or as a key or a `###` heading of its own. So every
+    line after the first is indented two spaces, which is how readers know
+    it continues the key above (goal-files.md §4). A blank line inside the
+    value stays blank: a reader keeps it when an indented line follows."""
+    lines = [line.rstrip() for line in str(value).replace("\r\n", "\n").split("\n")]
+    while lines and not lines[-1]:
+        lines.pop()
+    while lines and not lines[0]:
+        lines.pop(0)
+    if not lines:
+        return ""
+    rest = "".join("\n" + ("  " + line if line else "") for line in lines[1:])
+    return f"{key}: {lines[0]}{rest}\n"
 
 
 def build_log_entry(payload):
@@ -243,19 +270,13 @@ def build_log_entry(payload):
         header = f"### {ts} · event · {kind} · {dur}\n"
         body = f"{title}\n"
     else:
-        focus = str(payload.get("focus", ""))
-        done = str(payload.get("done", ""))
-        left = str(payload.get("left", ""))
-        # "What else?" -- the break's open question. Written only when
-        # it was answered, so every entry that predates this key, and every
-        # break where nothing else came up, keeps exactly the three-line
-        # body it has always had: readers that don't know "else:" see no
-        # change at all.
-        extra = str(payload.get("else", ""))
+        # A key whose answer was left blank is left out, as goal-files.md
+        # §4 has always said: an entry for a break where nothing was
+        # written is just its heading. `focus` only comes from older
+        # engines, which asked for it before every run.
         header = f"### {ts} · {dur}\n"
-        body = f"focus: {focus}\ndone: {done}\nleft: {left}\n"
-        if extra.strip():
-            body += f"else: {extra}\n"
+        body = "".join(note_line(key, payload.get(key, ""))
+                       for key in ("focus", "done", "left", "else"))
 
     return (header + body + "\n").encode("utf-8")
 

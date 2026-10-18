@@ -10,12 +10,12 @@
 # hot-reload its plugins, and a bar widget is simply rebuilt. The engine's
 # manifest says keepLoaded, so that reload leaves the running engine and its
 # timer alone. That is why a bar-only deploy needs nothing more than the copy,
-# and also why a new Service.qml only loads when the whole shell restarts. For
+# and also why a changed engine file only loads when the whole shell restarts. For
 # an engine change this script therefore takes a snapshot of the engine's
 # state, restarts the shell, and restores the snapshot into the new engine.
 # The snapshot is also kept at $XDG_RUNTIME_DIR/ompom-handoff.json, so a
 # failed restore can be retried by hand while the engine still accepts it
-# (see handoffMaxAgeMs in Service.qml):
+# (see handoffMaxAgeMs in Engine.qml):
 #   omarchy-shell ompom restore "$(cat "$XDG_RUNTIME_DIR/ompom-handoff.json")"
 #
 # With no engine deployed yet it is a first install: there is no timer to

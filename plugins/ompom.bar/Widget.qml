@@ -92,11 +92,14 @@ Item {
   }
 
   function labelText() {
+    // The night outranks "off": it holds in every mode. Only the snooze is
+    // ever seen here; the other two cover the bar.
+    if (root.phase === "snooze") return "sleep in " + root.remainingLabel
+    if (root.phase === "bedtime" || root.phase === "sleep") return "sleep"
     if (root.mode === "off") return ""
-    // intent reports the length of the run about to start (the engine's
-    // statusJson()), shown plain: it is visible while clicking through the
-    // modes, before the engine raises its "What's your focus?" overlay.
-    if (root.phase !== "focus" && root.phase !== "intent") return "break " + root.remainingLabel
+    // Only the break is labelled: a +1 minute extension ("extend") is
+    // focus time, and the prompt is the moment between the two.
+    if (root.phase === "break") return "break " + root.remainingLabel
     return root.remainingLabel
   }
 

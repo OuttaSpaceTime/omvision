@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs the ompom overlay as a live demo: the real Service.qml, loaded in its
-# own qs process with `demo: true`, so it cycles intent -> focus -> "Focus
-# complete" -> break on short timers. It never writes notes or the active
+# own qs process with `demo: true`, so it cycles focus -> "Focus complete"
+# -> break -> focus on short timers. It never writes notes or the active
 # goal, and it doesn't touch the engine inside omarchy-shell, so a real break
 # is never started or blocked by it. Ctrl+Q quits from any screen; a hard
 # timeout ends it regardless.
@@ -9,21 +9,24 @@
 #   ompom-demo                    this repo's plugins/ompom.engine, 5s focus, 5s break
 #   ompom-demo --break 60         a longer break, to try the notes screen
 #   ompom-demo --live             the copy omarchy-shell loads, not the repo
+#   ompom-demo --clock 22:14      the engine's clock starts at 22:14, to try bedtime
 set -euo pipefail
 
 focus=5
 brk=5
+clock=""
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 src="$root/plugins/ompom.engine"
 live="$HOME/.config/omarchy/plugins/ompom.engine"
 
-usage() { sed -n '2,12s/^# \{0,1\}//p' "$0"; }
+usage() { sed -n '2,13s/^# \{0,1\}//p' "$0"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --focus) focus="${2:-}"; shift 2 ;;
     --break) brk="${2:-}"; shift 2 ;;
     --live)  src="$live"; shift ;;
+    --clock) clock="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ompom-demo: unknown option $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -33,10 +36,19 @@ for n in "$focus" "$brk"; do
   [[ "$n" =~ ^[1-9][0-9]*$ ]] || { echo "ompom-demo: durations are whole seconds, got '$n'" >&2; exit 2; }
 done
 
-# An older Service.qml has no demo flag and would run as a real engine: real
-# timers, real writes. Refuse rather than do that.
-if ! grep -q 'property bool demo:' "$src/Service.qml"; then
-  echo "ompom-demo: $src/Service.qml has no demo mode (deploy the repo's copy first)" >&2
+offset=0
+if [ -n "$clock" ]; then
+  [[ "$clock" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] || { echo "ompom-demo: --clock takes HH:MM, got '$clock'" >&2; exit 2; }
+  # Milliseconds from now to that time today, which the engine adds to its
+  # clock (Engine.clockOffsetMs).
+  offset=$(( ( $(date -d "$clock" +%s) - $(date +%s) ) * 1000 ))
+fi
+
+# An older engine has no demo flag and would run as a real engine: real
+# timers, real writes. Refuse rather than do that. The flag is in Engine.qml
+# now, in Service.qml before the split, so any of the plugin's files counts.
+if ! grep -q 'property bool demo:' "$src"/*.qml; then
+  echo "ompom-demo: $src has no demo mode (deploy the repo's copy first)" >&2
   exit 1
 fi
 
@@ -47,13 +59,13 @@ fi
 cfg="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/ompom-demo.XXXXXX")"
 trap 'rm -rf -- "$cfg"' EXIT
 ln -s /usr/share/omarchy/shell/Commons "$cfg/Commons"
-for f in Service.qml OverlayButton.qml NoteHighlighterHost.qml notes-helper.py; do
-  ln -s "$src/$f" "$cfg/$f"
+for f in "$src"/*.qml "$src"/notes-helper.py; do
+  ln -s "$f" "$cfg/${f##*/}"
 done
 cat > "$cfg/shell.qml" <<EOF
 import Quickshell
 ShellRoot {
-  Service { demo: true; demoFocusSec: $focus; demoBreakSec: $brk }
+  Service { demo: true; demoFocusSec: $focus; demoBreakSec: $brk; clockOffsetMs: $offset }
 }
 EOF
 

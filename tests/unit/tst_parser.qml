@@ -34,7 +34,27 @@ TestCase {
     compare(m.coaching, [{ session: 1, date: "19 Sep", method: "Pólya",
                            summary: "What's the actual blocker? — Nothing's blocked, it just hasn't been written yet." }])
     compare(m.cancelled, null)
+    compare(m.focusable, true, "no focusable key is focusable")
     compare(Object.keys(m.raw).sort(), ["done_by", "estimate", "status", "title", "why"])
+  }
+
+  // Only an explicit no hides a goal from the break's picker (goal-files.md
+  // §6); notes-helper.py's is_focusable() reads the same table.
+  function test_parseGoalFile_focusable_data() {
+    return [
+      { tag: "no", value: "no", want: false },
+      { tag: "No, padded", value: "  No  ", want: false },
+      { tag: "false", value: "false", want: false },
+      { tag: "off", value: "OFF", want: false },
+      { tag: "yes", value: "yes", want: true },
+      { tag: "true", value: "true", want: true },
+      { tag: "empty", value: "", want: true },
+      { tag: "typo", value: "nope", want: true }
+    ]
+  }
+  function test_parseGoalFile_focusable(row) {
+    var text = goal.replace("status: active\n", "status: active\nfocusable: " + row.value + "\n")
+    compare(Parser.parseGoalFile(text).focusable, row.want)
   }
 
   function test_parseGoalFile_crlf_and_trailing_whitespace() {
@@ -258,6 +278,25 @@ TestCase {
     compare(Parser.investedMinutes(marked), 140)
     compare(Parser.pomodoroCount([]), 0)
     compare(Parser.pomodoroMinutes([]), 0)
+    var night = Parser.parseLogEntries(log + "\n### 20 Sep 22:31 · 0m\nleft: call the bank\n"
+                                       + "\n### 20 Sep 22:31 · 0m\nleft: and the dentist\n", now)
+    compare(night[night.length - 2].left, "call the bank", "the night's notes read as notes")
+    compare(night[night.length - 1].left, "and the dentist", "two lots in one minute are both kept")
+    compare(Parser.pomodoroCount(night), 2, "a 0m entry is notes, not a pomodoro")
+
+    // The engine re-saves the night's page whole under one heading: only
+    // the last copy shows, when it still holds every earlier word.
+    var resaved = Parser.parseLogEntries("### 20 Sep 22:31 · 0m\ndone: read\n"
+                                         + "\n### 20 Sep 22:31 · 0m\ndone: read\n  a chapter\nleft: call the bank\n"
+                                         + "\n### 20 Sep 22:31 · 0m\ndone: read\n  a chapter\nleft: call the bank\nelse: tired\n", now)
+    compare(resaved.length, 1, "a growing night page is one entry")
+    compare([resaved[0].done, resaved[0].left, resaved[0].other], ["read\na chapter", "call the bank", "tired"])
+    var edited = Parser.parseLogEntries("### 20 Sep 22:31 · 0m\ndone: read a book\n"
+                                        + "\n### 20 Sep 22:31 · 0m\ndone: read\n", now)
+    compare(edited.length, 2, "a page edited down keeps the older copy: no words lost")
+    var twoNights = Parser.parseLogEntries("### 20 Sep 22:31 · 0m\ndone: read\n"
+                                           + "\n### 21 Sep 22:31 · 0m\ndone: read\n  more\n", now)
+    compare(twoNights.length, 2, "only the same heading collapses")
   }
 
   function test_entryTime() {
@@ -284,6 +323,32 @@ TestCase {
     compare(e[0].other, "kept getting pulled into Slack, worth guarding the next run")
     compare(e[0].left, "picker still caches the list on load")
     compare(e[0].focus, "Wire the goal picker into the IPC")
+  }
+
+  function test_parseLogEntries_multiline_notes() {
+    // What notes-helper.py writes for a break whose notes span lines: each
+    // line after the first indented two spaces, a blank line inside a note
+    // kept blank, a blank key left out (no focus: line, as the engine no
+    // longer asks for one).
+    var text = "### 20 Sep 14:25 · 25m\n" +
+               "done: - wired the picker\n" +
+               "  - and the status call\n" +
+               "left: the tests\n" +
+               "\n" +
+               "  then the docs\n" +
+               "else: one line\n" +
+               "\n" +
+               "### 20 Sep 15:00 · 25m\n" +
+               "done: next\n"
+    var e = Parser.parseLogEntries(text, now)
+    compare(e.length, 2)
+    compare(e[0].focus, "")
+    compare(e[0].done, "- wired the picker\n- and the status call")
+    compare(e[0].left, "the tests\n\nthen the docs")
+    compare(e[0].other, "one line", "the entry's trailing blank line isn't part of the note")
+    compare(e[1].done, "next")
+    var stray = Parser.parseLogEntries("### 20 Sep 14:25 · 25m\ndone: a\nunindented prose\n  not a continuation\n", now)
+    compare(stray[0].done, "a", "an unindented line ends the key")
   }
 
   function test_parseLogEntries_skips_what_it_cant_read() {
