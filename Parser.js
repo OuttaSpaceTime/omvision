@@ -291,10 +291,13 @@ function parseLogEntries(text, now) {
         // multi-line note, §4), and a blank line between two of those is
         // part of the note. Anything else ends the key.
         var notes = { focus: "", done: "", left: "", "else": "" }
-        var key = null, blanks = 0
+        var id = "", key = null, blanks = 0
         for (var b = 0; b < body.length; b++) {
+          var idm = body[b].match(/^id:\s?(.*)$/)
           var km = body[b].match(/^(focus|done|left|else):\s?(.*)$/)
-          if (km) {
+          if (idm) {
+            id = idm[1].trim(); key = null
+          } else if (km) {
             key = km[1]; blanks = 0
             notes[key] = km[2]
           } else if (key !== null && body[b] === "") {
@@ -311,6 +314,7 @@ function parseLogEntries(text, now) {
           date: resolveDate(day, monIdx, hh, mm, referenceNow),
           minutes: minutes,
           heading: pm[1] + " " + pm[2] + " " + pm[3] + ":" + pm[4],
+          id: id,
           focus: notes.focus, done: notes.done, left: notes.left, other: notes["else"]
         })
       } else if (em) {
@@ -353,6 +357,12 @@ function isRun(e) { return e.type === "pomodoro" && e.minutes > 0 }
 
 // One pomodoro, one entry.
 //
+// An entry with an `id:` (goal-files.md §4: its start, to the second) is
+// the last entry with that id: the engine re-saves the night's notes whole,
+// under the same id, every time the page is closed, and an append-only file
+// keeps every copy. Entries without one predate ids, and fall to the two
+// rules below, which had to guess. Display only; the file is untouched.
+//
 // `.log.md` and `days/*.md` are append-only by contract, so a writer that
 // saves the same run twice leaves two entries behind and can never take one
 // back. ompom used to do exactly that -- pressing the notes screen's back
@@ -375,13 +385,15 @@ function isRun(e) { return e.type === "pomodoro" && e.minutes > 0 }
 // for runs, would hide the first lot. A text edited down shows both copies,
 // which repeats words but never loses any.
 function dedupePomodoros(entries) {
-  var lastIndexByKey = {}
+  var lastIndexById = {}, lastIndexByKey = {}
   // Night notes by heading, so each is held against the later copies under
   // its own heading only, not against every entry after it.
   var nightIndicesByHeading = {}
   for (var i = 0; i < entries.length; i++) {
     var n = entries[i]
-    if (isRun(n)) {
+    if (n.type === "pomodoro" && n.id !== "") {
+      lastIndexById[n.id] = i
+    } else if (isRun(n)) {
       lastIndexByKey[n.heading + "·" + n.minutes] = i
     } else if (isNightNote(n)) {
       if (!nightIndicesByHeading[n.heading]) nightIndicesByHeading[n.heading] = []
@@ -391,8 +403,13 @@ function dedupePomodoros(entries) {
   var out = []
   for (var j = 0; j < entries.length; j++) {
     var e = entries[j]
-    if (isRun(e) && lastIndexByKey[e.heading + "·" + e.minutes] !== j) continue
-    if (isNightNote(e) && nightIndicesByHeading[e.heading].some(function(k) { return k > j && holdsNotes(entries[k], e) })) continue
+    if (e.type === "pomodoro" && e.id !== "") {
+      if (lastIndexById[e.id] !== j) continue
+    } else if (isRun(e)) {
+      if (lastIndexByKey[e.heading + "·" + e.minutes] !== j) continue
+    } else if (isNightNote(e) && nightIndicesByHeading[e.heading].some(function(k) { return k > j && holdsNotes(entries[k], e) })) {
+      continue
+    }
     out.push(e)
   }
   return out

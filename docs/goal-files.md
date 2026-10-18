@@ -135,6 +135,7 @@ entry by a blank line.
 
 ```
 ### 20 Sep 14:25 · 25m
+id: 2026-09-20T14:25:03
 done: - status call wired through the IPC
   - picker opens on Ctrl+G
 left: picker still caches the list on load
@@ -142,21 +143,33 @@ else: kept getting pulled into Slack, worth guarding the next run
 ```
 
 Heading: `### <D Mon HH:MM> · <N>m` — day of month with no leading zero,
-three-letter month, 24-hour clock, then the pomodoro's length in minutes.
-Body: `done:`, `left:` and `else:` lines, the three sections of the break's
-notes ("What's done?", "What's left?", "What else?"). Each is optional — omit
-the line entirely if the section was left blank, don't write it empty. An entry
-for a break where nothing was written is just its heading.
+three-letter month, 24-hour clock, then the pomodoro's length (§4's duration
+formatting below: `25m`, or `1h15` from an hour up).
+Body: an `id:` line, then `done:`, `left:` and `else:` lines, the three sections
+of the break's notes ("What's done?", "What's left?", "What else?"). Each note is
+optional — omit the line entirely if the section was left blank, don't write it
+empty. An entry for a break where nothing was written is just its heading and id.
+
+**`id:`** is the entry's start, local time to the second (`YYYY-MM-DDTHH:MM:SS`,
+the `started` the engine sends `notes-helper.py`). It names the entry: two
+entries with the same id are the same entry saved twice, and the later one is
+the entry. A reader shows only the last entry per id. Two runs never share one,
+even in one minute, and an append-only file can hold any number of copies of
+one entry, so this is the rule, not a guess at one. Entries written before
+2026-10-18 have no id; for those, a reader falls back to the two rules it used
+before: one pomodoro per heading and length, the last kept, and the 0-minute
+rule below.
 
 **A 0-minute entry** (`### 16 Oct 22:31 · 0m`) holds notes with no run behind them:
 the ompom engine's night notes. The night has one notes page, kept all night. Each
 time it is closed with changes (22:15 to 05:30) the whole page is appended to the
-day file again, under one heading stamped at that night's first save. Readers
-show its notes like any pomodoro's, but don't count it as a pomodoro, and show
-only the last of such re-saves: a 0-minute entry is hidden when a later one under
-the same heading still contains each of its notes. Entries written before
-2026-10-17 are separate lots, each cleared from the page once saved, and can
-share a minute; that rule keeps both, since neither contains the other.
+day file again, under one heading and id stamped at that night's first save.
+Readers show its notes like any pomodoro's, but don't count it as a pomodoro, and
+show only the last of such re-saves, by its id. One without an id (before
+2026-10-18) is hidden only when a later one under the same heading still contains
+each of its notes: those before 2026-10-17 are separate lots, each cleared from
+the page once saved, and can share a minute, and that rule keeps both, since
+neither contains the other.
 
 **A multi-line note** continues on lines indented two spaces, which belong to the
 key above them; a blank line inside a note is kept when an indented line follows

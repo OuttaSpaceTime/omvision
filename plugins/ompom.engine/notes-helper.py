@@ -283,13 +283,15 @@ def build_log_entry(payload):
         header = f"### {ts} · event · {kind} · {dur}\n"
         body = f"{title}\n"
     else:
-        # A key whose answer was left blank is left out, as goal-files.md
-        # §4 has always said: an entry for a break where nothing was
-        # written is just its heading. `focus` only comes from older
-        # engines, which asked for it before every run.
+        # The entry's id is its `started`, to the second (goal-files.md
+        # §4): a re-save of the same entry -- the night's notes, every time
+        # the page is closed -- repeats it, and readers keep the last entry
+        # per id. A key whose answer was left blank is left out, as §4 has
+        # always said. `focus` only comes from older engines, which asked
+        # for it before every run.
         header = f"### {ts} · {dur}\n"
-        body = "".join(note_line(key, payload.get(key, ""))
-                       for key in ("focus", "done", "left", "else"))
+        body = f"id: {payload['started']}\n" + "".join(
+            note_line(key, payload.get(key, "")) for key in ("focus", "done", "left", "else"))
 
     return (header + body + "\n").encode("utf-8")
 

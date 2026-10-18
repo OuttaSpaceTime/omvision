@@ -45,6 +45,10 @@ TestCase {
   }
 
   function test_pomodoros_data() { return rows("pomodoros") }
+  // What older writers left; the helper no longer writes these, so only
+  // the reading is checked.
+  function test_olderEntries_data() { return rows("olderEntries") }
+  function test_olderEntries(c) { test_pomodoros(c) }
   function test_pomodoros(c) {
     var e = Parser.parseLogEntries(c.text, now)
     compare(e.length, 1, "one entry")

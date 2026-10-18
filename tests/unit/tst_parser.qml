@@ -365,6 +365,25 @@ TestCase {
     compare(e[2].type, "event")
   }
 
+  // With an id, the last entry carrying it is the entry, and nothing else
+  // is guessed: not the heading, not the text.
+  function test_parseLogEntries_dedupes_by_id() {
+    var e = Parser.parseLogEntries(
+      "### 20 Sep 22:31 · 0m\nid: 2026-09-20T22:31:05\ndone: read a book\n\n" +
+      "### 20 Sep 22:31 · 0m\nid: 2026-09-20T22:31:05\ndone: read\n", now)
+    compare(e.length, 1, "a night page edited down is one entry")
+    compare(e[0].done, "read", "the last save")
+    compare(e[0].id, "2026-09-20T22:31:05")
+    e = Parser.parseLogEntries(
+      "### 19 Sep 16:10 · 25m\nid: 2026-09-19T16:10:00\ndone: one\n\n" +
+      "### 19 Sep 16:10 · 25m\nid: 2026-09-19T16:10:40\ndone: two\n", now)
+    compare(e.length, 2, "two runs in one minute are two runs")
+    e = Parser.parseLogEntries(
+      "### 19 Sep 16:10 · 25m\ndone: before ids\n\n" +
+      "### 19 Sep 16:10 · 25m\nid: 2026-09-19T16:10:00\ndone: after\n", now)
+    compare(e.length, 2, "an entry with an id is never taken for an older one without")
+  }
+
   function test_parseLogEntries_year_wrap() {
     var jan = new Date(2027, 0, 2, 10, 0)
     var e = Parser.parseLogEntries("### 30 Dec 10:00 · 25m\n\n### 3 Jan 09:00 · 25m\n", jan)

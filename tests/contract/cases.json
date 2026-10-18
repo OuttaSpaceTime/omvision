@@ -38,28 +38,34 @@
   "pomodoros": [
     { "name": "nothing written: just the heading",
       "payload": { "started": "2026-10-16T09:30:12", "minutes": 25 },
-      "text": "### 16 Oct 09:30 · 25m\n\n",
-      "parsed": { "heading": "16 Oct 09:30", "minutes": 25, "focus": "", "done": "", "left": "", "other": "" } },
+      "text": "### 16 Oct 09:30 · 25m\nid: 2026-10-16T09:30:12\n\n",
+      "parsed": { "heading": "16 Oct 09:30", "id": "2026-10-16T09:30:12", "minutes": 25, "focus": "", "done": "", "left": "", "other": "" } },
     { "name": "three notes, a blank one left out",
       "payload": { "started": "2026-10-16T09:30:12", "minutes": 25, "done": "wired the IPC", "left": "", "else": "call Anna" },
-      "text": "### 16 Oct 09:30 · 25m\ndone: wired the IPC\nelse: call Anna\n\n",
-      "parsed": { "heading": "16 Oct 09:30", "minutes": 25, "focus": "", "done": "wired the IPC", "left": "", "other": "call Anna" } },
+      "text": "### 16 Oct 09:30 · 25m\nid: 2026-10-16T09:30:12\ndone: wired the IPC\nelse: call Anna\n\n",
+      "parsed": { "heading": "16 Oct 09:30", "id": "2026-10-16T09:30:12", "minutes": 25, "focus": "", "done": "wired the IPC", "left": "", "other": "call Anna" } },
     { "name": "a multi-line note, a blank line inside it kept, the ends trimmed",
       "payload": { "started": "2026-10-03T07:05:00", "minutes": 53, "done": "\n- one  \r\n- two\n\n### not a heading\n\n", "left": "x" },
-      "text": "### 3 Oct 07:05 · 53m\ndone: - one\n  - two\n\n  ### not a heading\nleft: x\n\n",
-      "parsed": { "heading": "3 Oct 07:05", "minutes": 53, "focus": "", "done": "- one\n- two\n\n### not a heading", "left": "x", "other": "" } },
+      "text": "### 3 Oct 07:05 · 53m\nid: 2026-10-03T07:05:00\ndone: - one\n  - two\n\n  ### not a heading\nleft: x\n\n",
+      "parsed": { "heading": "3 Oct 07:05", "id": "2026-10-03T07:05:00", "minutes": 53, "focus": "", "done": "- one\n- two\n\n### not a heading", "left": "x", "other": "" } },
     { "name": "an older engine's focus line",
       "payload": { "started": "2026-10-12T16:00:00", "minutes": 25, "focus": "the report", "done": "intro" },
-      "text": "### 12 Oct 16:00 · 25m\nfocus: the report\ndone: intro\n\n",
-      "parsed": { "heading": "12 Oct 16:00", "minutes": 25, "focus": "the report", "done": "intro", "left": "", "other": "" } },
+      "text": "### 12 Oct 16:00 · 25m\nid: 2026-10-12T16:00:00\nfocus: the report\ndone: intro\n\n",
+      "parsed": { "heading": "12 Oct 16:00", "id": "2026-10-12T16:00:00", "minutes": 25, "focus": "the report", "done": "intro", "left": "", "other": "" } },
     { "name": "night notes: 0 minutes",
       "payload": { "started": "2026-10-16T22:31:40", "minutes": 0, "done": "lights out" },
-      "text": "### 16 Oct 22:31 · 0m\ndone: lights out\n\n",
-      "parsed": { "heading": "16 Oct 22:31", "minutes": 0, "focus": "", "done": "lights out", "left": "", "other": "" } },
+      "text": "### 16 Oct 22:31 · 0m\nid: 2026-10-16T22:31:40\ndone: lights out\n\n",
+      "parsed": { "heading": "16 Oct 22:31", "id": "2026-10-16T22:31:40", "minutes": 0, "focus": "", "done": "lights out", "left": "", "other": "" } },
     { "name": "an hour and over",
       "payload": { "started": "2026-10-16T09:00:00", "minutes": 75 },
-      "text": "### 16 Oct 09:00 · 1h15\n\n",
-      "parsed": { "heading": "16 Oct 09:00", "minutes": 75, "focus": "", "done": "", "left": "", "other": "" } }
+      "text": "### 16 Oct 09:00 · 1h15\nid: 2026-10-16T09:00:00\n\n",
+      "parsed": { "heading": "16 Oct 09:00", "id": "2026-10-16T09:00:00", "minutes": 75, "focus": "", "done": "", "left": "", "other": "" } }
+  ],
+
+  "olderEntries": [
+    { "name": "an entry from before ids reads with none",
+      "text": "### 12 Oct 16:00 · 25m\nfocus: the report\ndone: intro\n\n",
+      "parsed": { "heading": "12 Oct 16:00", "id": "", "minutes": 25, "focus": "the report", "done": "intro", "left": "", "other": "" } }
   ],
 
   "events": [
