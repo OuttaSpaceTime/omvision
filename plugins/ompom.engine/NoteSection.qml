@@ -1,6 +1,8 @@
 import QtQuick
 import qs.Commons
 
+import "ListContinue.js" as ListContinue
+
 // One section of the break's notes: its heading, drawn as the markdown
 // heading it reads as ("# What's done?", in the journal's own styling), and
 // the text under it. Clicking the heading folds the text away; a folded
@@ -57,6 +59,10 @@ Column {
     section.cursorMoved(field)
   }
 
+  function returnPressed(event) {
+    event.accepted = !(event.modifiers & Qt.ShiftModifier) && ListContinue.applyTo(sectionEdit)
+  }
+
   // The journal's markdown styling on one of this section's documents. See
   // NoteHighlighterHost.qml for why it's loaded rather than imported: a
   // missing native module costs the styling, not the engine its load.
@@ -67,39 +73,6 @@ Column {
       item.basePointSize = section.pointSize
       item.document = target.textDocument
     }
-  }
-
-  // Continues a "- ", "* ", or "1. " list line onto the next line,
-  // auto-incrementing numbered markers. Pressing Return on an already-empty
-  // list line ends the list instead of piling up empty markers.
-  function continueList(event) {
-    event.accepted = true
-    var pos = sectionEdit.cursorPosition
-    var text = sectionEdit.text
-    var lineStart = text.lastIndexOf("\n", pos - 1) + 1
-    var lineEnd = text.indexOf("\n", lineStart)
-    if (lineEnd === -1) lineEnd = text.length
-    var line = text.substring(lineStart, lineEnd)
-
-    var bullet = line.match(/^(\s*)([-*])\s+(.*)$/)
-    var numbered = line.match(/^(\s*)(\d+)\.\s+(.*)$/)
-    var marker = bullet || numbered
-
-    if (marker && marker[3].trim().length === 0) {
-      sectionEdit.remove(lineStart, lineEnd)
-      sectionEdit.insert(lineStart, "\n")
-      sectionEdit.cursorPosition = lineStart + 1
-      return
-    }
-
-    var continuation = "\n"
-    if (bullet) {
-      continuation += bullet[1] + bullet[2] + " "
-    } else if (numbered) {
-      continuation += numbered[1] + (parseInt(numbered[2], 10) + 1) + ". "
-    }
-    sectionEdit.insert(pos, continuation)
-    sectionEdit.cursorPosition = pos + continuation.length
   }
 
   // A read-only TextEdit rather than a Text, so the same highlighter that
@@ -199,7 +172,10 @@ Column {
     onCursorRectangleChanged: section.caretMoved(sectionEdit)
     onActiveFocusChanged: section.caretMoved(sectionEdit)
     Keys.onPressed: function(event) { section.keyPressed(sectionEdit, event) }
-    Keys.onReturnPressed: function(event) { section.continueList(event) }
+    // A list goes on as it does in the journal (ListContinue.js); any
+    // other Return, and Shift+Return, is a plain line break.
+    Keys.onReturnPressed: function(event) { section.returnPressed(event) }
+    Keys.onEnterPressed: function(event) { section.returnPressed(event) }
 
     Highlight { target: sectionEdit }
   }

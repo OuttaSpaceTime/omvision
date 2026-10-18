@@ -20,8 +20,11 @@ Item {
   readonly property int barSize: bar ? bar.barSize : 26
 
   property string mode: "normal"
-  property string phase: "focus"
   property string remainingLabel: "--:--"
+  // What the engine says to show beside the icon (Cycle.barLabel()): the
+  // rules for it are the engine's, so a phase added there needs nothing
+  // here. An engine from before the key sends none, and gets its countdown.
+  property string label: ""
   property bool paused: false
 
   // SVGs (icons/*.svg), tinted at runtime via MultiEffect — no font/emoji
@@ -86,21 +89,9 @@ Item {
     try { parsed = JSON.parse(raw) } catch (e) { return }
     if (!parsed) return
     root.mode = parsed.mode || "normal"
-    root.phase = parsed.phase || "focus"
     root.remainingLabel = parsed.remainingLabel || "--:--"
+    root.label = typeof parsed.label === "string" ? parsed.label : root.remainingLabel
     root.paused = !!parsed.paused
-  }
-
-  function labelText() {
-    // The night outranks "off": it holds in every mode. Only the snooze is
-    // ever seen here; the other two cover the bar.
-    if (root.phase === "snooze") return "sleep in " + root.remainingLabel
-    if (root.phase === "bedtime" || root.phase === "sleep") return "sleep"
-    if (root.mode === "off") return ""
-    // Only the break is labelled: a +1 minute extension ("extend") is
-    // focus time, and the prompt is the moment between the two.
-    if (root.phase === "break") return "break " + root.remainingLabel
-    return root.remainingLabel
   }
 
   Row {
@@ -144,7 +135,7 @@ Item {
       color: root.dotColor
       font.family: root.fontFamily
       font.pixelSize: Style.font.body
-      text: root.labelText()
+      text: root.label
     }
   }
 

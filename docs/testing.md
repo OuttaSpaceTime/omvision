@@ -62,6 +62,12 @@ own runner: `qmltestrunner -platform offscreen -input tests/unit`.
 - `tst_parser.qml` covers goal files, tasks, coaching, log entries (`else:`, dedupe, year
   wrap, the `[+time]` marker), `estimate:` as poms *left*, and the small formatters.
 - `tst_util.qml` covers Util.js's list helpers (`goalsByTitle`).
+- `tst_cycle.qml` covers the ompom engine's rules (`plugins/ompom.engine/Cycle.js`):
+  runs, extensions, pause, a suspend, the long break, the break's write and a refusal, a
+  goal changed mid-run, bedtime, the night and its notes, the labels, the hand-off. Each
+  case moves a clock of its own, so a whole night takes milliseconds.
+- `tst_listcontinue.qml` covers Return in a list (`ListContinue.js`), which the journal
+  and the break's notes share.
 - `tst_contract.qml` runs `tests/contract/cases.json` (goal files, `focusable:` values,
   pomodoro and event entries) through Parser.js and Writer.js. bin/test runs the same
   cases through `notes-helper.py` with `tests/contract/check.py`, so the engine's helper
@@ -172,9 +178,8 @@ overlay's fields and shortcuts. It is one sequence rather than separate tests, s
 step starts from the cycle the one before left: a mode switch at the prompt, the break's
 extensions, Ctrl+G, the notes (list continuation, folding, arrows across sections,
 scrolling with Return, Escape keeping the text), the log entry the break's end writes, the long break, a
-refused write, an oversized note, and snapshots from older engines. Time moves by
-setting `remaining` to 0 and calling the engine's `tick()`, the function its one-second
-timer calls. A failure keeps the temp dir, with
+refused write, and hand-offs. Time moves by moving the engine's clock
+(`clockOffsetMs`) and calling its `tick()`, the function its one-second timer calls. A failure keeps the temp dir, with
 `engine.log`, a screenshot of each failed check and the HOME.
 
 ## Known failures

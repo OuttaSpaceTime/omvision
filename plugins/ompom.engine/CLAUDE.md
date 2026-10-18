@@ -1,10 +1,17 @@
 # CLAUDE.md
 
 Ompom's pomodoro engine: a `keepLoaded` omarchy-shell service with a fullscreen
-overlay. `Service.qml` is only the entry point: the cycle is `Engine.qml`, the screens
-are `Overlay.qml` (with `NoteSection.qml` and `OverlayButton.qml`), and the overlay only
-reads the engine and calls its functions. The bar icon lives in `plugins/ompom.bar`.
-Paths are from the omvision repo root.
+overlay. `Service.qml` is only the entry point. Every rule of the cycle is in
+`Cycle.js`, plain functions over a plain state with no I/O; `Engine.qml` holds that
+state as properties, runs each event through it with the clock, and carries out the
+effects it returns (helper writes, the goal list, the active-goal file). The screens are
+`Overlay.qml` (with `NoteSection.qml` and `OverlayButton.qml`), which only read the
+engine and call its functions. `ListContinue.js` is Return in a list, shared with the
+journal. The bar icon lives in `plugins/ompom.bar`, and only shows what the engine's
+`status` says. Paths are from the omvision repo root.
+
+- A rule goes in `Cycle.js`, never in `Engine.qml` or the overlay, with a case in
+  `tests/unit/tst_cycle.qml`.
 
 ## Deploying: never reset the running timer
 
@@ -16,8 +23,9 @@ Paths are from the omvision repo root.
   untouched through that. A changed engine file only loads on a shell restart, so
   the script saves the engine's `snapshot` IPC, restarts the shell, and `restore`s
   it into the new engine.
-- A new piece of cycle state (a property that must outlive a restart) is a row in
-  `cycleFields` in `Engine.qml`, with its check. Otherwise the next deploy drops it.
+- A new piece of cycle state is a key in `Cycle.fresh()` and a property of the same name
+  in `Engine.qml`. If it must outlive a restart it is also a row in `Cycle.FIELDS`, with
+  its check. Otherwise the next deploy drops it.
   Mark the row `optional: true` for the deploy that adds it (the engine handing off
   doesn't send it yet), and drop the flag in the commit after.
 - Replace live files atomically (temp file, then rename), never with `cp` in
@@ -25,6 +33,8 @@ Paths are from the omvision repo root.
 
 ## Testing
 
+- `bin/test unit` runs `tests/unit/tst_cycle.qml`: the cycle's rules on a clock that only
+  moves when the test moves it, in a few milliseconds.
 - `bin/test engine` runs the real `Engine.qml` and `Overlay.qml` offscreen (in a
   `FloatingWindow`, where `Service.qml` uses a layer-shell `PanelWindow` that offscreen
   `qs` can't show) and clicks and types through a whole cycle in `tests/engine/tst_break.qml`, checking the log entries the

@@ -33,7 +33,7 @@ Run `bin/omvision-deploy` again for later changes: it keeps a running pomodoro.
 Exposes an `ompom` IPC target for the bar widget (and anything else) to use:
 
 ```bash
-omarchy-shell ompom status        # JSON: mode, phase, remaining, paused, extensionsUsed, breakIsLong
+omarchy-shell ompom status        # JSON: mode, phase, remaining, remainingLabel, label (the bar's), paused, ...
 omarchy-shell ompom togglePause    # pause/resume the current focus run
 omarchy-shell ompom cycleMode      # Normal -> Long Focus -> Off -> Normal
 omarchy-shell ompom skipSleep      # ends tonight's bedtime screen, for when the laptop is really needed

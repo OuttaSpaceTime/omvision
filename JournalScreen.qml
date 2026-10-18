@@ -2,6 +2,7 @@ import QtQuick
 
 import "Parser.js" as Parser
 import "GoalMatch.js" as GoalMatch
+import "plugins/ompom.engine/ListContinue.js" as ListContinue
 
 // Journal — a writing surface, not a list screen.
 //
@@ -400,34 +401,12 @@ Item {
     root.bufferText = text
   }
 
-  // Return inside a list item starts the next one, the way omawrite and
-  // Typora do: `- ` repeats, `1.` counts on (keeping `.` or `)`), and the
-  // indent carries over. Return on an item with nothing after its marker ends
-  // the list instead -- the marker is removed and the line left empty.
-  // Shift+Return is a plain line break. Returns false when the line is not a
-  // list item, so the TextEdit handles the key as usual.
+  // Return inside a list item starts the next one (ListContinue.js, which
+  // the break's notes share). Shift+Return is a plain line break. Returns
+  // false when the line is not a list item, so the TextEdit handles the key
+  // as usual.
   function continueList(edit) {
-    if (edit.selectionStart !== edit.selectionEnd) return false
-    var text = edit.text
-    var pos = edit.cursorPosition
-    var lineStart = text.lastIndexOf("\n", pos - 1) + 1
-    var lineEnd = text.indexOf("\n", pos)
-    if (lineEnd < 0) lineEnd = text.length
-    var line = text.substring(lineStart, lineEnd)
-    var m = line.match(/^(\s*)([-*+]|(\d{1,9})([.)]))([ \t]+|$)/)
-    if (!m) return false
-    var markerEnd = lineStart + m[0].length
-    if (pos < markerEnd) return false // cursor in the indent or the marker itself
-    if (line.substring(m[0].length).trim() === "") {
-      edit.remove(lineStart, lineEnd)
-      edit.cursorPosition = lineStart
-      return true
-    }
-    var marker = m[3] !== undefined ? (parseInt(m[3], 10) + 1) + m[4] : m[2]
-    var insert = "\n" + m[1] + marker + " "
-    edit.insert(pos, insert)
-    edit.cursorPosition = pos + insert.length
-    return true
+    return ListContinue.applyTo(edit)
   }
 
   // ---- `@` goal tags ------------------------------------------------------

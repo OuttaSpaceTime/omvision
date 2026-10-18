@@ -4,8 +4,6 @@
 # drop its line (bin/check --update-baseline rewrites the whole file); never
 # add a line by hand to get a new warning past the check.
 Appender.qml	signal-handler-parameters	Type QProcess::ExitStatus of parameter exitStatus in signal called exited was not found, but is required to compile onExited. Did you add all imports and dependencies?	onExited: function(exitCode) {
-CancelDialog.qml	Quick.layout-positioning	Detected height on an item that is managed by a layout. This is undefined behavior; use implictHeight or Layout.preferredHeight instead.	height: Theme.optionMarkSize
-CancelDialog.qml	Quick.layout-positioning	Detected width on an item that is managed by a layout. This is undefined behavior; use implicitWidth or Layout.preferredWidth instead.	width: Theme.optionMarkSize
 CancelDialog.qml	unqualified	Unqualified access	onClicked: root.reasonIndex = reasonRow.index
 CancelDialog.qml	unqualified	Unqualified access	readonly property bool selected: root.reasonIndex === index
 CoachingScreen.qml	unqualified	Unqualified access	Item { width: parent.width; height: index > 0 ? Theme.spaceSm : 0 }
@@ -23,8 +21,6 @@ CoachingScreen.qml	unqualified	Unqualified access	visible: index > 0
 DayList.qml	unqualified	Unqualified access	onClicked: dayList.dayClicked(dayRow.modelData.path)
 DayList.qml	unqualified	Unqualified access	readonly property bool isSelected: dayList.selectedPath === modelData.path
 DayList.qml	unqualified	Unqualified access	width: daysColumn.width
-EventDialog.qml	Quick.layout-positioning	Detected height on an item that is managed by a layout. This is undefined behavior; use implictHeight or Layout.preferredHeight instead.	height: Theme.optionMarkSize
-EventDialog.qml	Quick.layout-positioning	Detected width on an item that is managed by a layout. This is undefined behavior; use implicitWidth or Layout.preferredWidth instead.	width: Theme.optionMarkSize
 EventDialog.qml	unqualified	Unqualified access	MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.selectedSlug = parent.modelData.slug }
 EventDialog.qml	unqualified	Unqualified access	onClicked: root.kindIndex = index
 EventDialog.qml	unqualified	Unqualified access	onClicked: root.kindIndex = index

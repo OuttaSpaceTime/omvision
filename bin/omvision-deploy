@@ -47,14 +47,14 @@ handoff="${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR is not set}/ompom-handoff.json"
 
 # What each plugin ships, taken from git (tracked or new, not ignored) so a
 # new QML file or icon is deployed without editing a list here. The patterns
-# are the decision: top-level QML and Python, the manifest, and the bar's
+# are the decision: top-level QML, JS and Python, the manifest, and the bar's
 # icons. native/ is left out on purpose: the MarkdownHighlight library there
 # needs its own build and deploy (see docs/ompom-highlighter.md).
 shipped() {  # <dir> <pathspec...>
   local dir="$1"; shift
   git -C "$dir" ls-files --cached --others --exclude-standard -- "$@"
 }
-mapfile -t engine_files < <(shipped "$engine_src" manifest.json ':(glob)*.qml' ':(glob)*.py')
+mapfile -t engine_files < <(shipped "$engine_src" manifest.json ':(glob)*.qml' ':(glob)*.js' ':(glob)*.py')
 mapfile -t bar_files < <(shipped "$bar_src" manifest.json ':(glob)*.qml' ':(glob)icons/*')
 
 changed() {  # <src dir> <dst dir> <files...>: print the files that differ

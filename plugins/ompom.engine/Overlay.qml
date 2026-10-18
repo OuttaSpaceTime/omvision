@@ -145,7 +145,7 @@ Item {
     Text {
       anchors.horizontalCenter: parent.horizontalCenter
       visible: overlay.engine.hasNotes
-      text: overlay.engine.fmt(overlay.engine.remaining)
+      text: overlay.engine.countdownLabel
       color: Color.accent
       font.family: Style.font.family
       // The hero of this screen, and sized like it: no token goes big
@@ -460,7 +460,7 @@ Item {
             // countdown is here too: the break ends, and the notes are
             // logged, whether or not this page is open.
             text: (overlay.engine.phase === "sleep" ? "NIGHT NOTES" : "BREAK NOTES") + "  ·  "
-                  + overlay.engine.fmt(overlay.engine.remaining)
+                  + overlay.engine.countdownLabel
             color: Util.alpha(Color.popups.text, 0.6)
           }
         }

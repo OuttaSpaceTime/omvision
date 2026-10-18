@@ -19,6 +19,6 @@ commons=/usr/share/omarchy/shell/Commons
 
 mkdir -p -- "$cfg"
 ln -s "$commons" "$cfg/Commons"
-for f in "$src"/*.qml "$src"/notes-helper.py "$@"; do
+for f in "$src"/*.qml "$src"/*.js "$src"/notes-helper.py "$@"; do
   ln -s "$f" "$cfg/${f##*/}"
 done

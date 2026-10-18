@@ -6,9 +6,9 @@ import "../../Parser.js" as Parser
 
 // The ompom engine's run/break cycle, through its overlay: real clicks and
 // keys, real helper writes into the throwaway HOME tests/engine/run.sh made,
-// read back with the app's own Parser.js. Time moves by setting `remaining`
-// to 0 and calling the engine's tick(), the function its one-second Timer
-// calls.
+// read back with the app's own Parser.js. Time moves by moving the
+// engine's clock (clockOffsetMs) and calling its tick(), the function its
+// one-second Timer calls.
 //
 // One long sequence rather than separate tests: each step starts from the
 // state the one before left, as a real cycle does. Lines go to stdout as
@@ -114,18 +114,14 @@ TestCase {
   readonly property string goalLog: home + "/Notes/Omvision/goals/write-the-report.log.md"
   readonly property string dayLog: home + "/Notes/Omvision/days/" + Parser.dayKey(new Date()) + ".md"
 
-  // Every run the test finishes gets a start minute of its own: the runs
-  // here take milliseconds, and Parser.js reads two entries under one
-  // `### <time> · <N>m` heading as one pomodoro saved twice.
-  property int runsEnded: 0
-  function runOut() {
-    if (engine.phase === "focus") {
-      runsEnded++
-      engine.focusStartedIso = Parser.dayKey(new Date()) + "T09:" + (runsEnded < 10 ? "0" : "") + runsEnded + ":00"
-    }
-    engine.remaining = 0
+  // Moves the engine's clock `sec` seconds on and ticks: time passing, as
+  // the engine sees it. Each run so starts at a minute of its own, as real
+  // ones do, which Parser.js counts on to tell two runs from one saved twice.
+  function advance(sec) {
+    engine.clockOffsetMs += sec * 1000
     engine.tick()
   }
+  function runOut() { advance(engine.remaining) }
   function toBreak() {
     runOut()
     check(engine.phase === "prompt", "the run ends on the prompt")
@@ -284,21 +280,11 @@ TestCase {
           "the 4th break is 15 minutes: " + engine.remaining)
     check(entries(goalLog).length === goalBefore + 2, "runs on the goal are logged to it")
 
-    // A note too long for the helper is cut to fit, not refused, and never
-    // through the middle of an emoji (a lone surrogate the helper can't
-    // encode). Straight through entryJson(): typed into the page, each of
-    // these texts would cost the hidden notes page a relayout of its own.
+    // Cycle.js cuts a note too long for the helper to fit
+    // (tests/unit/tst_cycle.qml); the limit it cuts to has to be the helper's.
     var helperMax = Number((readFile(engine.notesHelperPath).match(/^MAX_NOTE_INPUT_BYTES = ([\d_]+)/m) || ["", "0"])[1].replace(/_/g, ""))
     check(helperMax === engine.maxNoteInputBytes,
           "the engine's limit is notes-helper.py's: " + engine.maxNoteInputBytes + " vs " + helperMax)
-    var big = engine.entryJson("2026-10-13T10:00:00", 25, ["", "", new Array(30001).join("ä")])
-    check(engine.utf8Bytes(big) <= engine.maxNoteInputBytes && JSON.parse(big)["else"].slice(-1) === "…",
-          "an oversized note is shortened to the helper's limit")
-    for (var cut = 0; cut < 4; cut++) {
-      var kept = JSON.parse(engine.entryJson("2026-10-13T10:00:00", 25,
-                                             ["", "", new Array(cut + 1).join("a") + new Array(6001).join("😀")]))["else"]
-      if (/[\uD800-\uDBFF]…$/.test(kept)) { check(false, "a cut emoji at offset " + cut); break }
-    }
 
     // A refused write holds the break; Skip moves on.
     engine.runGoalSlug = "../not-a-slug"
@@ -312,7 +298,8 @@ TestCase {
 
     // Hand-offs across a deploy. `focusText` is a key an older engine
     // sent, and stands for any this one doesn't know.
-    var brk = Object.assign(JSON.parse(engine.snapshotJson()), { phase: "break", remaining: 100, extensionsUsed: 1,
+    var brk = Object.assign(JSON.parse(engine.snapshotJson()), {
+      phase: "break", endsAtMs: engine.now().getTime() + 100000, heldSec: 100, extensionsUsed: 1,
       focusStartedIso: "2026-10-13T10:00:00", notesOpen: true, doneText: "d", runGoalSlug: engine.activeGoalSlug,
       focusText: "x" })
     engine.goalsList = []
@@ -358,8 +345,7 @@ TestCase {
       clickButton("+1 minute (" + n + " left)")
       check(engine.phase === "snooze" && !engine.overlayVisible && near(engine.remaining, 60),
             "a snooze takes the overlay down for a minute")
-      engine.remaining = 0
-      engine.tick()
+      runOut()
       check(engine.phase === "bedtime" && engine.overlayVisible, "and it comes back")
     }
     check(!button("+1 minute (0 left)") && button("Good night"), "three is all")
@@ -369,8 +355,9 @@ TestCase {
     engine.snoozesUsed = 0
     engine.snooze()
     clockAt(0, 22, 21)
-    check(engine.phase === "sleep" && engine.overlayVisible && near(engine.remaining, 7 * 3600 + 9 * 60),
-          "22:20 starts the night even mid-snooze, counting down to 05:30: " + engine.fmt(engine.remaining))
+    check(engine.phase === "sleep" && engine.overlayVisible && near(engine.remaining, 7 * 3600 + 9 * 60)
+          && engine.countdownLabel === "7:09",
+          "22:20 starts the night even mid-snooze, counting down to 05:30: " + engine.countdownLabel)
     check(button("Take notes") && !button("+1 min") && !button("+1 minute (3 left)") && !button("Good night"),
           "the night offers only notes")
     keyClick(Qt.Key_G, Qt.ControlModifier)
@@ -422,9 +409,9 @@ TestCase {
     engine.sleepSkippedNight = ""
     clockAt(1, 1, 0)
     check(engine.phase === "sleep", "a fresh engine after 22:20 goes straight to the night: " + engine.phase)
-    var snap = engine.snapshotJson()
-    engine.restore(snap)
-    check(engine.phase === "sleep" && engine.overlayVisible, "the night survives a deploy")
+    var restored = engine.restore(engine.snapshotJson())
+    check(restored.indexOf("error") !== 0 && engine.phase === "sleep" && engine.overlayVisible,
+          "the night survives a deploy: " + restored)
 
     // 05:30: notes still open are saved, and the day starts.
     clickButton("Take notes")
