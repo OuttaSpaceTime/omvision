@@ -113,17 +113,25 @@ Item {
   property int remaining: normalFocusSec
   property int extensionsUsed: 0
   property bool notesOpen: false
-  // The break's three notes sections, as typed: "What's done?", "What's
-  // left?", "What else?". Here rather than in the overlay's fields, so the
-  // log entry, the snapshot and a restore all read and write plain strings.
+  // The break's three notes sections, as typed. Here rather than in the
+  // overlay's fields, so the log entry, the snapshot and a restore all read
+  // and write plain strings.
   property string doneText: ""
   property string leftText: ""
   property string elseText: ""
-  // The focus line an older engine asked for before the run, carried in by
-  // restore() from its snapshot (as `focusText`, its old field) so the run
-  // handed over at the deploy that dropped that screen still logs it.
-  // Nothing else sets it, and it's cleared with the run's notes.
-  property string handedOverFocus: ""
+  // The one list of them: the property each is typed into, the key
+  // notes-helper.py files it under (goal-files.md §4), and the heading the
+  // notes page gives it, in the order the log writes them. The heading
+  // lives here with the key rather than in Overlay.qml: the log keeps one
+  // line per question, so a question renamed or added is a change to both.
+  readonly property var notes: [
+    { field: "doneText", key: "done", title: "What's done?" },
+    { field: "leftText", key: "left", title: "What's left?" },
+    { field: "elseText", key: "else", title: "What else?" }
+  ]
+  function noteTexts() { return root.notes.map(function(n) { return root[n.field] }) }
+  // The notes page's only write to the engine.
+  function setNote(field, text) { root[field] = text }
 
   // --- goal ---
   // The selected goal (a slug, or "" for none), kept live from the
@@ -147,15 +155,12 @@ Item {
   // for "No goal" to drop.
   readonly property bool canPickGoal: root.pickableGoals.length > 0 || root.activeGoalSlug.length > 0
   readonly property string activeGoalTitle: root.goalTitleForSlug(root.activeGoalSlug)
-  // Ctrl+G during a break toggles this; a no-op with nothing to pick —
-  // see toggleGoalPicker().
-  property bool goalPickerOpen: false
   // The goal the run that just finished was spent on, pinned when its
   // break starts. Picking a goal during the break is picking the *next*
   // run's goal, so the finished run's entry must not follow it into a log
   // it was never worked on.
   property string runGoalSlug: ""
-  // Stamped in startFocus(), read back in finishedRunEntry() -- together
+  // Stamped in startNextRun(), read back in finishedRunEntry() -- together
   // with finishedRunMinutes() and the three notes, the whole log entry.
   property string focusStartedIso: ""
   // -1 is "no mid-run change": the goal active when the run started (or no
@@ -163,7 +168,7 @@ Item {
   // `remaining` as it stood the moment activeGoalFile last changed WHILE
   // phase was "focus" -- see onActiveGoalFileText() -- because only the
   // remainder was ever spent on whatever became active at that moment.
-  // Reset to -1 at the start of every run (startFocus()).
+  // Reset to -1 at the start of every run (startNextRun()).
   property int goalAttributionRemaining: -1
 
   // --- the long break ---
@@ -254,98 +259,69 @@ Item {
   // (the break ends again in the new engine, which retries it).
   readonly property int handoffMaxAgeMs: 5 * 60 * 1000
 
-  readonly property var noteFields: ["doneText", "leftText", "elseText"]
+  // Every property the hand-off carries, each with the check restore()
+  // puts it through: a new piece of cycle state is one row here, and
+  // snapshotJson() and restore() both follow the list. A snapshot is at
+  // most handoffMaxAgeMs old and only ever comes from the engine deployed
+  // just before, so a row this engine adds takes `optional: true` for the
+  // one deploy that hands off from an engine without it (restore() then
+  // keeps the fresh run's value), and loses it after: rows don't stay
+  // optional for good, as the old engine's did. Keys a snapshot has and
+  // this list doesn't (an older engine's `focusText`) are ignored.
+  readonly property var cycleFields: [
+    { name: "mode", ok: root.isOneOf(["normal", "long", "off"]) },
+    { name: "phase", ok: root.isOneOf(["focus", "prompt", "extend", "break"].concat(root.nightPhases)) },
+    { name: "paused", ok: root.isBool },
+    { name: "remaining", ok: root.isInt(0, 4 * 3600) },
+    { name: "extensionsUsed", ok: root.isInt(0, root.maxExtensions) },
+    { name: "focusStartedIso", ok: root.isStamp },
+    { name: "goalAttributionRemaining", ok: root.isInt(-1, 4 * 3600) },
+    { name: "cycleLogged", ok: root.isBool },
+    { name: "notesOpen", ok: root.isBool },
+    { name: "runGoalSlug", ok: root.isString },
+    { name: "runsInSet", ok: root.isInt(0, root.runsPerSet - 1) },
+    { name: "setDay", ok: root.isDay },
+    { name: "breakIsLong", ok: root.isBool },
+    { name: "snoozesUsed", ok: root.isInt(0, root.maxSnoozes) },
+    { name: "sleepSkippedNight", ok: root.isDay },
+    { name: "sleepNotesIso", ok: root.isStamp },
+    { name: "sleepNotesSaved", ok: function(v) {
+      return Array.isArray(v) && v.length === root.notes.length && v.every(root.isString) } }
+  ].concat(root.notes.map(function(n) { return { name: n.field, ok: root.isString } }))
+
+  function isBool(v) { return typeof v === "boolean" }
+  function isString(v) { return typeof v === "string" }
+  function isInt(lo, hi) { return function(v) { return Number.isInteger(v) && v >= lo && v <= hi } }
+  function isOneOf(values) { return function(v) { return values.indexOf(v) !== -1 } }
+  // "" or a date, and "" or isoOf()'s stamp: both are unset as "".
+  function isDay(v) { return typeof v === "string" && /^(\d{4}-\d\d-\d\d)?$/.test(v) }
+  function isStamp(v) { return typeof v === "string" && /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)?$/.test(v) }
 
   function snapshotJson() {
-    var s = {
-      takenAtMs: Date.now(),
-      mode: root.mode,
-      phase: root.phase,
-      paused: root.paused,
-      remaining: root.remaining,
-      extensionsUsed: root.extensionsUsed,
-      focusStartedIso: root.focusStartedIso,
-      goalAttributionRemaining: root.goalAttributionRemaining,
-      cycleLogged: root.cycleLogged,
-      notesOpen: root.notesOpen,
-      runGoalSlug: root.runGoalSlug,
-      runsInSet: root.runsInSet,
-      setDay: root.setDay,
-      breakIsLong: root.breakIsLong,
-      snoozesUsed: root.snoozesUsed,
-      sleepSkippedNight: root.sleepSkippedNight,
-      sleepNotesIso: root.sleepNotesIso,
-      sleepNotesSaved: root.sleepNotesSaved,
-      focusText: root.handedOverFocus
-    }
-    for (var field of root.noteFields) s[field] = root[field]
+    var s = { takenAtMs: Date.now() }
+    for (var f of root.cycleFields) s[f.name] = root[f.name]
     return JSON.stringify(s)
   }
 
   // Takes what snapshotJson() gives. Every field is checked before anything
   // is assigned, so a bad hand-off leaves the fresh engine exactly as it
-  // started rather than half-restored. The fields this engine added
-  // (runGoalSlug and the long-break set) are optional, and so is the old
-  // "intent" phase: the deploy that ships this file hands off from an engine
-  // that has neither, and refusing that snapshot would cost the running
-  // pomodoro.
+  // started rather than half-restored.
   function restore(json) {
     var s
     try { s = JSON.parse(String(json || "")) } catch (e) { return "error: not JSON" }
     if (!Util.isPlainObject(s)) return "error: not an object"
-    function int(v, lo, hi) { return Number.isInteger(v) && v >= lo && v <= hi }
     var age = Date.now() - s.takenAtMs
     if (!(age >= 0 && age <= root.handoffMaxAgeMs))
       return "error: snapshot missing takenAtMs or older than " + (root.handoffMaxAgeMs / 60000) + " minutes"
-    if (["normal", "long", "off"].indexOf(s.mode) === -1) return "error: bad mode"
-    if (["intent", "focus", "prompt", "extend", "break"].concat(root.nightPhases).indexOf(s.phase) === -1) return "error: bad phase"
-    if (!int(s.remaining, 0, 4 * 3600)) return "error: bad remaining"
-    if (!int(s.extensionsUsed, 0, root.maxExtensions)) return "error: bad extensionsUsed"
-    if (!int(s.goalAttributionRemaining, -1, 4 * 3600)) return "error: bad goalAttributionRemaining"
-    if (typeof s.focusStartedIso !== "string"
-        || !/^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)?$/.test(s.focusStartedIso)) return "error: bad focusStartedIso"
-    for (var b of ["paused", "cycleLogged", "notesOpen"])
-      if (typeof s[b] !== "boolean") return "error: bad " + b
-    for (var t of root.noteFields)
-      if (typeof s[t] !== "string") return "error: bad " + t
-    if (s.runGoalSlug !== undefined && typeof s.runGoalSlug !== "string") return "error: bad runGoalSlug"
-    if (s.runsInSet !== undefined && !int(s.runsInSet, 0, root.runsPerSet - 1)) return "error: bad runsInSet"
-    if (s.setDay !== undefined && !/^(\d{4}-\d\d-\d\d)?$/.test(String(s.setDay))) return "error: bad setDay"
-    if (s.breakIsLong !== undefined && typeof s.breakIsLong !== "boolean") return "error: bad breakIsLong"
-    if (s.focusText !== undefined && typeof s.focusText !== "string") return "error: bad focusText"
-    if (s.snoozesUsed !== undefined && !int(s.snoozesUsed, 0, root.maxSnoozes)) return "error: bad snoozesUsed"
-    if (s.sleepSkippedNight !== undefined && !/^(\d{4}-\d\d-\d\d)?$/.test(String(s.sleepSkippedNight))) return "error: bad sleepSkippedNight"
-    if (s.sleepNotesIso !== undefined && (typeof s.sleepNotesIso !== "string"
-        || !/^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)?$/.test(s.sleepNotesIso))) return "error: bad sleepNotesIso"
-    if (s.sleepNotesSaved !== undefined && !(Array.isArray(s.sleepNotesSaved) && s.sleepNotesSaved.length === 3
-        && s.sleepNotesSaved.every(function(t) { return typeof t === "string" }))) return "error: bad sleepNotesSaved"
+    for (var f of root.cycleFields)
+      if (!(f.optional && s[f.name] === undefined) && !f.ok(s[f.name])) return "error: bad " + f.name
 
     // From the baseline every new cycle starts from, then the snapshot on
     // top of it. The mode goes first: the fresh run resetRun() starts is
     // sized by it.
     root.mode = s.mode
     root.resetRun()
-    if (s.focusText !== undefined) root.handedOverFocus = s.focusText
-    // An older engine waiting on its "What's your focus?" screen: nothing
-    // had started, so the fresh run is exactly what comes next, with the
-    // focus line typed for it.
-    if (s.phase === "intent") return root.statusJson()
-    root.phase = s.phase
-    root.paused = s.paused
-    root.extensionsUsed = s.extensionsUsed
-    root.goalAttributionRemaining = s.goalAttributionRemaining
-    root.focusStartedIso = s.focusStartedIso
-    root.cycleLogged = s.cycleLogged
-    root.notesOpen = s.notesOpen
-    root.runGoalSlug = s.runGoalSlug !== undefined ? s.runGoalSlug : root.activeGoalSlug
-    if (s.runsInSet !== undefined) root.runsInSet = s.runsInSet
-    if (s.setDay !== undefined) root.setDay = s.setDay
-    if (s.breakIsLong !== undefined) root.breakIsLong = s.breakIsLong
-    if (s.snoozesUsed !== undefined) root.snoozesUsed = s.snoozesUsed
-    if (s.sleepSkippedNight !== undefined) root.sleepSkippedNight = s.sleepSkippedNight
-    if (s.sleepNotesIso !== undefined) root.sleepNotesIso = s.sleepNotesIso
-    if (s.sleepNotesSaved !== undefined) root.sleepNotesSaved = s.sleepNotesSaved
-    for (var field of root.noteFields) root[field] = s[field]
+    for (f of root.cycleFields) if (s[f.name] !== undefined) root[f.name] = s[f.name]
     // The countdown kept running in the old process until the restart,
     // so the time since the snapshot is taken off it. A countdown that
     // runs out this way is left at 0 for the next tick() to move on from,
@@ -391,37 +367,43 @@ Item {
     return Math.round(minutesBase / 60) + root.extensionsUsed
   }
 
+  // Every notes-helper.py call that writes, and the one place the demo is
+  // kept from writing: it gets a sink that reads its stdin and discards it,
+  // so its Process still starts, takes the payload and exits 0 the way the
+  // helper's does. Reading (list-goals) stays live and doesn't come here.
+  function writeCommand(args) {
+    return root.demo ? ["/bin/sh", "-c", "cat >/dev/null"] : [root.pythonBin, root.notesHelperPath].concat(args)
+  }
+
   // Where a finished run is written: the goal's log, or the day file when
-  // no goal was selected. The demo reads the entry and discards it.
+  // no goal was selected.
   function logCommandFor(slug) {
-    return root.demo
-      ? ["/bin/sh", "-c", "cat >/dev/null"]
-      : slug.length > 0
-        ? [root.pythonBin, root.notesHelperPath, "append-log", slug]
-        : [root.pythonBin, root.notesHelperPath, "append-day"]
+    return root.writeCommand(slug.length > 0 ? ["append-log", slug] : ["append-day"])
   }
 
   // The entry for the run that just finished, with whatever notes are typed.
   function finishedRunEntry() {
-    return root.entryJson(root.focusStartedIso, root.finishedRunMinutes(), root.handedOverFocus)
+    return root.entryJson(root.focusStartedIso, root.finishedRunMinutes(), root.noteTexts())
   }
 
-  // Any entry carrying the three notes, as notes-helper.py reads it: a
-  // finished run's, or the night's (0 minutes, see saveSleepNotes()). Quoted
-  // "else": it's a reserved word, and an unquoted key would be a syntax
-  // error in some engines even where QML's own tolerates it.
+  // Any entry carrying the notes (`texts`, in root.notes' order), as
+  // notes-helper.py reads it: a finished run's, or the night's (0 minutes,
+  // see saveSleepNotes()). The texts are passed in rather than read here,
+  // so the trimming below can be tried on any text without typing it into
+  // the notes page.
   //
   // An entry over the helper's limit has its longest note cut short, with
   // "…" to say so, until it fits: the helper would otherwise read it cut off
   // mid-JSON and refuse it, every retry alike, and the run would only get
   // past "Not saved" by being skipped. Only a paste could get there.
-  function entryJson(started, minutes, focus) {
-    var entry = { started: started, minutes: minutes, focus: focus,
-                  done: root.doneText, left: root.leftText, "else": root.elseText }
+  function entryJson(started, minutes, texts) {
+    var entry = { started: started, minutes: minutes }
+    var keys = root.notes.map(function(n) { return n.key })
+    keys.forEach(function(k, i) { entry[k] = texts[i] })
     var json = JSON.stringify(entry)
     for (var over = root.utf8Bytes(json) - root.maxNoteInputBytes; over > 0;
          over = root.utf8Bytes(json) - root.maxNoteInputBytes) {
-      var key = ["done", "left", "else"].reduce(function(a, b) { return entry[a].length >= entry[b].length ? a : b })
+      var key = keys.reduce(function(a, b) { return entry[a].length >= entry[b].length ? a : b })
       // Every character costs at least a byte, and "…" adds three back.
       var kept = entry[key].slice(0, Math.max(0, entry[key].length - over - 3))
       // Never half an emoji: a lone surrogate can't be encoded as UTF-8,
@@ -696,7 +678,7 @@ Item {
   // only what was added since was the other way, and was rejected: an edit
   // in the middle of the text has no "added since".
   function saveSleepNotes() {
-    var text = root.noteFields.map(function(f) { return root[f] })
+    var text = root.noteTexts()
     if (text.every(function(t) { return t.trim() === "" })) return
     if (text.every(function(t, i) { return t === root.sleepNotesSaved[i] })) return
     // A save still running takes this text with the next close, or at 05:30.
@@ -704,7 +686,7 @@ Item {
     if (root.sleepNotesIso === "") root.sleepNotesIso = root.isoNow()
     root.notesSaveFailed = false
     sleepNoteProc.saved = text
-    root.startLog(sleepNoteProc, "", root.entryJson(root.sleepNotesIso, 0, ""))
+    root.startLog(sleepNoteProc, "", root.entryJson(root.sleepNotesIso, 0, text))
   }
 
   // Local-time, no offset suffix -- matches what notes-helper.py's
@@ -789,24 +771,19 @@ Item {
     }
   }
 
-  // Starts a fresh focus run on the selected goal. Called at the end of a
-  // break (through startNextRun()) and from resetRun().
-  function startFocus() {
+  // A fresh focus run on the selected goal, with this cycle's notes and
+  // extensions cleared: at the end of a break whose run is logged (or
+  // skipped), at startup, and from resetRun(). Only this and goToBed()
+  // clear a cycle's notes, so they last through every close and reopen of
+  // the notes page in the break they belong to.
+  function startNextRun() {
+    root.clearCycle()
     root.phase = "focus"
     root.remaining = root.focusSecFor
     root.focusStartedIso = root.isoNow()
     root.breakIsLong = false
     // Fresh run, no mid-run goal change yet -- see its own comment.
     root.goalAttributionRemaining = -1
-  }
-
-  // The end of a break whose run is logged (or skipped): the next run
-  // starts straight away, with this cycle's notes and extensions cleared.
-  // The one place a cycle's notes are cleared, so they last through every
-  // close and reopen of the notes page in the break they belong to.
-  function startNextRun() {
-    root.clearCycle()
-    root.startFocus()
   }
 
   // Counts clearCycle()s. A log write stamped with an older one exits into a
@@ -821,23 +798,20 @@ Item {
   function clearCycle() {
     root.cycle += 1
     root.extensionsUsed = 0
-    root.goalPickerOpen = false
     root.notesOpen = false
     root.notesSaveFailed = false
     root.cycleLogged = false
-    for (var field of root.noteFields) root[field] = ""
-    root.handedOverFocus = ""
+    for (var n of root.notes) root[n.field] = ""
     root.sleepNotesIso = ""
-    root.sleepNotesSaved = ["", "", ""]
+    root.sleepNotesSaved = root.notes.map(function() { return "" })
   }
 
   // Best-effort, matching every other notes-helper call in this file: a
   // failed write here never blocks anything, it just means Omvision's idea
-  // of "the active goal" lags behind until the next successful write.
+  // of "the active goal" lags behind until the next successful write. The
+  // demo's goes nowhere (writeCommand()): the pointer is shared with
+  // Omvision and the real engine.
   function writeActiveGoal() {
-    // The active-goal pointer is shared with Omvision and the real engine;
-    // a demo picking a goal must not change what either of them sees.
-    if (root.demo) return
     writeActiveProc.pendingSlug = root.activeGoalSlug
     writeActiveProc.stdinEnabled = true
     writeActiveProc.running = true
@@ -881,25 +855,17 @@ Item {
     return ""
   }
 
-  // A no-op outside a break, and with nothing to pick: no focusable goal,
-  // and no active goal for "No goal" to drop.
-  function toggleGoalPicker() {
-    if (root.phase !== "break" || !root.canPickGoal) return
-    root.goalPickerOpen = !root.goalPickerOpen
-  }
-
   // The next run's goal: written straight away, so Omvision and the bar
   // show it during the break rather than only once the run starts.
   function chooseGoal(slug) {
     root.activeGoalSlug = String(slug || "")
-    root.goalPickerOpen = false
     root.writeActiveGoal()
   }
 
   // The engine comes up in a fresh run, sized for its mode (the demo's
   // short one included) and stamped with its start, without which its log
   // entry would be refused (notes-helper.py parses "started").
-  Component.onCompleted: root.startFocus()
+  Component.onCompleted: root.startNextRun()
 
   // Same FileView + watchChanges recipe Commons/Style.qml uses for
   // fontconfig/fonts.conf and the window-gaps toggle: reload() on
@@ -951,7 +917,7 @@ Item {
   Process {
     id: writeActiveProc
     property string pendingSlug: ""
-    command: [root.pythonBin, root.notesHelperPath, "write-active"]
+    command: root.writeCommand(["write-active"])
     onStarted: {
       writeActiveProc.write(writeActiveProc.pendingSlug)
       writeActiveProc.stdinEnabled = false

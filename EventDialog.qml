@@ -344,39 +344,11 @@ FocusScope {
         }
       }
 
-      Item {
+      CheckOption {
         Layout.fillWidth: true
-        Layout.preferredHeight: Theme.smallControlHeight
-        RowLayout {
-          anchors.fill: parent
-          spacing: Theme.spaceSm
-          Rectangle {
-            width: Theme.optionMarkSize
-            height: Theme.optionMarkSize
-            border.color: Theme.border
-            border.width: Theme.borderWidth
-            color: "transparent"
-            Rectangle {
-              visible: root.countsToward
-              anchors.centerIn: parent
-              width: Theme.optionDotSize
-              height: Theme.optionDotSize
-              color: Theme.accentColor
-            }
-          }
-          Text {
-            Layout.fillWidth: true
-            text: "count the time towards the goal"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.bodySmallSize
-            color: Theme.dim
-          }
-        }
-        MouseArea {
-          anchors.fill: parent
-          cursorShape: Qt.PointingHandCursor
-          onClicked: root.countsToward = !root.countsToward
-        }
+        checked: root.countsToward
+        label: "count the time towards the goal"
+        onToggled: root.countsToward = !root.countsToward
       }
 
       Text {

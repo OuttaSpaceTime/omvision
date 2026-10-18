@@ -18,11 +18,9 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 out="${1:?out dir}"
 src="$ROOT/plugins/ompom.engine"
-commons=/usr/share/omarchy/shell/Commons
-[ -d "$commons" ] || { echo "FAIL no omarchy-shell Commons at $commons"; exit 1; }
 
 cfg="$out/cfg" home="$out/home"
-mkdir -p "$cfg" "$home/.local/state/omvision" "$out/shots"
+mkdir -p "$home/.local/state/omvision" "$out/shots"
 touch "$home/.omvision-test-home"
 "$ROOT/tests/app/seed-home.sh" "$ROOT/tests/fixtures/home" "$home" >/dev/null || { echo "FAIL couldn't seed $home"; exit 1; }
 # Goals the break's picker must leave out: one not focusable (goal-files.md
@@ -31,13 +29,11 @@ touch "$home/.omvision-test-home"
 printf -- '---\ntitle: Train legs\nstatus: active\nfocusable: no\n---\n' >"$home/Notes/Omvision/goals/train-legs.md"
 printf -- '---\ntitle: Old milestone\nstatus: done\n---\n' >"$home/Notes/Omvision/goals/old-milestone.md"
 
-# The plugin's files beside shell.qml, as bin/ompom-demo lays them out, so
-# its types resolve as same-directory types and `qs.Commons` as the shell's
-# own module. The test goes two levels down, as in the repo, so its import
-# of the app's Parser.js (the log reader it checks the helper's entries
-# with) is "../../Parser.js" in both places, and qmllint can follow it.
-ln -s "$commons" "$cfg/Commons"
-for f in "$src"/*.qml "$src"/notes-helper.py "$ROOT/Parser.js"; do ln -s "$f" "$cfg/${f##*/}"; done
+# The plugin's files beside shell.qml, laid out as for bin/ompom-demo. The
+# test goes two levels down, as in the repo, so its import of the app's
+# Parser.js (the log reader it checks the helper's entries with) is
+# "../../Parser.js" in both places, and qmllint can follow it.
+staged="$("$ROOT/bin/ompom-stage" "$src" "$cfg" "$ROOT/Parser.js" 2>&1)" || { echo "FAIL $staged"; exit 1; }
 mkdir -p "$cfg/tests/engine"
 cp "${2:-$ROOT/tests/engine/tst_break.qml}" "$cfg/tests/engine/EngineTest.qml"
 cat > "$cfg/shell.qml" <<'QML'

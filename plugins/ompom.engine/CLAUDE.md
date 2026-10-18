@@ -16,8 +16,10 @@ Paths are from the omvision repo root.
   untouched through that. A changed engine file only loads on a shell restart, so
   the script saves the engine's `snapshot` IPC, restarts the shell, and `restore`s
   it into the new engine.
-- A new piece of cycle state (a property that must outlive a restart) goes into
-  both `snapshotJson()` and `restore()` in `Engine.qml`. Otherwise the next deploy drops it.
+- A new piece of cycle state (a property that must outlive a restart) is a row in
+  `cycleFields` in `Engine.qml`, with its check. Otherwise the next deploy drops it.
+  Mark the row `optional: true` for the deploy that adds it (the engine handing off
+  doesn't send it yet), and drop the flag in the commit after.
 - Replace live files atomically (temp file, then rename), never with `cp` in
   place: see `docs/ompom-highlighter.md`, "The crash".
 

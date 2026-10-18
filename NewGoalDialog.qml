@@ -294,42 +294,13 @@ FocusScope {
       }
 
       // ---- focusable ----------------------------------------------------
-      // EventDialog's "count the time" box, same mark and wording style.
-      Item {
+      // The same box as EventDialog's "count the time".
+      CheckOption {
         objectName: "goalFocusableToggle"
         Layout.fillWidth: true
-        Layout.preferredHeight: Theme.smallControlHeight
-        RowLayout {
-          anchors.fill: parent
-          spacing: Theme.spaceSm
-          Rectangle {
-            Layout.preferredWidth: Theme.optionMarkSize
-            Layout.preferredHeight: Theme.optionMarkSize
-            border.color: Theme.border
-            border.width: Theme.borderWidth
-            color: "transparent"
-            Rectangle {
-              visible: root.focusable
-              anchors.centerIn: parent
-              width: Theme.optionDotSize
-              height: Theme.optionDotSize
-              color: Theme.accentColor
-            }
-          }
-          Text {
-            Layout.fillWidth: true
-            elide: Text.ElideRight
-            text: "can be focused on at the laptop"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.bodySmallSize
-            color: Theme.dim
-          }
-        }
-        MouseArea {
-          anchors.fill: parent
-          cursorShape: Qt.PointingHandCursor
-          onClicked: root.focusable = !root.focusable
-        }
+        checked: root.focusable
+        label: "can be focused on at the laptop"
+        onToggled: root.focusable = !root.focusable
       }
 
       Text {

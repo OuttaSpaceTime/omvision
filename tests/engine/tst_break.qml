@@ -60,15 +60,29 @@ TestCase {
   function button(label) {
     return find(overlay, function(n) { return n.label === label && shown(n) })
   }
-  // Polished first: a button whose row has just changed (a line shown above
-  // it, a neighbour hidden) is still at its old position until the next
-  // frame, and a click there lands on whatever used to be.
+  // Settled first: a button whose row has just changed (a line shown above
+  // it, a neighbour hidden) is still at its old position until its
+  // positioners have run, and a click there lands on whatever used to be.
+  // OmvisionTest.settle()'s way, by watching it stop moving, rather than
+  // waitForRendering(): with nothing to redraw that waits for the engine's
+  // next tick, and on a screen no tick changes, its whole 5s timeout.
   function clickButton(label) {
-    waitForRendering(overlay)
     var b = button(label)
     check(!!b, "\"" + label + "\" is on screen")
-    if (b) mouseClick(b, b.width / 2, b.height / 2)
+    if (!b) return
+    settle(b)
+    mouseClick(b, b.width / 2, b.height / 2)
     wait(50)
+  }
+  function settle(item) {
+    var last = null
+    for (var t = 0; t < 2000; t += 25) {
+      var p = item.mapToItem(overlay, 0, 0)
+      var here = p.x + "," + p.y + "," + item.width + "," + item.height
+      if (here === last) return
+      last = here
+      wait(25)
+    }
   }
   function section(title) {
     return find(overlay, function(n) { return n.title === title })
@@ -145,15 +159,15 @@ TestCase {
     check(near(engine.remaining, 420), "+2 min lengthens it: " + engine.remaining)
     waitFor(function() { return engine.goalsList.length > 0 }, "the goal list")
     keyClick(Qt.Key_G, Qt.ControlModifier)
-    check(engine.goalPickerOpen, "Ctrl+G opens the goal picker")
+    check(overlay.goalPickerOpen, "Ctrl+G opens the goal picker")
     check(engine.goalsList.length === 3 && !!button("Write the report"), "it offers the open, focusable goal")
     check(!button("Train legs"), "and leaves out the `focusable: no` one")
     check(!button("Old milestone"), "and the done one")
     keyClick(Qt.Key_Escape)
-    check(!engine.goalPickerOpen && engine.phase === "break", "Escape closes it")
+    check(!overlay.goalPickerOpen && engine.phase === "break", "Escape closes it")
     keyClick(Qt.Key_G, Qt.ControlModifier)
     clickButton("Write the report")
-    check(!engine.goalPickerOpen && engine.activeGoalSlug === "write-the-report", "a goal is picked")
+    check(!overlay.goalPickerOpen && engine.activeGoalSlug === "write-the-report", "a goal is picked")
     check(engine.runGoalSlug === "", "the finished run keeps the goal it ran on (none)")
     waitFor(function() { return readFile(home + "/.local/state/omvision/active-goal").trim() === "write-the-report" },
             "the pick to be written to active-goal")
@@ -173,7 +187,7 @@ TestCase {
     check(engine.doneText === "- one\n- ", "Return continues a list: " + JSON.stringify(engine.doneText))
     type("two")
     keyClick(Qt.Key_G, Qt.ControlModifier)
-    check(!engine.goalPickerOpen && engine.notesOpen, "Ctrl+G does nothing on the notes page")
+    check(!overlay.goalPickerOpen && engine.notesOpen, "Ctrl+G does nothing on the notes page")
 
     // Return on the last section's last line scrolls the page with it.
     var flick = find(overlay, function(n) { return n.contentY !== undefined && n.clip === true })
@@ -272,17 +286,19 @@ TestCase {
 
     // A note too long for the helper is cut to fit, not refused, and never
     // through the middle of an emoji (a lone surrogate the helper can't
-    // encode).
-    engine.elseText = new Array(30001).join("ä")
-    var big = engine.finishedRunEntry()
+    // encode). Straight through entryJson(): typed into the page, each of
+    // these texts would cost the hidden notes page a relayout of its own.
+    var helperMax = Number((readFile(engine.notesHelperPath).match(/^MAX_NOTE_INPUT_BYTES = ([\d_]+)/m) || ["", "0"])[1].replace(/_/g, ""))
+    check(helperMax === engine.maxNoteInputBytes,
+          "the engine's limit is notes-helper.py's: " + engine.maxNoteInputBytes + " vs " + helperMax)
+    var big = engine.entryJson("2026-10-13T10:00:00", 25, ["", "", new Array(30001).join("ä")])
     check(engine.utf8Bytes(big) <= engine.maxNoteInputBytes && JSON.parse(big)["else"].slice(-1) === "…",
           "an oversized note is shortened to the helper's limit")
     for (var cut = 0; cut < 4; cut++) {
-      engine.elseText = new Array(cut + 1).join("a") + new Array(6001).join("😀")
-      var kept = JSON.parse(engine.finishedRunEntry())["else"]
+      var kept = JSON.parse(engine.entryJson("2026-10-13T10:00:00", 25,
+                                             ["", "", new Array(cut + 1).join("a") + new Array(6001).join("😀")]))["else"]
       if (/[\uD800-\uDBFF]…$/.test(kept)) { check(false, "a cut emoji at offset " + cut); break }
     }
-    engine.elseText = ""
 
     // A refused write holds the break; Skip moves on.
     engine.runGoalSlug = "../not-a-slug"
@@ -294,23 +310,23 @@ TestCase {
     check(engine.phase === "focus" && !engine.notesSaveFailed && !engine.breakIsLong,
           "Skip starts the next run: " + engine.statusJson())
 
-    // Hand-offs across a deploy.
-    var oldIntent = { takenAtMs: Date.now(), mode: "normal", phase: "intent", paused: false, remaining: 12,
-      extensionsUsed: 0, focusStartedIso: "", goalAttributionRemaining: -1, cycleLogged: false, notesOpen: false,
-      focusText: "x", doneText: "", leftText: "", elseText: "" }
-    var r = engine.restore(JSON.stringify(oldIntent))
-    check(engine.phase === "focus" && engine.remaining === engine.normalFocusSec,
-          "an older engine's intent snapshot restores as a fresh run: " + r)
-    check(JSON.parse(engine.finishedRunEntry()).focus === "x", "with the focus line typed for it, for its log entry")
-    var oldBreak = Object.assign({}, oldIntent, { phase: "break", remaining: 100, extensionsUsed: 1,
-      focusStartedIso: "2026-10-13T10:00:00", notesOpen: true, doneText: "d" })
+    // Hand-offs across a deploy. `focusText` is a key an older engine
+    // sent, and stands for any this one doesn't know.
+    var brk = Object.assign(JSON.parse(engine.snapshotJson()), { phase: "break", remaining: 100, extensionsUsed: 1,
+      focusStartedIso: "2026-10-13T10:00:00", notesOpen: true, doneText: "d", runGoalSlug: engine.activeGoalSlug,
+      focusText: "x" })
     engine.goalsList = []
-    r = engine.restore(JSON.stringify(oldBreak))
+    var r = engine.restore(JSON.stringify(brk))
     waitFor(function() { return engine.goalsList.length > 0 }, "a break restored from another process to list the goals")
-    check(engine.phase === "break" && engine.notesOpen && done.edit.text === "d" && engine.runGoalSlug === engine.activeGoalSlug,
-          "an older engine's break restores with its notes on screen: " + r)
+    check(engine.phase === "break" && engine.notesOpen && done.edit.text === "d" && engine.extensionsUsed === 1,
+          "a break restores with its notes on screen, a key it doesn't know ignored: " + r)
     engine.restore(JSON.stringify(Object.assign(JSON.parse(engine.snapshotJson()), { runsInSet: 3, breakIsLong: true })))
     check(engine.runsInSet === 3 && engine.breakIsLong && engine.doneText === "d", "this engine's own snapshot round-trips")
+    var partial = JSON.parse(engine.snapshotJson())
+    delete partial.sleepNotesIso
+    r = engine.restore(JSON.stringify(partial))
+    check(r === "error: bad sleepNotesIso" && engine.phase === "break" && engine.doneText === "d",
+          "a snapshot missing a field is refused, and changes nothing: " + r)
     check(engine.restore("{}").indexOf("error") === 0 && engine.phase === "break", "a bad snapshot changes nothing")
 
     night()
@@ -358,7 +374,7 @@ TestCase {
     check(button("Take notes") && !button("+1 min") && !button("+1 minute (3 left)") && !button("Good night"),
           "the night offers only notes")
     keyClick(Qt.Key_G, Qt.ControlModifier)
-    check(!engine.goalPickerOpen, "and no goal picker")
+    check(!overlay.goalPickerOpen, "and no goal picker")
 
     // Each close of the page saves it to the day file, 0 minutes long, and
     // the page keeps its text for the next open.

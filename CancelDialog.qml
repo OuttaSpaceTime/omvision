@@ -147,24 +147,9 @@ FocusScope {
               anchors.fill: parent
               spacing: Theme.spaceSm
 
-              Rectangle {
-                // A ring: a radius of half the width. Qt caps a radius at
-                // half the shorter side, so this is what the 7 typed here
-                // before drew too.
-                width: Theme.optionMarkSize
-                height: Theme.optionMarkSize
-                radius: width / 2
-                border.color: Theme.border
-                border.width: Theme.borderWidth
-                color: "transparent"
-                Rectangle {
-                  visible: reasonRow.selected
-                  anchors.centerIn: parent
-                  width: Theme.optionDotSize
-                  height: Theme.optionDotSize
-                  radius: width / 2
-                  color: Theme.accentColor
-                }
+              OptionMark {
+                round: true
+                checked: reasonRow.selected
               }
               Text {
                 Layout.fillWidth: true

@@ -374,15 +374,23 @@ function isRun(e) { return e.type === "pomodoro" && e.minutes > 0 }
 // which repeats words but never loses any.
 function dedupePomodoros(entries) {
   var lastIndexByKey = {}
+  // Night notes by heading, so each is held against the later copies under
+  // its own heading only, not against every entry after it.
+  var nightIndicesByHeading = {}
   for (var i = 0; i < entries.length; i++) {
-    if (!isRun(entries[i])) continue
-    lastIndexByKey[entries[i].heading + "·" + entries[i].minutes] = i
+    var n = entries[i]
+    if (isRun(n)) {
+      lastIndexByKey[n.heading + "·" + n.minutes] = i
+    } else if (isNightNote(n)) {
+      if (!nightIndicesByHeading[n.heading]) nightIndicesByHeading[n.heading] = []
+      nightIndicesByHeading[n.heading].push(i)
+    }
   }
   var out = []
   for (var j = 0; j < entries.length; j++) {
     var e = entries[j]
     if (isRun(e) && lastIndexByKey[e.heading + "·" + e.minutes] !== j) continue
-    if (isNightNote(e) && entries.some(function(later, k) { return k > j && holdsNotes(later, e) })) continue
+    if (isNightNote(e) && nightIndicesByHeading[e.heading].some(function(k) { return k > j && holdsNotes(entries[k], e) })) continue
     out.push(e)
   }
   return out

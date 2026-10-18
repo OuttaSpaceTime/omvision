@@ -53,15 +53,11 @@ if ! grep -q 'property bool demo:' "$src"/*.qml; then
 fi
 
 # qs needs a config directory whose shell.qml is the entry point, with the
-# plugin's files beside it so `Service` resolves as a same-directory type and
-# `qs.Commons` resolves to the shell's own module. Symlinks, not copies, so
-# the demo is always the file as it is on disk right now.
+# plugin's files beside it (bin/ompom-stage) so `Service` resolves as a
+# same-directory type.
 cfg="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/ompom-demo.XXXXXX")"
 trap 'rm -rf -- "$cfg"' EXIT
-ln -s /usr/share/omarchy/shell/Commons "$cfg/Commons"
-for f in "$src"/*.qml "$src"/notes-helper.py; do
-  ln -s "$f" "$cfg/${f##*/}"
-done
+"$root/bin/ompom-stage" "$src" "$cfg"
 cat > "$cfg/shell.qml" <<EOF
 import Quickshell
 ShellRoot {

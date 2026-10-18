@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Lays out a qs config directory for running the ompom engine outside
+# omarchy-shell: the plugin's files beside the shell.qml the caller writes
+# next, so its types resolve as same-directory types, and `qs.Commons` as
+# the shell's own module. Symlinks, not copies, so what runs is each file as
+# it is on disk right now. bin/ompom-demo and tests/engine/run.sh both start
+# here, so the plugin's layout is spelled out once.
+#
+#   ompom-stage <plugin dir> <config dir> [extra file...]
+#
+# Extra files are linked in beside the plugin's (the engine test's
+# Parser.js).
+set -euo pipefail
+
+src="${1:?plugin dir}" cfg="${2:?config dir}"
+shift 2
+commons=/usr/share/omarchy/shell/Commons
+[ -d "$commons" ] || { echo "ompom-stage: no omarchy-shell Commons at $commons" >&2; exit 1; }
+
+mkdir -p -- "$cfg"
+ln -s "$commons" "$cfg/Commons"
+for f in "$src"/*.qml "$src"/notes-helper.py "$@"; do
+  ln -s "$f" "$cfg/${f##*/}"
+done

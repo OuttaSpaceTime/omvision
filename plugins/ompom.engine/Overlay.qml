@@ -12,6 +12,11 @@ Item {
 
   required property var engine
 
+  // Ctrl+G's goal picker. How the screen looks rather than part of the
+  // cycle, so it's the overlay's: closed again whenever the phase moves on
+  // (the Connections below), which is every way a break ends.
+  property bool goalPickerOpen: false
+
   // The writing size: omvision's journal type exactly (Theme.writingPointSize
   // there), in points for the same reason -- the highlighter's character
   // formats are point-sized, and mixing pixel and point sizes on one run of
@@ -30,6 +35,26 @@ Item {
     id: writingMetrics
     font.family: Style.font.family
     font.pointSize: overlay.writingPointSize
+  }
+
+  // The overlay's three tiers of text (see the block view below), each
+  // set in one place.
+  component Caption: Text {
+    color: Color.muted
+    font.family: Style.font.family
+    font.pixelSize: Style.font.caption
+    font.letterSpacing: 2
+  }
+  component Subtitle: Text {
+    color: Color.muted
+    font.family: Style.font.family
+    font.pixelSize: Style.font.subtitle
+  }
+  component Heading: Text {
+    color: Color.popups.text
+    font.family: Style.font.family
+    font.pixelSize: Style.font.display
+    font.bold: true
   }
 
   Rectangle {
@@ -59,15 +84,17 @@ Item {
   Shortcut {
     sequences: ["Ctrl+G"]
     enabled: overlay.engine.phase === "break" && !overlay.engine.notesOpen
-    onActivated: overlay.engine.toggleGoalPicker()
+    // A no-op with nothing to pick: no focusable goal, and no active goal
+    // for "No goal" to drop.
+    onActivated: if (overlay.engine.canPickGoal) overlay.goalPickerOpen = !overlay.goalPickerOpen
   }
 
   // The picker first, since it sits on top of whichever view opened it.
   Shortcut {
     sequences: ["Escape"]
-    enabled: overlay.engine.goalPickerOpen || overlay.engine.notesOpen
+    enabled: overlay.goalPickerOpen || overlay.engine.notesOpen
     onActivated: {
-      if (overlay.engine.goalPickerOpen) overlay.engine.goalPickerOpen = false
+      if (overlay.goalPickerOpen) overlay.goalPickerOpen = false
       else overlay.engine.closeNotes()
     }
   }
@@ -83,7 +110,7 @@ Item {
     onActivated: if (overlay.engine.demo) Qt.quit()
   }
 
-  Text {
+  Caption {
     visible: overlay.engine.demo
     anchors.right: parent.right
     anchors.bottom: parent.bottom
@@ -91,9 +118,6 @@ Item {
     z: 10
     text: "DEMO  ·  Ctrl+Q quits"
     color: Util.alpha(Color.popups.text, 0.6)
-    font.family: Style.font.family
-    font.pixelSize: Style.font.caption
-    font.letterSpacing: 2
   }
 
   // --- block view: prompt / break / bedtime / sleep ---
@@ -105,25 +129,17 @@ Item {
     visible: !overlay.engine.notesOpen
     spacing: Style.space(14)
 
-    Text {
+    Caption {
       anchors.horizontalCenter: parent.horizontalCenter
       text: (overlay.engine.atNight ? "Bedtime" : overlay.engine.mode === "long" ? "Long Focus" : "Normal").toUpperCase()
-      color: Color.muted
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
-      font.letterSpacing: 2
     }
 
-    Text {
+    Heading {
       anchors.horizontalCenter: parent.horizontalCenter
       text: overlay.engine.phase === "bedtime" ? "Time to sleep"
         : overlay.engine.phase === "sleep" ? "Good night"
         : overlay.engine.phase !== "break" ? "Focus complete"
         : overlay.engine.breakIsLong ? "Long break" : "Break"
-      color: Color.popups.text
-      font.family: Style.font.family
-      font.pixelSize: Style.font.display
-      font.bold: true
     }
 
     Text {
@@ -139,38 +155,30 @@ Item {
     }
 
     // What the night's countdown counts down to.
-    Text {
+    Subtitle {
       anchors.horizontalCenter: parent.horizontalCenter
       visible: overlay.engine.phase === "sleep"
       text: "until " + overlay.engine.wakeLabel
-      color: Color.muted
-      font.family: Style.font.family
-      font.pixelSize: Style.font.subtitle
     }
 
     // The quiet goal line: the selected goal, which the next run starts on
     // (the finished run's own is pinned apart, in Engine.runGoalSlug), and
     // the Ctrl+G hint even before a goal has ever been picked. Absent when
     // Ctrl+G would open nothing (Engine.canPickGoal).
-    Text {
+    Subtitle {
       anchors.horizontalCenter: parent.horizontalCenter
       visible: overlay.engine.phase === "break" && overlay.engine.canPickGoal
       text: (overlay.engine.activeGoalTitle.length > 0 ? "Goal: " + overlay.engine.activeGoalTitle : "No goal set")
             + "  ·  Ctrl+G to change"
-      color: Color.muted
-      font.family: Style.font.family
-      font.pixelSize: Style.font.subtitle
     }
 
     // The one sign that the break's write was refused -- quiet by design
     // (no dialog), Color.urgent so it still reads as a warning.
-    Text {
+    Subtitle {
       anchors.horizontalCenter: parent.horizontalCenter
       visible: overlay.engine.notesSaveFailed
       text: "Notes not saved"
       color: Color.urgent
-      font.family: Style.font.family
-      font.pixelSize: Style.font.subtitle
     }
 
     // The buttons are a separate decision from the reading above them, so
@@ -180,59 +188,77 @@ Item {
       height: Style.space(18)
     }
 
+    // One group per screen, each shown as a whole; a Row leaves hidden
+    // children out, so the groups need no spacing of their own between
+    // them beyond the outer Row's.
     Row {
       anchors.horizontalCenter: parent.horizontalCenter
       spacing: Style.space(16)
 
-      OverlayButton {
-        visible: overlay.engine.phase === "prompt" && overlay.engine.extensionsUsed < overlay.engine.maxExtensions
-        label: "+1 minute (" + (overlay.engine.maxExtensions - overlay.engine.extensionsUsed) + " left)"
-        onActivated: overlay.engine.addExtension()
-      }
-
-      OverlayButton {
+      Row {
         visible: overlay.engine.phase === "prompt"
-        primary: true
-        label: "Start break"
-        onActivated: overlay.engine.startBreak()
+        spacing: parent.spacing
+
+        OverlayButton {
+          visible: overlay.engine.extensionsUsed < overlay.engine.maxExtensions
+          label: "+1 minute (" + (overlay.engine.maxExtensions - overlay.engine.extensionsUsed) + " left)"
+          onActivated: overlay.engine.addExtension()
+        }
+
+        OverlayButton {
+          primary: true
+          label: "Start break"
+          onActivated: overlay.engine.startBreak()
+        }
       }
 
       // The same three minutes the focus run gets, and gone at 22:20 with
       // this whole screen.
-      OverlayButton {
-        visible: overlay.engine.phase === "bedtime" && overlay.engine.snoozesUsed < overlay.engine.maxSnoozes
-        label: "+1 minute (" + (overlay.engine.maxSnoozes - overlay.engine.snoozesUsed) + " left)"
-        onActivated: overlay.engine.snooze()
-      }
-
-      OverlayButton {
+      Row {
         visible: overlay.engine.phase === "bedtime"
-        primary: true
-        label: "Good night"
-        onActivated: overlay.engine.startSleep()
-      }
+        spacing: parent.spacing
 
-      Repeater {
-        model: [1, 2, 3]
         OverlayButton {
-          required property int modelData
-          visible: overlay.engine.phase === "break" && !overlay.engine.notesSaveFailed
-          label: "+" + modelData + " min"
-          onActivated: overlay.engine.extendBreak(modelData)
+          visible: overlay.engine.snoozesUsed < overlay.engine.maxSnoozes
+          label: "+1 minute (" + (overlay.engine.maxSnoozes - overlay.engine.snoozesUsed) + " left)"
+          onActivated: overlay.engine.snooze()
+        }
+
+        OverlayButton {
+          primary: true
+          label: "Good night"
+          onActivated: overlay.engine.startSleep()
         }
       }
 
-      OverlayButton {
-        visible: overlay.engine.phase === "break" && overlay.engine.notesSaveFailed
-        primary: true
-        label: "Try again"
-        onActivated: overlay.engine.saveNote()
+      Row {
+        visible: overlay.engine.phase === "break" && !overlay.engine.notesSaveFailed
+        spacing: parent.spacing
+
+        Repeater {
+          model: [1, 2, 3]
+          OverlayButton {
+            required property int modelData
+            label: "+" + modelData + " min"
+            onActivated: overlay.engine.extendBreak(modelData)
+          }
+        }
       }
 
-      OverlayButton {
+      Row {
         visible: overlay.engine.phase === "break" && overlay.engine.notesSaveFailed
-        label: "Skip"
-        onActivated: overlay.engine.skipUnsavedNotes()
+        spacing: parent.spacing
+
+        OverlayButton {
+          primary: true
+          label: "Try again"
+          onActivated: overlay.engine.saveNote()
+        }
+
+        OverlayButton {
+          label: "Skip"
+          onActivated: overlay.engine.skipUnsavedNotes()
+        }
       }
 
       OverlayButton {
@@ -322,6 +348,7 @@ Item {
     Connections {
       target: overlay.engine
       function onPhaseChanged() {
+        overlay.goalPickerOpen = false
         if (!overlay.engine.hasNotes) return
         for (var i = 0; i < notesPage.sections.length; i++) notesPage.sections[i].open = true
       }
@@ -372,12 +399,8 @@ Item {
         spacing: Style.space(32)
 
         Repeater {
-          // The engine's three notes, in the order the log writes them.
-          model: [
-            { title: "What's done?", field: "doneText" },
-            { title: "What's left?", field: "leftText" },
-            { title: "What else?", field: "elseText" }
-          ]
+          // The engine's notes, in the order the log writes them.
+          model: overlay.engine.notes
 
           NoteSection {
             required property var modelData
@@ -385,7 +408,7 @@ Item {
             title: modelData.title
             text: overlay.engine[modelData.field]
             pointSize: overlay.writingPointSize
-            onEdited: function(text) { overlay.engine[modelData.field] = text }
+            onEdited: function(text) { overlay.engine.setNote(modelData.field, text) }
             onCursorMoved: function(field) { noteFlick.ensureCursorVisible(field) }
             onKeyPressed: function(field, event) { notesPage.moveAcross(field, event) }
           }
@@ -429,7 +452,7 @@ Item {
             onActivated: overlay.engine.closeNotes()
           }
 
-          Text {
+          Caption {
             anchors.verticalCenter: parent.verticalCenter
             // A caption, same tier as the block view's mode label, but at
             // partial text alpha rather than Color.muted, which on light
@@ -439,20 +462,15 @@ Item {
             text: (overlay.engine.phase === "sleep" ? "NIGHT NOTES" : "BREAK NOTES") + "  ·  "
                   + overlay.engine.fmt(overlay.engine.remaining)
             color: Util.alpha(Color.popups.text, 0.6)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.letterSpacing: 2
           }
         }
 
-        Text {
+        Subtitle {
           visible: overlay.engine.notesSaveFailed
           // The night saves on leaving the page, so leaving it is the retry.
           text: overlay.engine.phase === "sleep" ? "Notes not saved — Esc tries again"
                                                  : "Notes not saved — Esc, then Try again"
           color: Color.urgent
-          font.family: Style.font.family
-          font.pixelSize: Style.font.subtitle
         }
       }
     }
@@ -460,11 +478,13 @@ Item {
 
   // --- goal picker: Ctrl+G on the break's countdown ---
   // Opaque backdrop, same reasoning as the floating header: it fully
-  // occludes what's underneath rather than showing through it. Escape and
-  // Ctrl+G close it.
+  // occludes what's underneath rather than showing through it, and takes
+  // every click that misses a button. Escape and Ctrl+G close it. Inside,
+  // the block view's idiom: centred column, caption, display heading, a
+  // row of OverlayButtons.
   Rectangle {
     anchors.fill: parent
-    visible: overlay.engine.goalPickerOpen
+    visible: overlay.goalPickerOpen
     color: Color.background
     z: 3
 
@@ -472,54 +492,48 @@ Item {
       anchors.fill: parent
       acceptedButtons: Qt.AllButtons
     }
-  }
 
-  // The block view's idiom (centred column, caption, display heading, a
-  // row of OverlayButtons).
-  Column {
-    anchors.centerIn: parent
-    visible: overlay.engine.goalPickerOpen
-    z: 4
-    spacing: Style.space(20)
+    Column {
+      anchors.centerIn: parent
+      spacing: Style.space(20)
 
-    Text {
-      anchors.horizontalCenter: parent.horizontalCenter
-      text: "NEXT RUN"
-      color: Color.muted
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
-      font.letterSpacing: 2
-    }
-
-    Text {
-      anchors.horizontalCenter: parent.horizontalCenter
-      text: "Pick a goal"
-      color: Color.popups.text
-      font.family: Style.font.family
-      font.pixelSize: Style.font.display
-      font.bold: true
-    }
-
-    Row {
-      anchors.horizontalCenter: parent.horizontalCenter
-      spacing: Style.space(16)
-
-      Repeater {
-        model: overlay.engine.pickableGoals
-        OverlayButton {
-          required property var modelData
-          primary: modelData.slug === overlay.engine.activeGoalSlug
-          label: modelData.title || modelData.slug || ""
-          onActivated: overlay.engine.chooseGoal(modelData.slug)
-        }
+      Caption {
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: "NEXT RUN"
       }
 
-      // Otherwise a goal once picked could only be swapped, never
-      // dropped, short of opening Omvision.
-      OverlayButton {
-        visible: overlay.engine.activeGoalSlug.length > 0
-        label: "No goal"
-        onActivated: overlay.engine.chooseGoal("")
+      Heading {
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: "Pick a goal"
+      }
+
+      Row {
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: Style.space(16)
+
+        Repeater {
+          model: overlay.engine.pickableGoals
+          OverlayButton {
+            required property var modelData
+            primary: modelData.slug === overlay.engine.activeGoalSlug
+            label: modelData.title || modelData.slug || ""
+            onActivated: {
+              overlay.engine.chooseGoal(modelData.slug)
+              overlay.goalPickerOpen = false
+            }
+          }
+        }
+
+        // Otherwise a goal once picked could only be swapped, never
+        // dropped, short of opening Omvision.
+        OverlayButton {
+          visible: overlay.engine.activeGoalSlug.length > 0
+          label: "No goal"
+          onActivated: {
+            overlay.engine.chooseGoal("")
+            overlay.goalPickerOpen = false
+          }
+        }
       }
     }
   }
