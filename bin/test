@@ -3,7 +3,8 @@
 # and nothing reads or writes ~/Notes -- the app tests get a throwaway HOME.
 #
 #   bin/test              every layer
-#   bin/test unit         layer 1 only: Writer.js and Parser.js (qmltestrunner)
+#   bin/test unit         layer 1 only: Writer.js and Parser.js (qmltestrunner), and
+#                         tests/contract's cases against notes-helper.py
 #   bin/test app          layer 2 only: the whole app, driven from inside qs
 #   bin/test engine       the ompom engine's break cycle (tests/engine)
 #   bin/test app tasks    one app test file (tests/app/tst_tasks.qml)
@@ -39,7 +40,7 @@ for a in "$@"; do
   case "$a" in
     -k) keep=1 ;;
     -v) verbose=1 ;;
-    -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) args+=("$a") ;;
   esac
 done
@@ -85,8 +86,11 @@ PY
     echo "note: $CONTRACT not found; worked example not checked against it"
   fi
 
+  # tst_contract.qml reads tests/contract/cases.json, which a TestCase can
+  # only do through a file:// XMLHttpRequest.
   local out
-  out="$(cd "$ROOT" && QT_QPA_PLATFORM=offscreen "$QMLTESTRUNNER" -platform offscreen -input tests/unit 2>&1)"
+  out="$(cd "$ROOT" && QT_QPA_PLATFORM=offscreen QML_XHR_ALLOW_FILE_READ=1 \
+    "$QMLTESTRUNNER" -platform offscreen -input tests/unit 2>&1)"
   local code=$?
   if [ "$verbose" = 1 ]; then printf '%s\n' "$out"
   else
@@ -99,6 +103,16 @@ PY
   xfail="$(printf '%s\n' "$out" | grep -c '^XFAIL' || true)"
   if [ "$code" != 0 ] || [ -z "$totals" ]; then failed=1; fi
   summary+=("unit     ${totals:-did not finish (exit $code)}, $xfail known failures")
+
+  # The same contract cases tst_contract.qml runs, against notes-helper.py.
+  local cout
+  cout="$(python3 -I "$ROOT/tests/contract/check.py" 2>&1)"
+  code=$?
+  if [ "$verbose" = 1 ]; then printf '%s\n' "$cout"
+  else printf '%s\n' "$cout" | grep -E '^(FAIL|Traceback)' | sed 's/^/  /' || true
+  fi
+  if [ "$code" != 0 ]; then failed=1; fi
+  summary+=("contract $(printf '%s\n' "$cout" | sed -n 's/^DONE //p' | tail -1 || true) (notes-helper.py)")
 }
 
 # ---- layer 2 -----------------------------------------------------------------

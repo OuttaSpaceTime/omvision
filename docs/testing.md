@@ -62,6 +62,12 @@ own runner: `qmltestrunner -platform offscreen -input tests/unit`.
 - `tst_parser.qml` covers goal files, tasks, coaching, log entries (`else:`, dedupe, year
   wrap, the `[+time]` marker), `estimate:` as poms *left*, and the small formatters.
 - `tst_util.qml` covers Util.js's list helpers (`goalsByTitle`).
+- `tst_contract.qml` runs `tests/contract/cases.json` (goal files, `focusable:` values,
+  pomodoro and event entries) through Parser.js and Writer.js. bin/test runs the same
+  cases through `notes-helper.py` with `tests/contract/check.py`, so the engine's helper
+  and the app can't disagree on `docs/goal-files.md` without one of them failing. A case
+  is a JSON object with what goes in and what must come out; it reads the file with a
+  `file://` XMLHttpRequest, which bin/test allows with `QML_XHR_ALLOW_FILE_READ=1`.
 - `workedexample.js` is the worked example from `docs/goal-files.md`,
   as JS strings (a test can't read files). bin/test checks it against the contract on
   every run.

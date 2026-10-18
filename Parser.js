@@ -212,7 +212,9 @@ function parseCoaching(lines) {
 }
 
 // ---- §4 log entry grammar ----------------------------------------------------
-var POM_HEAD = /^###\s+(\d{1,2})\s+([A-Za-z]{3})\s+(\d{2}):(\d{2})\s*·\s*(\d+)m\s*$/
+// The duration as either writer formats it (formatDuration() here and in
+// notes-helper.py): `25m`, or `1h`/`1h15` from an hour up.
+var POM_HEAD = /^###\s+(\d{1,2})\s+([A-Za-z]{3})\s+(\d{2}):(\d{2})\s*·\s*(\d+m|\d+h(?:\d{2})?)\s*$/
 var EVT_HEAD = /^###\s+(\d{1,2})\s+([A-Za-z]{3})\s+(\d{2}):(\d{2})\s*·\s*event\s*·\s*([^·]+?)\s*·\s*(.+?)\s*$/
 
 function monthIndex(abbrev) {
@@ -277,7 +279,7 @@ function parseLogEntries(text, now) {
       var em = !pm ? line.match(EVT_HEAD) : null
       if (pm) {
         var day = Number(pm[1]), monIdx = monthIndex(pm[2])
-        var hh = Number(pm[3]), mm = Number(pm[4]), minutes = Number(pm[5])
+        var hh = Number(pm[3]), mm = Number(pm[4]), minutes = parseDurationToMinutes(pm[5])
         i++
         var body = []
         while (i < lines.length && !lines[i].match(/^###\s/)) { body.push(lines[i]); i++ }

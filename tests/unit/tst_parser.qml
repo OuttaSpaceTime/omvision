@@ -38,23 +38,11 @@ TestCase {
     compare(Object.keys(m.raw).sort(), ["done_by", "estimate", "status", "title", "why"])
   }
 
-  // Only an explicit no hides a goal from the break's picker (goal-files.md
-  // §6); notes-helper.py's is_focusable() reads the same table.
-  function test_parseGoalFile_focusable_data() {
-    return [
-      { tag: "no", value: "no", want: false },
-      { tag: "No, padded", value: "  No  ", want: false },
-      { tag: "false", value: "false", want: false },
-      { tag: "off", value: "OFF", want: false },
-      { tag: "yes", value: "yes", want: true },
-      { tag: "true", value: "true", want: true },
-      { tag: "empty", value: "", want: true },
-      { tag: "typo", value: "nope", want: true }
-    ]
-  }
-  function test_parseGoalFile_focusable(row) {
-    var text = goal.replace("status: active\n", "status: active\nfocusable: " + row.value + "\n")
-    compare(Parser.parseGoalFile(text).focusable, row.want)
+  // Which values of the key mean no is tests/contract/cases.json's, shared
+  // with notes-helper.py; this is only that the goal's own key is read.
+  function test_parseGoalFile_focusable() {
+    var text = goal.replace("status: active\n", "status: active\nfocusable: no\n")
+    compare(Parser.parseGoalFile(text).focusable, false)
   }
 
   function test_parseGoalFile_crlf_and_trailing_whitespace() {

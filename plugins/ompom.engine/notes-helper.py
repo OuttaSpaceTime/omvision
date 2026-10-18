@@ -152,27 +152,35 @@ def write_atomic(dir_fd, name, data):
         raise
 
 
+FRONT_MATTER_LINE = re.compile(r"([A-Za-z0-9_-]+):\s?(.*)")
+
+
 def parse_front_matter(text):
-    """Parse the YAML-ish block between the first two '---' fence lines
-    into a flat {key: value} dict. Anything that doesn't fit exactly --
-    no opening fence, no closing fence -- returns None so the caller
-    skips the file instead of guessing what the author meant."""
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return None
-    try:
-        close = lines.index("---", 1)
-    except ValueError:
+    """Parse goal-files.md §6's front matter into a flat {key: value}
+    dict, or None for a file that isn't a goal file. The rule is
+    Parser.js's goalFrontMatter(), line for line, so the break's picker
+    lists exactly the goals Omvision's Goals screen does
+    (tests/contract/cases.json holds both to it): blank lines may come
+    before the opening fence; every line up to the closing one is
+    `key: value`, and any other line makes it not a goal file; a repeated
+    key's last line wins; and there has to be a non-empty title. A value
+    is what follows the colon and at most one space, with trailing
+    whitespace dropped."""
+    lines = [line.rstrip() for line in text.splitlines()]
+    i = 0
+    while i < len(lines) and lines[i] == "":
+        i += 1
+    if i == len(lines) or lines[i] != "---":
         return None
     fields = {}
-    for line in lines[1:close]:
-        if not line.strip():
-            continue
-        key, sep, value = line.partition(":")
-        if not sep:
-            continue
-        fields[key.strip()] = value.strip()
-    return fields
+    for line in lines[i + 1:]:
+        if line == "---":
+            return fields if fields.get("title") else None
+        m = FRONT_MATTER_LINE.fullmatch(line)
+        if not m:
+            return None
+        fields[m.group(1)] = m.group(2)
+    return None
 
 
 def handle_list_goals(goals_fd):
@@ -223,11 +231,14 @@ def is_focusable(raw):
 
 
 def format_duration(minutes):
+    """Writer.js's formatDuration(): under an hour `<n>m`, else `<h>h`, or
+    `<h>h<mm>` with the minutes padded to two digits, the only form
+    Parser.js reads back (`1h1` would be a heading it skips)."""
     minutes = int(minutes)
     if minutes < 60:
         return f"{minutes}m"
     hours, rem = divmod(minutes, 60)
-    return f"{hours}h{rem}" if rem else f"{hours}h"
+    return f"{hours}h{rem:02d}" if rem else f"{hours}h"
 
 
 def format_timestamp(started):
@@ -266,7 +277,9 @@ def build_log_entry(payload):
 
     kind = payload.get("kind")
     if kind is not None:
-        title = str(payload["title"])
+        # One body line, as Writer.formatEventEntry() makes it: a newline
+        # in the title would start a line §4 doesn't have.
+        title = re.sub(r"[\r\n]+", " ", str(payload["title"])).strip()
         header = f"### {ts} · event · {kind} · {dur}\n"
         body = f"{title}\n"
     else:

@@ -1,0 +1,83 @@
+{
+  "about": "goal-files.md as cases that every implementation of it runs: notes-helper.py (tests/contract/check.py) and Parser.js/Writer.js (tests/unit/tst_contract.qml). A grammar change is a change here, and fails in whichever side wasn't updated. Times are local, as the engine sends them.",
+
+  "focusable": [
+    { "name": "missing key", "raw": null, "focusable": true },
+    { "name": "empty", "raw": "", "focusable": true },
+    { "name": "no", "raw": "no", "focusable": false },
+    { "name": "No, padded", "raw": "  No  ", "focusable": false },
+    { "name": "false", "raw": "false", "focusable": false },
+    { "name": "OFF", "raw": "OFF", "focusable": false },
+    { "name": "yes", "raw": "yes", "focusable": true },
+    { "name": "true", "raw": "true", "focusable": true },
+    { "name": "a typo stays in", "raw": "nope", "focusable": true }
+  ],
+
+  "goalFiles": [
+    { "name": "minimal", "text": "---\ntitle: Write the report\nstatus: active\n---\n## Tasks\n",
+      "goal": { "title": "Write the report", "status": "active", "focusable": true } },
+    { "name": "no status", "text": "---\ntitle: Write the report\n---\n",
+      "goal": { "title": "Write the report", "status": null, "focusable": true } },
+    { "name": "not focusable", "text": "---\ntitle: Train legs\nstatus: active\nfocusable: no\n---\n",
+      "goal": { "title": "Train legs", "status": "active", "focusable": false } },
+    { "name": "blank lines before the fence", "text": "\n\n---\ntitle: Late start\n---\n",
+      "goal": { "title": "Late start", "status": null, "focusable": true } },
+    { "name": "CRLF and trailing spaces", "text": "---  \r\ntitle: Windows  \r\nstatus: done\r\n---\r\n",
+      "goal": { "title": "Windows", "status": "done", "focusable": true } },
+    { "name": "a # in a title is the title", "text": "---\ntitle: Fix bug #12\n---\n",
+      "goal": { "title": "Fix bug #12", "status": null, "focusable": true } },
+    { "name": "a repeated key: the last wins", "text": "---\ntitle: First\ntitle: Second\n---\n",
+      "goal": { "title": "Second", "status": null, "focusable": true } },
+    { "name": "a stray line is not a goal file", "text": "---\ntitle: Stray\njust a sentence\n---\n", "goal": null },
+    { "name": "no title is not a goal file", "text": "---\nstatus: active\n---\n", "goal": null },
+    { "name": "an empty title is not a goal file", "text": "---\ntitle:\n---\n", "goal": null },
+    { "name": "no closing fence is not a goal file", "text": "---\ntitle: Open\n", "goal": null },
+    { "name": "no fence at all is not a goal file", "text": "title: Bare\n", "goal": null }
+  ],
+
+  "pomodoros": [
+    { "name": "nothing written: just the heading",
+      "payload": { "started": "2026-10-16T09:30:12", "minutes": 25 },
+      "text": "### 16 Oct 09:30 · 25m\n\n",
+      "parsed": { "heading": "16 Oct 09:30", "minutes": 25, "focus": "", "done": "", "left": "", "other": "" } },
+    { "name": "three notes, a blank one left out",
+      "payload": { "started": "2026-10-16T09:30:12", "minutes": 25, "done": "wired the IPC", "left": "", "else": "call Anna" },
+      "text": "### 16 Oct 09:30 · 25m\ndone: wired the IPC\nelse: call Anna\n\n",
+      "parsed": { "heading": "16 Oct 09:30", "minutes": 25, "focus": "", "done": "wired the IPC", "left": "", "other": "call Anna" } },
+    { "name": "a multi-line note, a blank line inside it kept, the ends trimmed",
+      "payload": { "started": "2026-10-03T07:05:00", "minutes": 53, "done": "\n- one  \r\n- two\n\n### not a heading\n\n", "left": "x" },
+      "text": "### 3 Oct 07:05 · 53m\ndone: - one\n  - two\n\n  ### not a heading\nleft: x\n\n",
+      "parsed": { "heading": "3 Oct 07:05", "minutes": 53, "focus": "", "done": "- one\n- two\n\n### not a heading", "left": "x", "other": "" } },
+    { "name": "an older engine's focus line",
+      "payload": { "started": "2026-10-12T16:00:00", "minutes": 25, "focus": "the report", "done": "intro" },
+      "text": "### 12 Oct 16:00 · 25m\nfocus: the report\ndone: intro\n\n",
+      "parsed": { "heading": "12 Oct 16:00", "minutes": 25, "focus": "the report", "done": "intro", "left": "", "other": "" } },
+    { "name": "night notes: 0 minutes",
+      "payload": { "started": "2026-10-16T22:31:40", "minutes": 0, "done": "lights out" },
+      "text": "### 16 Oct 22:31 · 0m\ndone: lights out\n\n",
+      "parsed": { "heading": "16 Oct 22:31", "minutes": 0, "focus": "", "done": "lights out", "left": "", "other": "" } },
+    { "name": "an hour and over",
+      "payload": { "started": "2026-10-16T09:00:00", "minutes": 75 },
+      "text": "### 16 Oct 09:00 · 1h15\n\n",
+      "parsed": { "heading": "16 Oct 09:00", "minutes": 75, "focus": "", "done": "", "left": "", "other": "" } }
+  ],
+
+  "events": [
+    { "name": "under an hour",
+      "payload": { "started": "2026-10-16T14:00:00", "minutes": 45, "kind": "meeting", "title": "Standup" },
+      "text": "### 16 Oct 14:00 · event · meeting · 45m\nStandup\n\n",
+      "parsed": { "heading": "16 Oct 14:00", "minutes": 45, "kind": "meeting", "duration": "45m", "title": "Standup" } },
+    { "name": "hours and minutes",
+      "payload": { "started": "2026-10-16T18:30:00", "minutes": 90, "kind": "training", "title": "Legs" },
+      "text": "### 16 Oct 18:30 · event · training · 1h30\nLegs\n\n",
+      "parsed": { "heading": "16 Oct 18:30", "minutes": 90, "kind": "training", "duration": "1h30", "title": "Legs" } },
+    { "name": "whole hours, leftover minutes padded",
+      "payload": { "started": "2026-10-16T08:00:00", "minutes": 61, "kind": "reading", "title": "Book" },
+      "text": "### 16 Oct 08:00 · event · reading · 1h01\nBook\n\n",
+      "parsed": { "heading": "16 Oct 08:00", "minutes": 61, "kind": "reading", "duration": "1h01", "title": "Book" } },
+    { "name": "a title's newlines become spaces, its ends trimmed",
+      "payload": { "started": "2026-10-16T08:00:00", "minutes": 120, "kind": "other", "title": "  Squats\nand\r\nlunges " },
+      "text": "### 16 Oct 08:00 · event · other · 2h\nSquats and lunges\n\n",
+      "parsed": { "heading": "16 Oct 08:00", "minutes": 120, "kind": "other", "duration": "2h", "title": "Squats and lunges" } }
+  ]
+}

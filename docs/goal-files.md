@@ -14,6 +14,12 @@ engine's side of the contract (`list-goals`, `append-log`, `append-day`,
 `read-active`, `write-active`). Omvision reads and writes these files directly, in
 its own language, following the same rules.
 
+`tests/contract/cases.json` is the executable part of this document: goal files,
+`focusable:` values, pomodoro and event entries, each with what it must read or
+be written as. `bin/test unit` runs every case against `notes-helper.py` and
+against Omvision's `Parser.js` and `Writer.js`, so a change to the grammar here is
+a change to the cases, and fails on whichever side wasn't updated with it.
+
 A pomodoro note lives in exactly one place: the active goal's log if a goal is
 set, or the day file if not. There is no third copy and no daily-notes file with
 a rollover — see "Retired paths" at the end of this document.
@@ -344,12 +350,16 @@ should be fatal.
 
 - **No front matter, or front matter that doesn't parse → skip the whole
   file.** Front matter here is intentionally a restricted subset of YAML: a
-  `---` line, one `key: value` pair per line, a closing `---` line, no nested
+  `---` line (blank lines may come before it), one `key: value` pair per line
+  (a key is letters, digits, `_` and `-`; the value is what follows the colon
+  and at most one space; a repeated key's last line wins), a closing `---`
+  line, no nested
   structures, no multi-line values. That restriction is what lets every reader
   parse it with plain string splitting instead of pulling in a YAML library —
   consistent with `notes-helper.py` having zero non-stdlib imports today. A
   file that doesn't fit this shape (front matter never closes, a value spans
-  multiple lines, no `---` at all) is not a goal file as far as this contract
+  multiple lines, a line between the fences that isn't `key: value`, no `---`
+  at all) is not a goal file as far as this contract
   is concerned; skip it and move on. This is the same posture `write_atomic()`
   and friends already take toward anything that isn't a plain file where one is
   expected — leave it alone, drop the operation, don't guess.
