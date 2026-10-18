@@ -14,7 +14,7 @@ OmvisionTest {
     // Clicking start with the real kitty on PATH would open a window with a
     // live claude session in it, so make sure it's the stub first.
     var which = run(["/usr/bin/sh", "-c", "command -v kitty"])
-    compare(which.out.trim(), testDir.replace(/\/app$/, "/bin/kitty"), "kitty is the test stub")
+    compare(which.out.trim(), libDir.replace(/\/lib$/, "/bin/kitty"), "kitty is the test stub")
 
     openGoal("write-the-report")
     click("coachButton")

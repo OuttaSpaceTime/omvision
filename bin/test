@@ -6,11 +6,11 @@
 #   bin/test unit         layer 1 only: Writer.js and Parser.js (qmltestrunner), and
 #                         tests/contract's cases against notes-helper.py
 #   bin/test app          layer 2 only: the whole app, driven from inside qs
-#   bin/test engine       the ompom engine's break cycle (tests/engine)
+#   bin/test engine       layer 3 only: the ompom engine and its overlay (tests/engine)
 #   bin/test app tasks    one app test file (tests/app/tst_tasks.qml)
 #   bin/test app tasks test_add_a_task
-#                         one test in it
-#   -k                    keep every app test's temp dir, not just failed ones
+#                         one test in it (engine takes a file and test too)
+#   -k                    keep every app and engine test's temp dir, not just failed ones
 #   -v                    print the runners' full output
 #
 # Layer 1 is Qt's qmltestrunner over tests/unit: plain TestCase files that
@@ -20,9 +20,10 @@
 # at the file. Each run gets a fresh temp HOME seeded from
 # tests/fixtures/home; the test file resets it between its own tests. A run
 # that fails keeps its temp dir, with the app's log and a screenshot of each
-# failed test, and says where. The engine layer runs the pomodoro engine
-# (plugins/ompom.engine) the same way, offscreen with a throwaway HOME; see
-# tests/engine/run.sh. See docs/testing.md.
+# failed test, and says where. Layer 3 runs the pomodoro engine
+# (plugins/ompom.engine) the same way, once per tests/engine/tst_*.qml,
+# through tests/engine/run.sh, with tests/fixtures/engine laid over the
+# shared HOME. See docs/testing.md.
 #
 # Exits non-zero if any test fails, a known failure starts passing (XPASS),
 # an app run times out or crashes, or the worked-example fixture has drifted
@@ -40,7 +41,7 @@ for a in "$@"; do
   case "$a" in
     -k) keep=1 ;;
     -v) verbose=1 ;;
-    -h|--help) sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) args+=("$a") ;;
   esac
 done
@@ -115,17 +116,25 @@ PY
   summary+=("contract $(printf '%s\n' "$cout" | sed -n 's/^DONE //p' | tail -1 || true) (notes-helper.py)")
 }
 
-# ---- layer 2 -----------------------------------------------------------------
-run_app_file() {
-  local file="$1" name
+# ---- layers 2 and 3 ----------------------------------------------------------
+# One test file in its own qs process, through the program's own launcher:
+# bin/omvision for the app, tests/engine/run.sh for the engine. The file's
+# base (tests/app/OmvisionTest.qml, tests/engine/EngineTest.qml) is a
+# tests/lib/QsTestCase, so both print the same PASS/FAIL/DONE lines.
+run_qs_file() {  # <layer> <file> <launcher> <fixture home...>
+  local layer="$1" file="$2" launcher="$3" name
+  shift 3
+  local fixtures=("$@")
   name="$(basename "$file" .qml)"; name="${name#tst_}"
+  local col
+  col="$(printf '%-8s' "$layer")"
 
   local dir
-  dir="$(mktemp -d "${TMPDIR:-/tmp}/omvision-test.$name.XXXXXX")"
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/omvision-test.$layer.$name.XXXXXX")"
   mkdir -p "$dir/home" "$dir/out"
   touch "$dir/home/.omvision-test-home"
-  if ! "$ROOT/tests/app/seed-home.sh" "$ROOT/tests/fixtures/home" "$dir/home" >/dev/null; then
-    failed=1; summary+=("app      $name: couldn't seed the test HOME ($dir)"); return
+  if ! "$ROOT/tests/lib/seed-home.sh" "${fixtures[@]}" "$dir/home" >/dev/null; then
+    failed=1; summary+=("$col $name: couldn't seed the test HOME ($dir)"); return
   fi
 
   # Only this run's own settings: no inherited OMVISION_SHOT_* (which would
@@ -136,16 +145,18 @@ run_app_file() {
   # tests/bin goes first on PATH so a command the app launches (kitty, for
   # the Coaching screen's `start in kitty`) is a stub that records its argv,
   # never the real program.
+  local fixture_list
+  fixture_list="$(IFS=:; printf '%s' "${fixtures[*]}")"
   env -u OMVISION_SHOT_DIR -u OMVISION_SHOT_WIDTH -u OMVISION_SHOT_HEIGHT \
     HOME="$dir/home" QT_QPA_PLATFORM=offscreen PATH="$ROOT/tests/bin:$PATH" \
     OMVISION_TEST="$file" OMVISION_TEST_OUT="$dir/out" OMVISION_TEST_ONLY="$only_test" \
-    OMVISION_TEST_FIXTURES="$ROOT/tests/fixtures/home" \
-    timeout "$APP_TIMEOUT" "$ROOT/bin/omvision" --no-color >"$dir/app.log" 2>&1
+    OMVISION_TEST_FIXTURES="$fixture_list" \
+    timeout "$APP_TIMEOUT" "$launcher" --no-color >"$dir/qs.log" 2>&1
   local code=$?
 
   local lines
-  lines="$(sed -n 's/.*\[omvision-test\] //p' "$dir/app.log")"
-  if [ "$verbose" = 1 ]; then cat "$dir/app.log"
+  lines="$(sed -n 's/.*\[omvision-test\] //p' "$dir/qs.log")"
+  if [ "$verbose" = 1 ]; then cat "$dir/qs.log"
   else printf '%s\n' "$lines" | grep -E '^(FAIL|XFAIL|SKIP|SHOT) ' | sed 's/^/  /' || true
   fi
 
@@ -155,73 +166,50 @@ run_app_file() {
   if [ -z "$done_line" ]; then
     ok=0
     if [ "$code" = 124 ]; then done_line="timed out after ${APP_TIMEOUT}s"
-    else done_line="the app exited ($code) before the tests finished"; fi
+    else done_line="qs exited ($code) before the tests finished"; fi
   elif [ "$code" != 0 ] || printf '%s\n' "$lines" | grep -q '^FAIL '; then
     ok=0
   fi
 
   if [ "$ok" = 1 ]; then
-    summary+=("app      $name: $done_line")
+    summary+=("$col $name: $done_line")
     if [ "$keep" = 1 ]; then summary+=("           kept $dir"); else rm -rf -- "$dir"; fi
   else
     failed=1
-    summary+=("app      $name: $done_line -- log, screenshots and HOME kept in $dir")
+    summary+=("$col $name: $done_line -- log, screenshots and HOME kept in $dir")
   fi
 }
 
-run_app() {
+# <layer> <launcher> <fixture home...>: every tests/<layer>/tst_*.qml, or
+# the one named on the command line.
+run_qs_layer() {
+  local layer="$1" launcher="$2"
+  shift 2
   if ! command -v qs >/dev/null; then
     echo "bin/test: qs (Quickshell) not found" >&2
-    failed=1; summary+=("app      not run: no qs"); return
+    failed=1; summary+=("$(printf '%-8s' "$layer") not run: no qs"); return
   fi
   local files=()
   if [ -n "$only_file" ]; then
-    files=("$ROOT/tests/app/tst_${only_file#tst_}")
+    files=("$ROOT/tests/$layer/tst_${only_file#tst_}")
     files[0]="${files[0]%.qml}.qml"
     [ -f "${files[0]}" ] || { echo "bin/test: no ${files[0]}" >&2; failed=1; return; }
   else
-    for f in "$ROOT"/tests/app/tst_*.qml; do files+=("$f"); done
+    for f in "$ROOT"/tests/"$layer"/tst_*.qml; do files+=("$f"); done
   fi
   for f in "${files[@]}"; do
-    echo "app: $(basename "$f")"
-    run_app_file "$f"
+    echo "$layer: $(basename "$f")"
+    run_qs_file "$layer" "$f" "$launcher" "$@"
   done
 }
 
-# ---- engine ------------------------------------------------------------------
-run_engine() {
-  if ! command -v qs >/dev/null; then
-    echo "bin/test: qs (Quickshell) not found" >&2
-    failed=1; summary+=("engine   not run: no qs"); return
-  fi
-  # One sequence in one file (see tests/engine/tst_break.qml), so there is
-  # no file or test to pick.
-  if [ -n "$only_file" ]; then
-    echo "bin/test: the engine layer is one sequence; it takes no file or test name" >&2
-    failed=1; summary+=("engine   not run: unexpected argument '$only_file'"); return
-  fi
-  local dir out
-  dir="$(mktemp -d "${TMPDIR:-/tmp}/omvision-test.engine.XXXXXX")"
-  out="$("$ROOT/tests/engine/run.sh" "$dir")"
-  local code=$?
-  if [ "$verbose" = 1 ]; then printf '%s\n' "$out"
-  else printf '%s\n' "$out" | grep -E '^FAIL' | sed 's/^/  /' || true
-  fi
-  local passed done_line
-  passed="$(printf '%s\n' "$out" | grep -c '^ok ' || true)"
-  done_line="$(printf '%s\n' "$out" | sed -n 's/^DONE //p' | tail -1)"
-  if [ "$code" = 0 ]; then
-    summary+=("engine   $passed passed, ${done_line:-0 failed}")
-    if [ "$keep" = 1 ]; then summary+=("           kept $dir"); else rm -rf -- "$dir"; fi
-  else
-    failed=1
-    summary+=("engine   ${done_line:-did not finish} -- log, screenshots and HOME kept in $dir")
-  fi
-}
-
 if [ "$layer" = all ] || [ "$layer" = unit ]; then echo "unit: tests/unit"; run_unit; fi
-if [ "$layer" = all ] || [ "$layer" = app ]; then run_app; fi
-if [ "$layer" = all ] || [ "$layer" = engine ]; then echo "engine: tests/engine"; run_engine; fi
+if [ "$layer" = all ] || [ "$layer" = app ]; then
+  run_qs_layer app "$ROOT/bin/omvision" "$ROOT/tests/fixtures/home"
+fi
+if [ "$layer" = all ] || [ "$layer" = engine ]; then
+  run_qs_layer engine "$ROOT/tests/engine/run.sh" "$ROOT/tests/fixtures/home" "$ROOT/tests/fixtures/engine"
+fi
 
 echo
 printf '%s\n' "${summary[@]}"

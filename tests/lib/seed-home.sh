@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Puts the fixture notes into a test HOME, or puts them back.
 #
-#   tests/app/seed-home.sh <fixture home> <test home>
+#   tests/lib/seed-home.sh <fixture home>... <test home>
 #
-# bin/test runs it once to seed a fresh temp HOME before starting the app;
-# OmvisionTest.qml runs it again before every test to undo what the last
-# test wrote. Prints each installed file's path, one per line, so the test
-# can read back what the app should now be showing.
+# bin/test runs it once to seed a fresh temp HOME before starting a test
+# file; QsTestCase.qml runs it again before every test to undo what the
+# last test wrote. Several fixture homes are laid over each other in order
+# (the engine tests add tests/fixtures/engine to the shared one). Prints
+# each installed file's path, one per line, so the test can read back what
+# the app should now be showing.
 #
 # Safety: the target must be a directory under the temp dir that carries the
 # marker file bin/test creates. This script deletes files there (whatever a
@@ -24,8 +26,9 @@
 # journal opens on it. `date +%F` is local time, as Parser.dayKey() is.
 set -euo pipefail
 
-fixtures="${1:?fixture home}"
-target="${2:?test home}"
+[ $# -ge 2 ] || { echo "usage: seed-home.sh <fixture home>... <test home>" >&2; exit 2; }
+fixture_homes=("${@:1:$#-1}")
+target="${!#}"
 
 tmp_root="$(cd "${TMPDIR:-/tmp}" && pwd -P)"
 target_real="$(cd "$target" && pwd -P)"
@@ -40,18 +43,20 @@ notes="$target_real/Notes/Omvision"
 today="$(date +%F)"
 declare -A keep=()
 
-while IFS= read -r -d '' src; do
-  rel="${src#"$fixtures"/}"
-  case "$rel" in
-    */TODAY.md) rel="${rel%TODAY.md}$today.md" ;;
-  esac
-  dst="$target_real/$rel"
-  mkdir -p "$(dirname "$dst")"
-  cp "$src" "$dst.seed-tmp"
-  mv -f "$dst.seed-tmp" "$dst"
-  keep["$dst"]=1
-  printf '%s\n' "$dst"
-done < <(find "$fixtures" -type f -print0 | sort -z)
+for fixtures in "${fixture_homes[@]}"; do
+  while IFS= read -r -d '' src; do
+    rel="${src#"$fixtures"/}"
+    case "$rel" in
+      */TODAY.md) rel="${rel%TODAY.md}$today.md" ;;
+    esac
+    dst="$target_real/$rel"
+    mkdir -p "$(dirname "$dst")"
+    cp "$src" "$dst.seed-tmp"
+    mv -f "$dst.seed-tmp" "$dst"
+    keep["$dst"]=1
+    printf '%s\n' "$dst"
+  done < <(find "$fixtures" -type f -print0 | sort -z)
+done
 
 # Whatever a test created (a new goal, a day file, another journal day).
 if [ -d "$notes" ]; then

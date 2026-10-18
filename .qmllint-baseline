@@ -76,9 +76,9 @@ omvision.qml	unqualified	Unqualified access	root.syncGoal(loader.slug, loader.me
 omvision.qml	unqualified	Unqualified access	root.syncGoal(loader.slug, loader.meta, loader.entries)
 omvision.qml	unqualified	Unqualified access	root.syncGoal(loader.slug, loader.meta, loader.entries)
 omvision.qml	unqualified	Unqualified access	root.syncGoal(loader.slug, null, loader.entries)
-tests/app/OmvisionTest.qml	missing-property	Member "code" not found on type "QObject"	var r = { code: p.finished ? p.code : -1, out: p.out }
-tests/app/OmvisionTest.qml	missing-property	Member "finished" not found on type "QObject"	for (; t < limit && !p.finished; t += 10) wait(10)
-tests/app/OmvisionTest.qml	missing-property	Member "finished" not found on type "QObject"	var r = { code: p.finished ? p.code : -1, out: p.out }
-tests/app/OmvisionTest.qml	missing-property	Member "out" not found on type "QObject"	var r = { code: p.finished ? p.code : -1, out: p.out }
-tests/app/OmvisionTest.qml	missing-property	Member "streamDone" not found on type "QObject"	for (var s = 0; s < 500 && !p.streamDone; s += 10) wait(10)
-tests/app/OmvisionTest.qml	signal-handler-parameters	Type QProcess::ExitStatus of parameter exitStatus in signal called exited was not found, but is required to compile onExited. Did you add all imports and dependencies?	onExited: function(exitCode, exitStatus) { proc.code = exitCode; proc.finished = true }
+tests/lib/QsTestCase.qml	missing-property	Member "code" not found on type "QObject"	var r = { code: p.finished ? p.code : -1, out: p.out }
+tests/lib/QsTestCase.qml	missing-property	Member "finished" not found on type "QObject"	for (; t < limit && !p.finished; t += 10) wait(10)
+tests/lib/QsTestCase.qml	missing-property	Member "finished" not found on type "QObject"	var r = { code: p.finished ? p.code : -1, out: p.out }
+tests/lib/QsTestCase.qml	missing-property	Member "out" not found on type "QObject"	var r = { code: p.finished ? p.code : -1, out: p.out }
+tests/lib/QsTestCase.qml	missing-property	Member "streamDone" not found on type "QObject"	for (var s = 0; s < 500 && !p.streamDone; s += 10) wait(10)
+tests/lib/QsTestCase.qml	signal-handler-parameters	Type QProcess::ExitStatus of parameter exitStatus in signal called exited was not found, but is required to compile onExited. Did you add all imports and dependencies?	onExited: function(exitCode, exitStatus) { proc.code = exitCode; proc.finished = true }

@@ -27,7 +27,7 @@ kit_load() {
   local home="$1/home"
   mkdir -p "$home"
   touch "$home/.omvision-test-home"
-  "$ROOT/tests/app/seed-home.sh" "$ROOT/tests/fixtures/home" "$home" >/dev/null || { echo "ERROR: couldn't seed the temp HOME"; return 1; }
+  "$ROOT/tests/lib/seed-home.sh" "$ROOT/tests/fixtures/home" "$home" >/dev/null || { echo "ERROR: couldn't seed the temp HOME"; return 1; }
   env -u OMVISION_TEST -u OMVISION_SHOT_DIR -u OMVISION_SHOT_WIDTH -u OMVISION_SHOT_HEIGHT \
     HOME="$home" "$ROOT/bin/omvision" --no-color
 }

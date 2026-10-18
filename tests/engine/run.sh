@@ -1,52 +1,33 @@
 #!/usr/bin/env bash
-# Runs tests/engine/tst_break.qml against the real ompom engine, offscreen.
+# The engine layer's launcher, as bin/omvision is the app layer's: bin/test
+# runs it once per tests/engine/tst_*.qml, with HOME already seeded and the
+# test file in OMVISION_TEST, and reads the PASS/FAIL lines QsTestCase
+# prints. Any arguments go on to qs.
 #
-#   tests/engine/run.sh <out dir> [test file]
-#
-# `qs` offscreen has no layer-shell backend, so the test's shell.qml puts
-# the plugin's own Overlay.qml in a FloatingWindow where Service.qml uses a
+# `qs` offscreen has no layer-shell backend, so the shell.qml here puts the
+# plugin's own Overlay.qml in a FloatingWindow where Service.qml uses a
 # PanelWindow, over the plugin's own Engine.qml: every file but the 30-line
 # Service.qml is the one that ships. Not demo mode: the real notes-helper.py
-# writes real entries -- into a throwaway HOME under <out dir>, seeded from
-# tests/fixtures/home. The test sits inside that window, so its key events
-# reach the overlay's fields and shortcuts.
-#
-# Prints the test's lines (ok / FAIL / DONE) and exits non-zero on a
-# failure, a crash or a timeout. bin/test runs this as its `engine` layer.
-set -uo pipefail
+# writes real entries, into the throwaway HOME. The test file is loaded in
+# that window, so its key events reach the overlay's fields and shortcuts.
+set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-out="${1:?out dir}"
-src="$ROOT/plugins/ompom.engine"
+: "${OMVISION_TEST:?the test file to run}"
+out="${OMVISION_TEST_OUT:-${TMPDIR:-/tmp}}"
 
-cfg="$out/cfg" home="$out/home"
-mkdir -p "$home/.local/state/omvision" "$out/shots"
-touch "$home/.omvision-test-home"
-"$ROOT/tests/app/seed-home.sh" "$ROOT/tests/fixtures/home" "$home" >/dev/null || { echo "FAIL couldn't seed $home"; exit 1; }
-# Goals the break's picker must leave out: one not focusable (goal-files.md
-# §6), one done. Here rather than in the shared fixture, which the app tests
-# compare file for file.
-printf -- '---\ntitle: Train legs\nstatus: active\nfocusable: no\n---\n' >"$home/Notes/Omvision/goals/train-legs.md"
-printf -- '---\ntitle: Old milestone\nstatus: done\n---\n' >"$home/Notes/Omvision/goals/old-milestone.md"
+# The active-goal file's directory, so the engine's FileView has somewhere
+# to watch before the helper first writes there.
+mkdir -p "$HOME/.local/state/omvision"
 
-# The plugin's files beside shell.qml, laid out as for bin/ompom-demo. The
-# test goes two levels down, as in the repo, so its import of the app's
-# Parser.js (the log reader it checks the helper's entries with) is
-# "../../Parser.js" in both places, and qmllint can follow it.
-staged="$("$ROOT/bin/ompom-stage" "$src" "$cfg" "$ROOT/Parser.js" 2>&1)" || { echo "FAIL $staged"; exit 1; }
-mkdir -p "$cfg/tests/engine"
-cp "${2:-$ROOT/tests/engine/tst_break.qml}" "$cfg/tests/engine/EngineTest.qml"
+# The plugin's files beside shell.qml, laid out as for bin/ompom-demo.
+cfg="$(mktemp -d "$out/cfg.XXXXXX")"
+"$ROOT/bin/ompom-stage" "$ROOT/plugins/ompom.engine" "$cfg"
 cat > "$cfg/shell.qml" <<'QML'
 import QtQuick
 import Quickshell
-import "tests/engine"
 ShellRoot {
-  // Noon today, whenever the test runs: the engine follows the clock into
-  // its night at 22:15, and the cycle steps need a day. The test moves it.
-  Engine {
-    id: engine
-    clockOffsetMs: { var d = new Date(); d.setHours(12, 0, 0, 0); return d.getTime() - Date.now() }
-  }
+  Engine { id: engine }
   FloatingWindow {
     id: window
     visible: engine.overlayVisible
@@ -54,21 +35,22 @@ ShellRoot {
     implicitHeight: 800
     color: "transparent"
     Overlay { id: overlay; anchors.fill: parent; engine: engine }
-    EngineTest { engine: engine; overlayWindow: window; overlay: overlay }
+    // Behind the overlay, which takes every click that misses a control.
+    Loader {
+      anchors.fill: parent
+      z: -1
+      source: "file://" + Quickshell.env("OMVISION_TEST")
+      onLoaded: {
+        item.engine = engine
+        item.overlay = overlay
+        item.window = window
+        item.target = overlay
+      }
+    }
   }
 }
 QML
 
-# WAYLAND_DISPLAY stays, as in bin/test's app layer: qs's GTK setup aborts
-# without one, and offscreen nothing is shown on it.
-HOME="$home" QT_QPA_PLATFORM=offscreen QML_XHR_ALLOW_FILE_READ=1 \
-  ENGINE_TEST_SHOTS="$out/shots" QML2_IMPORT_PATH="$ROOT${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}" \
-  timeout "${ENGINE_TEST_TIMEOUT:-90}" qs -p "$cfg" --no-color >"$out/engine.log" 2>&1
-code=$?
-lines="$(sed -n 's/.*\[engine-test\] //p' "$out/engine.log")"
-printf '%s\n' "$lines"
-if [ "$code" = 124 ]; then echo "FAIL timed out"; exit 1; fi
-# Checked after the DONE line too: a crash on the way out (a native module's
-# teardown, say) is still a crash.
-if [ "$code" != 0 ]; then echo "FAIL qs exited $code"; exit 1; fi
-printf '%s\n' "$lines" | grep -q '^DONE 0 failed' || exit 1
+# The writing surfaces use omvision's MarkdownHighlight module, which
+# resolves through QML2_IMPORT_PATH (see docs/ompom-highlighter.md).
+QML2_IMPORT_PATH="$ROOT${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}" exec qs -p "$cfg" "$@"

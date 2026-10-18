@@ -1,17 +1,18 @@
 # Testing
 
-`bin/test` runs everything, offscreen, in about 25 seconds. No window opens and
+`bin/test` runs everything, offscreen, in about a minute. No window opens and
 nothing under `~/Notes` is read or written.
 
 ```bash
 bin/test                    # every layer
-bin/test unit               # Writer.js and Parser.js only (under a second)
+bin/test unit               # the JS modules and the contract cases (a second or two)
 bin/test app                # the whole-app tests only
 bin/test app tasks          # one file: tests/app/tst_tasks.qml
 bin/test app tasks test_add_a_task
-bin/test engine             # the ompom engine's break cycle (tests/engine)
+bin/test engine             # the ompom engine and its overlay (tests/engine)
+bin/test engine notes test_headings_fold
 bin/test -v                 # the runners' full output
-bin/test -k                 # keep every app run's temp dir, not only failed ones
+bin/test -k                 # keep every app and engine run's temp dir, not only failed ones
 ```
 
 It exits non-zero if a test fails, a known failure starts passing, an app run times out
@@ -88,14 +89,17 @@ temp HOME seeded from `tests/fixtures/home`. `tests/bin` goes first on its PATH:
 launches is found there as a stub that records its arguments, not run for real. `kitty`
 writes its argv, one per line, to `$HOME/kitty.argv` (`tst_coaching.qml` reads it back).
 
-A test file is an `OmvisionTest` (`tests/app/OmvisionTest.qml`), which is a Qt `TestCase`
-with these helpers. Each one waits by itself and fails with what it last saw:
+A test file is an `OmvisionTest` (`tests/app/OmvisionTest.qml`). Its base, shared with
+the engine's tests, is `QsTestCase` (`tests/lib/QsTestCase.qml`): a Qt `TestCase` that runs
+inside `qs`, with the result lines, the per-test reset, and these helpers. Each one waits
+by itself and fails with what it last saw:
 
 | helper | does |
 |---|---|
-| `openGoal(slug)` | clicks the goal's row on the Goals screen, waits for its detail |
+| `openGoal(slug)` | (OmvisionTest) clicks the goal's row on the Goals screen, waits for its detail |
 | `click(name)` | hovers the item, waits until it can be clicked, clicks its centre |
 | `item(name)` | the visible item with that name, once it appears |
+| `shows(name)` | whether a visible item with that name is there now |
 | `type(text)`, `key(k, mods)` | real key events to the focused item |
 | `readFile(rel)` | a file under `$HOME/Notes/Omvision`, or null |
 | `expectFile(rel, want)` | waits until the file says `want` (a string, or a predicate) |
@@ -105,7 +109,7 @@ with these helpers. Each one waits by itself and fails with what it last saw:
 The usual `compare`, `verify`, `tryCompare`, `tryVerify`, `mouseClick`, `mouseMove`,
 `keyClick` and `wait` work as in any TestCase.
 
-Before every test the fixture files are put back (`tests/app/seed-home.sh`) and the test
+Before every test the fixture files are put back (`tests/lib/seed-home.sh`) and the test
 waits until the app shows them again, then goes back to the Goals screen. State the app
 keeps in memory across screens is not reset: the journal's open day, for instance. A test
 that needs the app exactly as it started gets a file of its own and sets
@@ -121,6 +125,11 @@ app's log, the screenshots and the HOME as the test left it.
 done), its log, and a journal entry. `journal/TODAY.md` is installed under today's date,
 so the journal opens on it. Nothing in it comes from the real notes. The theme file is
 absent, so the app runs on the Flexoki fallback.
+
+`tests/fixtures/engine` holds what only the engine's tests need: two more goals, one
+`focusable: no` and one done, which the break's picker must leave out. It is laid over
+`tests/fixtures/home` (`seed-home.sh` takes any number of fixture homes) rather than
+added to it, since the app tests compare what the app shows with the fixture file for file.
 
 `seed-home.sh` refuses any target that is not under the temp dir, or that lacks the
 `.omvision-test-home` marker bin/test creates. It deletes whatever a test added under
@@ -142,11 +151,18 @@ and a refactor must keep them:
 | `journalEditor`, `journalCanvas` | the journal's page, and the Flickable it scrolls in |
 | `prevDayButton`, `nextDayButton` | the journal's page turns, `‹` and `›` |
 | `coachMethod:<mi\|polya>`, `coachStartButton` | the Coaching screen's method chips, `start in kitty` |
+| `goalFocusableToggle` | the goal dialog's "can be focused on at the laptop" box |
+| `extendRunButton`, `startBreakButton` | the engine's prompt: `+1 minute`, `Start break` |
+| `extendBreakButton:<1\|2\|3>`, `takeNotesButton` | the break's `+N min`, and `Take notes` (the night's too) |
+| `tryAgainButton`, `skipButton`, `notesNotSaved` | a refused write's buttons, and its line |
+| `snoozeButton`, `goodNightButton` | bedtime's `+1 minute` and `Good night` |
+| `goalPicker`, `pickGoal:<slug>`, `noGoalButton` | Ctrl+G's picker and its buttons |
+| `notesPage`, `noteSection:<done\|left\|else>`, `notesBackButton` | the notes page's Flickable, its sections, its `←` |
 
 The goal names sit in `GoalsScreen.qml`, and in `GoalDetailScreen.qml` and its parts
 (`GoalHeader.qml`, `TaskRow.qml`, `GoalEndActions.qml`), and the journal's in
 `JournalScreen.qml`, on its TextEdit, its Flickable and its header, and the coaching ones
-in `CoachingScreen.qml`. There is no
+in `CoachingScreen.qml`, and the engine's in `plugins/ompom.engine/Overlay.qml`. There is no
 other way to find a control: a fallback that looked items up by their label predated the names and was removed, because
 it let a test pass after the objectName it asked for had been renamed away. A renamed
 control now fails its tests with `no visible item named …`, and the table above is what
@@ -156,31 +172,37 @@ to update.
 
 A `TestCase` reports every assertion through an internal object, `qtest_results`. By
 default that is a `TestResult`, which logs through QtTest's C++ logger. qmltestrunner
-sets that logger up and `qs` doesn't. `OmvisionTest` points the property at a small
+sets that logger up and `qs` doesn't. `QsTestCase` points the property at a small
 stand-in that records failures, and it runs the test functions itself, since Qt's own
 scheduler drives the logger at every step. It borrows the real `TestResult` only for
 `wait()`. All of this is private Qt API (`QtTest/TestCase.qml`, Qt 6.11), and it lives in
-`OmvisionTest.qml` alone, so a Qt upgrade that changes it breaks only that file.
+`tests/lib/QsTestCase.qml` alone, so a Qt upgrade that changes it breaks only that file.
 
 ## The engine layer: `tests/engine`
 
 The ompom engine (`plugins/ompom.engine`) runs inside omarchy-shell, not the app, so it
-has a layer of its own. `tests/engine/run.sh` builds a `qs` config in a temp dir with the
-plugin's files linked in, omarchy-shell's own `Commons`, and a `shell.qml` that puts the
-plugin's `Overlay.qml` over its `Engine.qml` in a `FloatingWindow`. That is
-`Service.qml`'s whole job too, except that it uses a layer-shell `PanelWindow`, which
-offscreen `qs` has no backend for; every other file is the one that ships. It is not
-the demo mode: the real helper writes real log entries, into a throwaway HOME seeded from
-`tests/fixtures/home`, and the test reads them back with the app's `Parser.js`.
+has a layer of its own. Its rules are `Cycle.js`'s and have unit tests
+(`tests/unit/tst_cycle.qml`); this layer is for the wiring: the overlay's clicks and keys,
+and what the real `notes-helper.py` writes, read back with the app's `Parser.js`.
 
-`tst_break.qml` sits inside the overlay window, so `keyClick` and `mouseClick` reach the
-overlay's fields and shortcuts. It is one sequence rather than separate tests, since each
-step starts from the cycle the one before left: a mode switch at the prompt, the break's
-extensions, Ctrl+G, the notes (list continuation, folding, arrows across sections,
-scrolling with Return, Escape keeping the text), the log entry the break's end writes, the long break, a
-refused write, and hand-offs. Time moves by moving the engine's clock
-(`clockOffsetMs`) and calling its `tick()`, the function its one-second timer calls. A failure keeps the temp dir, with
-`engine.log`, a screenshot of each failed check and the HOME.
+bin/test runs it the way it runs the app's: once per `tests/engine/tst_*.qml`, in a fresh
+temp HOME, through a launcher, `tests/engine/run.sh`, as the app's is `bin/omvision`.
+`run.sh` builds a `qs` config with the plugin's files linked in (`bin/ompom-stage`, which
+`bin/ompom-demo` uses too) and a `shell.qml` that puts the plugin's `Overlay.qml` over its
+`Engine.qml` in a `FloatingWindow`, with the test file loaded inside that window, so its
+key and mouse events reach the overlay. That is `Service.qml`'s whole job too, except that
+it uses a layer-shell `PanelWindow`, which offscreen `qs` has no backend for; every other
+file is the one that ships. It is not the demo mode: the helper writes real entries.
+
+A test file is an `EngineTest` (`tests/engine/EngineTest.qml`), a `QsTestCase` with
+`engine`, `overlay`, and helpers for time: `clockAt(days, hh, mm)`, `advance(sec)`,
+`runOut()`, `toBreak()`, `endBreak()`. Time moves by moving the engine's clock
+(`clockOffsetMs`) and calling its `tick()`, the function its one-second timer calls.
+Before every test the fixture is put back and the engine is on a fresh run at noon
+today, with no goal, so each test stands alone: `tst_break.qml` (the run, the prompt,
+the break, the picker, the log entry, a refused write, a hand-off), `tst_notes.qml` (the
+notes page: lists, folding, the arrows, scrolling) and `tst_night.qml` (bedtime, the
+snoozes, the night and its notes, 05:30).
 
 ## Known failures
 

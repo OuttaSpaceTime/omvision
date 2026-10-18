@@ -21,14 +21,17 @@ reading and writing files under `~/Notes/Omvision/`.
   that, and fails only on warnings not in `.qmllint-baseline`.
 - `bin/check` runs everything a change should pass: lint, the no-pixel-numbers rule, the
   load check and `bin/test`. Run it before you stop. See `docs/testing.md`.
-- Tests: `bin/test` runs every layer offscreen in about 25s. Run it before and after a
-  change. `tests/unit` (qmltestrunner) covers Writer.js and Parser.js. `tests/app` runs the
-  real app inside `qs` with a throwaway HOME, clicks and types through `OmvisionTest.qml`'s
-  helpers, and checks the bytes on disk. `tests/engine` does the same for the ompom
-  engine's break cycle. `bin/test app tasks` runs one file. See `docs/testing.md`.
+- Tests: `bin/test` runs every layer offscreen in about a minute. Run it before and after
+  a change. `tests/unit` (qmltestrunner) covers Writer.js, Parser.js and the engine's
+  Cycle.js, and `tests/contract` holds goal-files.md as cases the app and
+  notes-helper.py both run. `tests/app` runs the real app inside `qs` with a throwaway
+  HOME, clicks and types through `OmvisionTest.qml`'s helpers, and checks the bytes on
+  disk. `tests/engine` does the same for the ompom engine and its overlay; both share
+  `tests/lib/QsTestCase.qml`. `bin/test app tasks` runs one file. See `docs/testing.md`.
 - A change to the write path, or to what a click or key does, comes with a test: a
-  whole-file Writer/Parser case in `tests/unit`, a flow in `tests/app`, or a step in
-  `tests/engine/tst_break.qml` for the engine. Pin a bug you
+  whole-file Writer/Parser case in `tests/unit`, a contract case for the file grammar, a
+  rule's case in `tests/unit/tst_cycle.qml`, or a flow in `tests/app` or `tests/engine`.
+  Pin a bug you
   aren't fixing with `expectFailContinue("", "BUG: …")`. Keep the objectNames listed in
   `docs/testing.md` through refactors.
 - Launch with `bin/omvision`, not `qs -p omvision.qml`. The journal's markdown styling is a

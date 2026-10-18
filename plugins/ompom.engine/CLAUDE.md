@@ -37,8 +37,9 @@ journal. The bar icon lives in `plugins/ompom.bar`, and only shows what the engi
   moves when the test moves it, in a few milliseconds.
 - `bin/test engine` runs the real `Engine.qml` and `Overlay.qml` offscreen (in a
   `FloatingWindow`, where `Service.qml` uses a layer-shell `PanelWindow` that offscreen
-  `qs` can't show) and clicks and types through a whole cycle in `tests/engine/tst_break.qml`, checking the log entries the
-  real helper writes into a throwaway HOME. A change to the cycle or the overlay gets a
-  step there. Its failures keep screenshots; see `docs/testing.md`.
+  `qs` can't show) and clicks and types through them in `tests/engine/tst_*.qml`,
+  checking the log entries the real helper writes into a throwaway HOME. A change to the
+  overlay, or to what reaches the helper, gets a test there; controls are found by the
+  objectNames `docs/testing.md` lists. Its failures keep screenshots.
 - Try the overlay live with `bin/ompom-demo` (the `ompom-demo` skill). It runs on its
   own IPC target, `ompom-demo`, and never writes notes.

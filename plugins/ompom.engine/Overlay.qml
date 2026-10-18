@@ -175,6 +175,7 @@ Item {
     // The one sign that the break's write was refused -- quiet by design
     // (no dialog), Color.urgent so it still reads as a warning.
     Subtitle {
+      objectName: "notesNotSaved"
       anchors.horizontalCenter: parent.horizontalCenter
       visible: overlay.engine.notesSaveFailed
       text: "Notes not saved"
@@ -200,12 +201,14 @@ Item {
         spacing: parent.spacing
 
         OverlayButton {
+          objectName: "extendRunButton"
           visible: overlay.engine.extensionsUsed < overlay.engine.maxExtensions
           label: "+1 minute (" + (overlay.engine.maxExtensions - overlay.engine.extensionsUsed) + " left)"
           onActivated: overlay.engine.addExtension()
         }
 
         OverlayButton {
+          objectName: "startBreakButton"
           primary: true
           label: "Start break"
           onActivated: overlay.engine.startBreak()
@@ -219,12 +222,14 @@ Item {
         spacing: parent.spacing
 
         OverlayButton {
+          objectName: "snoozeButton"
           visible: overlay.engine.snoozesUsed < overlay.engine.maxSnoozes
           label: "+1 minute (" + (overlay.engine.maxSnoozes - overlay.engine.snoozesUsed) + " left)"
           onActivated: overlay.engine.snooze()
         }
 
         OverlayButton {
+          objectName: "goodNightButton"
           primary: true
           label: "Good night"
           onActivated: overlay.engine.startSleep()
@@ -239,6 +244,7 @@ Item {
           model: [1, 2, 3]
           OverlayButton {
             required property int modelData
+            objectName: "extendBreakButton:" + modelData
             label: "+" + modelData + " min"
             onActivated: overlay.engine.extendBreak(modelData)
           }
@@ -250,18 +256,21 @@ Item {
         spacing: parent.spacing
 
         OverlayButton {
+          objectName: "tryAgainButton"
           primary: true
           label: "Try again"
           onActivated: overlay.engine.saveNote()
         }
 
         OverlayButton {
+          objectName: "skipButton"
           label: "Skip"
           onActivated: overlay.engine.skipUnsavedNotes()
         }
       }
 
       OverlayButton {
+        objectName: "takeNotesButton"
         // Only once the break has actually started -- the prompt is a
         // "focus just ended, what now" decision point, not a writing
         // moment. The night's one button.
@@ -359,6 +368,7 @@ Item {
 
     Flickable {
       id: noteFlick
+      objectName: "notesPage"
       anchors.fill: parent
       clip: true
       contentWidth: width
@@ -404,6 +414,7 @@ Item {
 
           NoteSection {
             required property var modelData
+            objectName: "noteSection:" + modelData.key
             width: notesColumn.width
             title: modelData.title
             text: overlay.engine[modelData.field]
@@ -444,6 +455,7 @@ Item {
           spacing: Style.space(12)
 
           OverlayButton {
+            objectName: "notesBackButton"
             // Icon-only, deliberately minimal: a label would compete with
             // the caption right next to it for attention.
             label: "←"
@@ -483,6 +495,7 @@ Item {
   // the block view's idiom: centred column, caption, display heading, a
   // row of OverlayButtons.
   Rectangle {
+    objectName: "goalPicker"
     anchors.fill: parent
     visible: overlay.goalPickerOpen
     color: Color.background
@@ -515,6 +528,7 @@ Item {
           model: overlay.engine.pickableGoals
           OverlayButton {
             required property var modelData
+            objectName: "pickGoal:" + modelData.slug
             primary: modelData.slug === overlay.engine.activeGoalSlug
             label: modelData.title || modelData.slug || ""
             onActivated: {
@@ -527,6 +541,7 @@ Item {
         // Otherwise a goal once picked could only be swapped, never
         // dropped, short of opening Omvision.
         OverlayButton {
+          objectName: "noGoalButton"
           visible: overlay.engine.activeGoalSlug.length > 0
           label: "No goal"
           onActivated: {
