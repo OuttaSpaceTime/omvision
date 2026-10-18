@@ -772,8 +772,8 @@ var FIELDS = [
   { name: "mode", ok: isOneOf(MODES) },
   { name: "phase", ok: isOneOf(PHASES) },
   { name: "paused", ok: isBool },
-  { name: "endsAtMs", ok: isTime, optional: true },
-  { name: "heldSec", ok: isInt(0, 24 * 3600), optional: true },
+  { name: "endsAtMs", ok: isTime },
+  { name: "heldSec", ok: isInt(0, 24 * 3600) },
   { name: "extensionsUsed", ok: isInt(0, MAX_EXTENSIONS) },
   { name: "focusStartedIso", ok: isStamp },
   { name: "goalAttributionRemaining", ok: isInt(-1, 4 * 3600) },
@@ -810,16 +810,6 @@ function restore(s, ctx, json) {
     var f = FIELDS[i]
     if (!(f.optional && snap[f.name] === undefined) && !f.ok(snap[f.name])) return { error: "error: bad " + f.name, fx: [] }
   }
-  // The engine before end times (e81a789) sends the seconds left as
-  // `remaining`, counted at takenAtMs, and neither end key. Only the deploy
-  // that replaces it gets here; the commit after it drops this and makes
-  // both keys required.
-  if (snap.endsAtMs === undefined || snap.heldSec === undefined) {
-    if (!isInt(0, 24 * 3600)(snap.remaining)) return { error: "error: bad remaining", fx: [] }
-    snap.heldSec = snap.remaining
-    snap.endsAtMs = snap.takenAtMs + snap.remaining * 1000
-  }
-
   // From the baseline every new cycle starts from, then the snapshot on top
   // of it. The mode goes first: the fresh run resetRun() starts is sized by
   // it.

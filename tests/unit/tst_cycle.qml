@@ -452,16 +452,4 @@ TestCase {
     compare(t.doneText, "late")
     compare(t.sleepNotesIso, "2026-10-16T22:30:00")
   }
-
-  // The engine before end times sends `remaining` as it stood at takenAtMs.
-  // Only the deploy that replaces it reads one; see restore().
-  function test_an_older_engines_countdown_hands_off() {
-    var snap = Cycle.snapshot(started(noon), noon)
-    delete snap.endsAtMs
-    delete snap.heldSec
-    snap.remaining = 600
-    var s = started(noon + 5000)
-    compare(Cycle.restore(s, ctx(noon + 5000), JSON.stringify(snap)).error, "")
-    compare(Cycle.remainingSec(s, noon + 5000), 595)
-  }
 }
