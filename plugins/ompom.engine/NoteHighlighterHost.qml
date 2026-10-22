@@ -3,7 +3,8 @@ import qs.Commons
 import MarkdownHighlight
 
 // Omvision's journal highlighter, on the overlay's break notes (each
-// section's heading and its text), so writing here looks exactly like
+// section's heading and its text) and the night's journal page
+// (NightJournal.qml), so writing here looks exactly like
 // writing in the journal: same module, same settings. The module is the
 // repo root's highlighter/, built there and deployed into this plugin's
 // native/ directory, which is already on omarchy-shell's QML2_IMPORT_PATH
@@ -21,7 +22,7 @@ import MarkdownHighlight
 // by contrast against the overlay's background rather than by a fixed
 // alpha. They are bindings, so a theme switch restyles live text.
 MarkdownHighlighter {
-  // NoteSection.qml sets this from its pointSize.
+  // NoteSection.qml and NightJournal.qml set this from their pointSize.
   basePointSize: 15
   // Percent. omvision measured 135 against omawrite: lists stay one list,
   // a blank line still opens a clear gap. See JournalHighlight.qml.

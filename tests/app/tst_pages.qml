@@ -11,7 +11,7 @@ OmvisionTest {
   // Long enough to scroll well past one screen.
   readonly property string longDay: {
     var t = "# A long day\n"
-    for (var i = 1; i <= 60; i++) t += "\nParagraph " + i + ", and a line or two more of what happened.\n"
+    for (let i = 1; i <= 60; i++) t += "\nParagraph " + i + ", and a line or two more of what happened.\n"
     return t
   }
 

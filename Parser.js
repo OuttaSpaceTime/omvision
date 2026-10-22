@@ -350,7 +350,7 @@ function parseLogEntries(text, now) {
 }
 
 // A pomodoro entry that is a run. One of 0 minutes is notes with no run
-// behind them (the ompom engine's night notes, goal-files.md §4): read like
+// behind them (the ompom engine's old night notes, goal-files.md §4): read like
 // any pomodoro's notes, but not counted as one, and deduplicated by their
 // own rule (dedupePomodoros()).
 function isRun(e) { return e.type === "pomodoro" && e.minutes > 0 }
@@ -358,8 +358,8 @@ function isRun(e) { return e.type === "pomodoro" && e.minutes > 0 }
 // One pomodoro, one entry.
 //
 // An entry with an `id:` (goal-files.md §4: its start, to the second) is
-// the last entry with that id: the engine re-saves the night's notes whole,
-// under the same id, every time the page is closed, and an append-only file
+// the last entry with that id: the engine re-saved the night's notes whole,
+// under the same id, every time their page closed, and an append-only file
 // keeps every copy. Entries without one predate ids, and fall to the two
 // rules below, which had to guess. Display only; the file is untouched.
 //

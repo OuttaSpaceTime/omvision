@@ -63,11 +63,13 @@ Writes follow the file contract's two disciplines:
   re-reading the file immediately before its change is applied, never from a copy
   taken when the screen opened. `omvision.qml` makes these writes; `Writer.js`
   computes the new text.
-- `journal/*.md` is Omvision's alone — `JournalStore.qml`, through a
-  `SerialFileWriter` of its own, debounced while you type. Each write carries the
-  path it was queued with, so switching days mid-write can never file one day's
-  text under another's path, and a day is never written before its text on disk is
-  known.
+- `journal/*.md` is written by `JournalStore.qml`, through a `SerialFileWriter` of
+  its own, debounced while you type. Each write carries the path it was queued
+  with, so switching days mid-write can never file one day's text under another's
+  path, and a day is never written before its text on disk is known. The one other
+  writer is the ompom overlay's night page, which only replaces a day whose text
+  is still what it read (goal-files.md §5, `write-journal`); the Journal screen
+  takes such a change in when it has no unsaved edits.
 - `.log.md` and `days/*.md` are **append-only** — `Appender.qml`: `tee -a` with the
   entry on stdin, so it is `O_APPEND` at the kernel level with no read step at all. A
   coaching session rewriting `<slug>.md` concurrently can never cost an event its

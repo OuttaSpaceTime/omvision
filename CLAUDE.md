@@ -20,7 +20,7 @@ reading and writing files under `~/Notes/Omvision/`.
   so every `Theme.*` reads as `[missing-property]`; `bin/check` lints a copy that fixes
   that, and fails only on warnings not in `.qmllint-baseline`.
 - `bin/check` runs everything a change should pass: lint, the no-pixel-numbers rule, the
-  load check and `bin/test`. Run it before you stop. See `docs/testing.md`.
+  no-scrim rule, the load check and `bin/test`. Run it before you stop. See `docs/testing.md`.
 - Tests: `bin/test` runs every layer offscreen in about a minute. Run it before and after
   a change. `tests/unit` (qmltestrunner) covers Writer.js, Parser.js and the engine's
   Cycle.js, and `tests/contract` holds goal-files.md as cases the app and
@@ -47,12 +47,15 @@ reading and writing files under `~/Notes/Omvision/`.
 - Colours, type sizes and spacing come from `Theme.qml` tokens. Spacing uses only the scale's
   steps: never type a pixel number (`bin/check px` enforces it; a number that must stay
   takes `// check: allow-px <reason>` on its line). Don't import `qs.Commons`.
+- No dialog dims the window behind it: no scrim, no translucent layer (`docs/layout-rules.md`
+  rule 10; `bin/check noscrim` enforces it).
 - `~/Notes/Omvision/` holds the user's real notes. Don't write to it to test anything. The
   file contract is `docs/goal-files.md`:
   - `<slug>.log.md` and `days/*.md` are append-only (`tee -a`).
   - Goal files are re-read right before each change and written one at a time through a
     queue.
-  - The journal is written only by this app.
+  - The journal is written by this app, and at night by the ompom overlay's journal page
+    (`notes-helper.py write-journal`, which won't write over a save it didn't read).
 - `plugins/ompom.engine` and `plugins/ompom.bar` are the omarchy-shell plugins that run the
   user's live pomodoro. Deploy them only with `bin/omvision-deploy` (the `omvision-deploy` skill):
   it keeps the running timer. See `plugins/ompom.engine/CLAUDE.md`. They live here rather

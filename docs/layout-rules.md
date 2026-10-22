@@ -106,6 +106,16 @@ labels touched their borders). A control must not be the loudest
 thing on its screen: `+ task` at twice its height and a solid accent checkbox both
 had to be pulled back. Square corners, 1px hairlines, no shadows.
 
+## 10. Nothing dims the window
+
+A dialog sits on the window as it is: no scrim, no darkened or translucent layer
+behind it. The user never wants one. EventDialog, CancelDialog and NewGoalDialog laid
+black at 45% (`Theme.scrim`) over the window until it was taken out, and Omvida had
+copied it. The surround is a clear full-window `MouseArea` that blocks clicks and hover
+(and dismisses, except on CancelDialog); the card's border sets it apart.
+`bin/check noscrim` (shared with Omvida through qs-kit) fails on a colour named scrim
+and on translucent black.
+
 ## Screenshotting
 
 Use `bin/shot`. It runs the real app with real data from `~/Notes/Omvision/`, but

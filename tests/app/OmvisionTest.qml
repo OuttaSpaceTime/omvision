@@ -32,7 +32,7 @@ QsTestCase {
   id: base
 
   // ---- set by omvision.qml's test hook ------------------------------------
-  // All six must exist: the hook assigns them without checking. target and
+  // All six must exist: the hook passes them without checking. target and
   // window are QsTestCase's.
   property var app: null
   property var journal: null
@@ -40,9 +40,9 @@ QsTestCase {
   property var coaching: null
 
   // Called the moment the hook hands over the app, before its files have
-  // loaded (they load on the event loop, and this runs inside the hook's own
-  // onLoaded). The tests themselves start a turn later. For a file that
-  // needs to act before anything is read.
+  // loaded (they load on the event loop, and this runs inside the hook's
+  // setSource(), as it sets the initial properties). The tests themselves
+  // start a turn later. For a file that needs to act before anything is read.
   function started() {}
 
   onAppChanged: if (app) base.started()
@@ -80,13 +80,13 @@ QsTestCase {
   // Returns daysBack -> path.
   function addDays(days) {
     var paths = {}
-    for (var back in days) {
+    for (let back in days) {
       paths[back] = dayPath(back)
       writeFile(paths[back], days[back])
     }
     tryVerify(function() {
-      for (var b in days) {
-        var e = base.journal.findEntry(paths[b])
+      for (let b in days) {
+        const e = base.journal.findEntry(paths[b])
         if (e === null || e.content !== days[b]) return false
       }
       return true
@@ -119,18 +119,18 @@ QsTestCase {
     var a = base.app
     var slugs = [], journalPaths = []
     var now = new Date()
-    for (var rel in base.fixture) {
-      var text = base.fixture[rel]
-      var m = rel.match(/^goals\/(.+)\.log\.md$/)
+    for (let rel in base.fixture) {
+      const text = base.fixture[rel]
+      let m = rel.match(/^goals\/(.+)\.log\.md$/)
       if (m) {
-        var g = a.goalsData[m[1]]
+        const g = a.goalsData[m[1]]
         if (!g || JSON.stringify(g.logEntries) !== JSON.stringify(Parser.parseLogEntries(text, now))) return false
         continue
       }
       m = rel.match(/^goals\/(.+)\.md$/)
       if (m) {
         slugs.push(m[1])
-        var g2 = a.goalsData[m[1]]
+        const g2 = a.goalsData[m[1]]
         if (!g2 || JSON.stringify(g2.meta) !== JSON.stringify(Parser.parseGoalFile(text))) return false
         continue
       }

@@ -42,7 +42,7 @@ half-written keeps the last theme rather than falling back.
   bar's thickness) isn't spacing; it is a named size in `Theme.qml` at whatever value it
   needs. Control height 32, small secondary actions and the
   fields they open 24 (`smallControlHeight`); every dialog card is `dialogWidth` (560) wide,
-  padded `spaceXl`, over a scrim of black at 45% (`scrim`).
+  padded `spaceXl`, on the window as it is: nothing dims it (no scrim).
 - **One page column.** Every screen sets its text in the journal's column: `pageMeasure`
   wide (70 characters of the writing font, ≈840px) and on the journal's own vertical line —
   centred on the *window*, not on the area beside the rail (`Theme.pageX`), so switching

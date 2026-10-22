@@ -470,7 +470,7 @@ TestCase {
   function test_journalPreview_capped() {
     var line = new Array(101).join("x")
     var lines = []
-    for (var i = 0; i * line.length <= Parser.JOURNAL_PREVIEW_MAX; i++) lines.push(line)
+    for (let i = 0; i * line.length <= Parser.JOURNAL_PREVIEW_MAX; i++) lines.push(line)
     compare(Parser.journalPreview(lines.join("\n")).length, Parser.JOURNAL_PREVIEW_MAX)
   }
 

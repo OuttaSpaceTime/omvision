@@ -82,7 +82,7 @@ EngineTest {
   }
 
   function test_every_fourth_break_is_long() {
-    for (var n = 1; n <= 3; n++) {
+    for (let n = 1; n <= 3; n++) {
       toBreak()
       verify(!engine.breakIsLong, "break " + n + " is short")
       endBreak()

@@ -27,7 +27,7 @@ Item {
 
   function countByStatus(status) {
     var n = 0
-    for (var i = 0; i < goalList.length; i++) if (statusOf(goalList[i]) === status) n++
+    for (let i = 0; i < goalList.length; i++) if (statusOf(goalList[i]) === status) n++
     return n
   }
 

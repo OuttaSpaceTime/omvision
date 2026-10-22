@@ -54,7 +54,7 @@ Item {
   readonly property var goalList: Util.goalsByTitle(root.goalsData)
 
   function findGoal(slug) {
-    for (var i = 0; i < goalList.length; i++) if (goalList[i].slug === slug) return goalList[i]
+    for (let i = 0; i < goalList.length; i++) if (goalList[i].slug === slug) return goalList[i]
     return null
   }
   readonly property var selectedGoal: findGoal(root.selectedSlug)

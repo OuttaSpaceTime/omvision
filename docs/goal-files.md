@@ -11,8 +11,8 @@ can write any of the three against it without opening the others' source.
 
 `plugins/ompom.engine/notes-helper.py` is the reference implementation of the
 engine's side of the contract (`list-goals`, `append-log`, `append-day`,
-`read-active`, `write-active`). Omvision reads and writes these files directly, in
-its own language, following the same rules.
+`read-active`, `write-active`, `read-journal`, `write-journal`). Omvision reads
+and writes these files directly, in its own language, following the same rules.
 
 `tests/contract/cases.json` is the executable part of this document: goal files,
 `focusable:` values, pomodoro and event entries, each with what it must read or
@@ -30,6 +30,7 @@ a rollover — see "Retired paths" at the end of this document.
 ~/Notes/Omvision/goals/<slug>.md                    # Omvision + coach only
 ~/Notes/Omvision/goals/<slug>.log.md                 # ompom-engine + Omvision events, append-only
 ~/Notes/Omvision/goals/<slug>/journal/YYYY-MM-DD.md  # Omvision only, one file per day
+~/Notes/Omvision/journal/YYYY-MM-DD.md               # the journal: Omvision, and ompom's night page (§5)
 ~/Notes/Omvision/days/YYYY-MM-DD.md                  # poms run with no active goal, same grammar, append-only
 ~/.local/state/omvision/active-goal                  # slug of the goal ompom shows, or empty
 ```
@@ -161,8 +162,9 @@ before: one pomodoro per heading and length, the last kept, and the 0-minute
 rule below.
 
 **A 0-minute entry** (`### 16 Oct 22:31 · 0m`) holds notes with no run behind them:
-the ompom engine's night notes. The night has one notes page, kept all night. Each
-time it is closed with changes (22:15 to 05:30) the whole page is appended to the
+the ompom engine's night notes, written until 2026-10-22, when the night's page
+became the day's journal (`write-journal`, §5). The night had one notes page, kept all
+night. Each time it was closed with changes the whole page was appended to the
 day file again, under one heading and id stamped at that night's first save.
 Readers show its notes like any pomodoro's, but don't count it as a pomodoro, and
 show only the last of such re-saves, by its id. One without an id (before
@@ -214,14 +216,16 @@ Same invocation discipline as today: `["/usr/bin/python3", <resolved path>,
 <subcommand>, ...]`, called directly, never through a shell. Same fd walk —
 every directory from `$HOME` down is opened `O_NOFOLLOW` via its already-open
 parent, and every read/write/rename after that walk goes through those fds. Same
-20 000-byte input ceiling on anything read from stdin.
+20 000-byte input ceiling on a log entry read from stdin; `write-journal`'s is
+sized for a journal day instead (below).
 
 Exit codes are uniform across every subcommand: **2** for a usage error (wrong
-argv shape, an invalid slug, or an entry that cannot be parsed into the
+argv shape, an invalid slug or day, or an entry that cannot be parsed into the
 grammar above — the caller's bug, and nothing is written); **1** for an
 `OSError` raised while walking or opening the fixed directories
-(`~/Notes/Omvision/goals`, `~/Notes/Omvision/days`, `~/.local/state/omvision`)
-— something is wrong with the machine, not the input; **0** otherwise.
+(`~/Notes/Omvision/goals`, `~/Notes/Omvision/days`, `~/Notes/Omvision/journal`,
+`~/.local/state/omvision`) — something is wrong with the machine, not the
+input; **0** otherwise. `write-journal` adds **3**, below.
 
 A malformed entry deliberately does **not** collapse into success. A pomodoro's
 worth of writing is real content, not nothing — a dropped entry that reports
@@ -352,6 +356,28 @@ whether that's ompom's overlay or Omvision), so the ordinary RMW pattern is
 fine here; §2's argument is specifically about two *independent* writers on the
 same file, which doesn't apply to a marker only ever set by "the user picked a
 goal."
+
+### `read-journal <day>` / `write-journal <day>`
+
+The ompom engine's night page is the day's journal,
+`~/Notes/Omvision/journal/<day>.md`, and these two are its only access to it.
+`<day>` is `YYYY-MM-DD` and a real date, checked before anything is opened.
+
+`read-journal` — no stdin. Prints the file's text as it is, or nothing for a day
+with no file. A file it can't read whole (over 1 000 000 bytes, not UTF-8, not a
+plain file) exits 1 with nothing printed: the page would otherwise save a cut copy
+back over it.
+
+`write-journal` — reads `{"base": "...", "text": "..."}` from stdin and replaces
+the day with `text`, whole and atomically (`write_atomic()`, keeping an existing
+file's mode), but only if the file still says `base`, the text the page last read
+or wrote. If it doesn't — Omvision saved the day meanwhile — nothing is written,
+the file's text goes to stdout, and the exit code is **3**; the engine puts the
+page's typing after that text and writes again. A blank `text` deletes the file,
+as Omvision does with an emptied page. A rewrite, not an append, because the
+journal is free text edited anywhere; §2's argument is about logs. The check and
+the rename aren't one atomic step, which is acceptable because the night overlay
+covers the screen: no one is typing into Omvision while it runs.
 
 ## 6. Parsing rules
 

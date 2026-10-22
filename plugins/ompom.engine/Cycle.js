@@ -15,13 +15,15 @@
 // engine's clock in milliseconds (the system clock plus Engine.clockOffsetMs,
 // which tests and the demo move), the timer lengths (DURATIONS, or the
 // demo's), and which of the engine's writes are still running
-// ({ finishedLog, sleepSave }), which only the adapter knows.
+// ({ finishedLog, journalSave }), which only the adapter knows.
 //
-// Effects: { type: "log", via: "note" | "finished" | "sleep", slug, entry,
-// cycle, saved } is one notes-helper.py append (to the goal's log, or the
-// day file for slug ""), stamped with the cycle it belongs to (see
-// isStale()); { type: "listGoals" }; { type: "writeActive", slug };
-// { type: "warn", message }.
+// Effects: { type: "log", via: "note" | "finished", slug, entry, cycle } is
+// one notes-helper.py append (to the goal's log, or the day file for slug
+// ""), stamped with the cycle it belongs to (see isStale());
+// { type: "readJournal", day, cycle } and { type: "writeJournal", day, base,
+// text, cycle } are the night page's read and write of Omvision's journal;
+// { type: "listGoals" }; { type: "writeActive", slug }; { type: "warn",
+// message }.
 
 // ---- constants ------------------------------------------------------------
 
@@ -77,7 +79,7 @@ var RUNS_PER_SET = 4
 // sleep" (phase "bedtime"); +1 minute takes the overlay down for a minute
 // ("snooze"), three times at most. From 22:20 to 05:30 the night's screen
 // ("sleep") is the only thing on the laptop: a countdown to 05:30 and the
-// notes page, nothing else. It follows the clock rather than a countdown of
+// journal, nothing else. It follows the clock rather than a countdown of
 // its own (followTheClock(), every tick), so a login, a resume from suspend
 // or a deploy at any hour of the night lands on the right screen, and a
 // suspended night still ends at 05:30. It holds in every mode, "off" too:
@@ -150,12 +152,14 @@ function fresh() {
     // The night skipSleep() was used on (nightOf()), so the clock doesn't
     // put the overlay straight back up on the next tick. "" is none.
     sleepSkippedNight: "",
-    // The night's notes as one entry, re-saved whole on every close that
-    // changed them (saveSleepNotes()): the stamp its heading carries, fixed
-    // at the night's first save, and the text as it was last written, so a
-    // close that changed nothing appends nothing.
-    sleepNotesIso: "",
-    sleepNotesSaved: NOTES.map(function() { return "" }),
+    // The night's page: the day's journal (see openJournal()). journalBase
+    // is what the file said at the last read or write; journalLoaded, that
+    // the read is in (until then the page can't be typed into).
+    journalDay: "",
+    journalText: "",
+    journalBase: "",
+    journalLoaded: false,
+    journalFailed: false,
     // One entry per pomodoro, full stop: the log is append-only. Set the
     // moment this cycle's entry is on disk, cleared with the rest of the
     // cycle.
@@ -164,7 +168,7 @@ function fresh() {
     // stays up at 0:00, its text untouched, with "Try again" and "Skip" in
     // place of the extension buttons: the alternative, starting the next run
     // anyway, would hide a pomodoro that was never logged behind a closed
-    // overlay. The night's page shows it too.
+    // overlay.
     notesSaveFailed: false,
     // From saveNote() until its write exits, so the tick that reaches 0:00
     // and a "Try again" click in the same instant can't both append the run.
@@ -196,7 +200,8 @@ function countdownRunning(s) {
   return s.phase === "snooze" || (!atNight(s) && s.mode !== "off" && !s.paused)
 }
 
-// The phases with a notes page: a break, and the night.
+// The phases with a notes page: a break (its three questions), and the
+// night (the journal).
 function hasNotes(s) { return s.phase === "break" || s.phase === "sleep" }
 
 function remainingSec(s, nowMs) {
@@ -256,15 +261,13 @@ function fmt(totalSeconds) {
   return (h > 0 ? h + ":" : "") + pad2(Math.floor(s / 60) % 60) + ":" + pad2(s % 60)
 }
 
-// The countdown as the screens show it. The night's is h:mm, in minutes
-// rounded up so it reads 0:00 at 05:30 and not a minute before: it runs for
-// seven hours, the seconds were noise on a screen meant to be left alone,
-// and they made the whole layer surface redraw every second all night.
+// The countdown as the screens show it, the night's included. The night's
+// was once h:mm, in minutes rounded up, to spare the layer surface a redraw
+// every second for seven hours; the seconds came back because a countdown
+// that visibly runs reads as time passing, and one that sits still for a
+// minute reads as stuck.
 function countdownLabel(s, nowMs) {
-  var sec = remainingSec(s, nowMs)
-  if (s.phase !== "sleep") return fmt(sec)
-  var minutes = Math.ceil(sec / 60)
-  return Math.floor(minutes / 60) + ":" + pad2(minutes % 60)
+  return fmt(remainingSec(s, nowMs))
 }
 
 // What the bar shows beside its icon. Here rather than in the bar, which
@@ -333,8 +336,8 @@ function finishedRunEntry(s, durations) {
 }
 
 // Any entry carrying the notes (`texts`, in NOTES' order), as notes-helper.py
-// reads it: a finished run's, or the night's (0 minutes, see
-// saveSleepNotes()).
+// reads it: a finished run's. The night's 0-minute entries came through here
+// too, before the night's page became the journal (goal-files.md §4).
 //
 // An entry over the helper's limit has its longest note cut short, with "…"
 // to say so, until it fits: the helper would otherwise read it cut off
@@ -383,14 +386,14 @@ function setCountdown(s, sec, nowMs) {
 // write that outlives its break and finds a later one.
 function isStale(s, cycle) { return cycle !== s.cycle }
 
-function log(fx, s, via, slug, entry, saved) {
-  fx.push({ type: "log", via: via, slug: slug, entry: entry, cycle: s.cycle, saved: saved })
+function log(fx, s, via, slug, entry) {
+  fx.push({ type: "log", via: via, slug: slug, entry: entry, cycle: s.cycle })
 }
 
 function warn(fx, message) { fx.push({ type: "warn", message: message }) }
 
 // Everything one cycle collects, gone: by startNextRun(), and by goToBed(),
-// whose night starts with an empty notes page.
+// whose night starts with nothing read yet.
 function clearCycle(s) {
   s.cycle += 1
   s.extensionsUsed = 0
@@ -398,8 +401,11 @@ function clearCycle(s) {
   s.notesSaveFailed = false
   s.cycleLogged = false
   NOTES.forEach(function(n) { s[n.field] = "" })
-  s.sleepNotesIso = ""
-  s.sleepNotesSaved = NOTES.map(function() { return "" })
+  s.journalDay = ""
+  s.journalText = ""
+  s.journalBase = ""
+  s.journalLoaded = false
+  s.journalFailed = false
 }
 
 // A fresh focus run on the selected goal, with this cycle's notes and
@@ -525,19 +531,22 @@ function extendBreak(s, ctx, minutes) {
 }
 
 // Shows the notes page with whatever this break has already put in it: only
-// the next run's start clears it. The night has the same page.
+// the next run's start clears it. The night's page is the journal instead,
+// read fresh on every open (openJournal()).
 function openNotes(s, ctx) {
-  if (hasNotes(s)) s.notesOpen = true
-  return []
+  if (!hasNotes(s)) return []
+  s.notesOpen = true
+  return s.phase === "sleep" ? openJournal(s, ctx) : []
 }
 
 // Back to the countdown. In a break it never saves: the run is logged once,
 // when the break ends, with the notes as they stand then, so the page can be
-// opened and left as often as the break allows. The night is the other way
-// round, see saveSleepNotes().
+// opened and left as often as the break allows. The night's journal is
+// saved as it's typed; leaving the page saves whatever the typing pause
+// hadn't yet.
 function closeNotes(s, ctx) {
   s.notesOpen = false
-  return s.phase === "sleep" ? saveSleepNotes(s, ctx) : []
+  return s.phase === "sleep" ? saveJournal(s, ctx) : []
 }
 
 // The one write for a completed pomodoro: the run's goal log, or the day
@@ -656,10 +665,13 @@ function startSleep(s, ctx) {
   return []
 }
 
-// 05:30: any notes still unsaved are written, and the day starts on a fresh
-// run and a fresh set.
+// 05:30: the journal's last typing is saved, and the day starts on a fresh
+// run and a fresh set. Typing that arrived while a write was still running
+// has nothing left to follow it, so it goes into a warning.
 function wake(s, ctx) {
-  var fx = s.phase === "sleep" ? saveSleepNotes(s, ctx) : []
+  var fx = s.phase === "sleep" ? saveJournal(s, ctx) : []
+  if (s.phase === "sleep" && ctx.busy.journalSave && s.journalLoaded && s.journalText !== s.journalBase)
+    warn(fx, "ompom: the journal for " + s.journalDay + " not saved at 05:30: " + s.journalText)
   return fx.concat(resetRun(s, ctx))
 }
 
@@ -672,46 +684,83 @@ function skipSleep(s, ctx) {
   return followTheClock(s, ctx)
 }
 
-// The night's notes go to the day file each time the page is closed (and at
-// 05:30), and stay on the page: it's one page for the whole night, as a
-// break's is for the break. Not saved once at the night's end, as a break
-// does: a laptop switched off overnight would take them with it. So each
-// close that changed them appends the whole text again, under the one
-// heading the night's first save stamped, and Parser.js shows only the last
-// copy (goal-files.md §4). An entry of 0 minutes: notes with no run behind
-// them, never counted as a pomodoro.
+// ---- the night's journal -------------------------------------------------------
+// The night's page is Omvision's journal file for the day
+// (~/Notes/Omvision/journal/YYYY-MM-DD.md), opened on its text: free
+// writing, no questions. The break's three headings were the wrong shape for
+// a night's thoughts, and their 0-minute day-file entries sat apart from the
+// rest of the day's writing.
 //
-// Clearing the page after each save was the first version: every reopen
-// showed an empty page, and what had been written looked lost. Appending
-// only what was added since was the other way, and was rejected: an edit in
-// the middle of the text has no "added since".
-function saveSleepNotes(s, ctx) {
-  var text = noteTexts(s)
-  if (text.every(function(t) { return t.trim() === "" })) return []
-  if (text.every(function(t, i) { return t === s.sleepNotesSaved[i] })) return []
-  // A save still running takes this text with the next close, or at 05:30.
-  if (ctx.busy.sleepSave) return []
-  if (s.sleepNotesIso === "") s.sleepNotesIso = isoOf(new Date(ctx.nowMs))
-  s.notesSaveFailed = false
-  var fx = []
-  log(fx, s, "sleep", "", entryJson(s.sleepNotesIso, 0, text), text)
-  return fx
+// The calendar day, as the Journal screen has it, so after midnight the page
+// opens on the new day; a page with unsaved text stays on its day until it's
+// saved. Saved as it's typed (Engine.qml's typing pause), on leaving the
+// page and at 05:30, whole, and only over the text it was based on
+// (notes-helper.py write-journal): if Omvision saved the day in between,
+// the file's text comes back and the page's typing goes after it.
+
+// notes-helper.py's EXIT_JOURNAL_CHANGED.
+var JOURNAL_CHANGED_EXIT = 3
+
+function openJournal(s, ctx) {
+  // A read racing a save could bring back the text from before it, and two
+  // reads at once would mix up which day each answer is for.
+  if ((s.journalLoaded && s.journalText !== s.journalBase) || ctx.busy.journalSave || ctx.busy.journalRead) return []
+  s.journalDay = isoOf(new Date(ctx.nowMs)).slice(0, 10)
+  s.journalLoaded = false
+  return [{ type: "readJournal", day: s.journalDay, cycle: s.cycle }]
 }
 
-// Records the text the write carried as saved, which is what the next close
-// compares against. A refusal says so and records nothing, so the next close
-// tries again. After 05:30 nothing is left to show it on, so it's only
-// warned.
-function sleepNoteExited(s, ctx, code, cycle, payload, saved) {
+// A read that fails leaves the page unloaded, so nothing is saved over a day
+// whose text isn't known; leaving the page and opening it again retries.
+function journalReadExited(s, ctx, code, cycle, day, text) {
+  if (isStale(s, cycle) || day !== s.journalDay || s.journalLoaded) return []
+  s.journalFailed = code !== 0
+  if (code !== 0) return []
+  s.journalText = text
+  s.journalBase = text
+  s.journalLoaded = true
+  return []
+}
+
+// While a write runs, this text waits for it (journalWriteExited()).
+function saveJournal(s, ctx) {
+  if (s.phase !== "sleep" || !s.journalLoaded || s.journalText === s.journalBase || ctx.busy.journalSave) return []
+  return [{ type: "writeJournal", day: s.journalDay, base: s.journalBase, text: s.journalText, cycle: s.cycle }]
+}
+
+// `base` and `text` are what the write carried; `out` is the file's text
+// when the helper refused. After 05:30 no page is left to show a failure on,
+// so the text goes into the warning, where it can still be found.
+function journalWriteExited(s, ctx, code, cycle, day, base, text, out) {
   var fx = []
   if (isStale(s, cycle)) {
-    if (code !== 0) warn(fx, "ompom: night notes not logged (helper exit " + code + "): " + payload)
-  } else if (code !== 0) {
-    s.notesSaveFailed = true
-  } else {
-    s.sleepNotesSaved = saved
+    if (code !== 0) warn(fx, "ompom: the journal for " + day + " not saved (helper exit " + code + "): " + text)
+    return fx
   }
-  return fx
+  // A refusal that sends back the very text the write was based on means
+  // the two sides read the file differently: writing again would only be
+  // refused again, forever.
+  s.journalFailed = code !== 0 && (code !== JOURNAL_CHANGED_EXIT || out === base)
+  if (s.journalFailed) {
+    warn(fx, "ompom: the journal for " + day + " not saved (helper exit " + code + ")")
+    return fx
+  }
+  if (code === JOURNAL_CHANGED_EXIT) s.journalText = mergeJournal(out, base, s.journalText)
+  s.journalBase = code === 0 ? text : out
+  return saveJournal(s, ctx)
+}
+
+// The page's typing on top of the file's new text (`disk`). Typing after
+// `base` -- the usual case -- goes after `disk`. An edit higher up can't be
+// told apart from what was there, so then the whole page follows `disk` as
+// a paragraph of its own: some text twice, none lost, as
+// JournalStore.mergeTyped() does.
+function mergeJournal(disk, base, page) {
+  if (page === base || page.trim() === "") return disk
+  if (base !== "" && page.indexOf(base) === 0) return disk + page.slice(base.length)
+  if (disk === "") return page
+  var sep = /\n\n$/.test(disk) ? "" : (/\n$/.test(disk) ? "\n" : "\n\n")
+  return disk + sep + page
 }
 
 // ---- the goal ------------------------------------------------------------------
@@ -767,7 +816,10 @@ function isStamp(v) { return typeof v === "string" && /^(\d{4}-\d\d-\d\dT\d\d:\d
 // fresh run's value), and loses it after: rows don't stay optional for
 // good. Keys a snapshot has and this list doesn't (an older engine's
 // `focusText`) are ignored. Not carried: the goal (the new engine reads the
-// active-goal file itself), the write in flight, and the cycle count.
+// active-goal file itself), the write in flight, the cycle count, and the
+// night's journal page, which is saved as it's typed and read again
+// (restore()): carried, a day's text twice over (page and base) could pass
+// the 128 KiB Linux allows the one argv string bin/omvision-deploy passes.
 var FIELDS = [
   { name: "mode", ok: isOneOf(MODES) },
   { name: "phase", ok: isOneOf(PHASES) },
@@ -784,9 +836,7 @@ var FIELDS = [
   { name: "setDay", ok: isDay },
   { name: "breakIsLong", ok: isBool },
   { name: "snoozesUsed", ok: isInt(0, MAX_SNOOZES) },
-  { name: "sleepSkippedNight", ok: isDay },
-  { name: "sleepNotesIso", ok: isStamp },
-  { name: "sleepNotesSaved", ok: function(v) { return Array.isArray(v) && v.length === NOTES.length && v.every(isString) } }
+  { name: "sleepSkippedNight", ok: isDay }
 ].concat(NOTES.map(function(n) { return { name: n.field, ok: isString } }))
 
 function snapshot(s, nowMs) {
@@ -819,5 +869,6 @@ function restore(s, ctx, json) {
   // The picker's list is otherwise only read when a break starts, and this
   // one started in another process.
   if (s.phase === "break") fx.push({ type: "listGoals" })
+  if (s.phase === "sleep" && s.notesOpen) fx = fx.concat(openJournal(s, ctx))
   return { error: "", fx: fx }
 }

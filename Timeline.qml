@@ -20,14 +20,14 @@ Flickable {
   function groupByDay(entries) {
     var byDay = {}
     var order = []
-    for (var i = entries.length - 1; i >= 0; i--) { // newest first
-      var e = entries[i]
-      var key = Parser.dayKey(e.date)
+    for (let i = entries.length - 1; i >= 0; i--) { // newest first
+      const e = entries[i]
+      const key = Parser.dayKey(e.date)
       if (!byDay[key]) { byDay[key] = { key: key, date: e.date, entries: [] }; order.push(key) }
       byDay[key].entries.push(e)
     }
     var out = []
-    for (var j = 0; j < order.length; j++) out.push(byDay[order[j]])
+    for (let j = 0; j < order.length; j++) out.push(byDay[order[j]])
     return out
   }
   readonly property var dayGroups: groupByDay(logEntries)

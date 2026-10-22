@@ -131,13 +131,13 @@ QtObject {
 
   function hasPending(path) {
     if (writer.current && writer.current.path === path) return true
-    for (var i = 0; i < writer.queue.length; i++) if (writer.queue[i].path === path) return true
+    for (let i = 0; i < writer.queue.length; i++) if (writer.queue[i].path === path) return true
     return false
   }
 
   function pendingTextFor(path) {
-    for (var i = writer.queue.length - 1; i >= 0; i--) {
-      var q = writer.queue[i]
+    for (let i = writer.queue.length - 1; i >= 0; i--) {
+      const q = writer.queue[i]
       if (writer.changesText(q) && q.path === path) return q.text
     }
     var c = writer.current

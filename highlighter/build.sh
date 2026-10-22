@@ -18,6 +18,11 @@ command -v g++ >/dev/null || { echo "g++ not found" >&2; exit 1; }
 
 mkdir -p "$BUILD" "$OUT"
 
+# clangd reads its flags from here (there is no compile_commands.json without
+# cmake); written from the same pkg-config call the build uses, so the editor
+# and the compiler never disagree about the Qt headers.
+{ echo "-std=c++17"; echo "-I."; pkg-config --cflags Qt6Quick Qt6Qml Qt6Gui Qt6Core | tr ' ' '\n' | grep -v '^$'; } > compile_flags.txt
+
 "$MOC" markdownhighlighter.h -o "$BUILD/moc_markdownhighlighter.cpp"
 "$MOC" plugin.h -o "$BUILD/moc_plugin.cpp"
 

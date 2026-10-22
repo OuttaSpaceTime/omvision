@@ -65,7 +65,8 @@ own runner: `qmltestrunner -platform offscreen -input tests/unit`.
 - `tst_util.qml` covers Util.js's list helpers (`goalsByTitle`).
 - `tst_cycle.qml` covers the ompom engine's rules (`plugins/ompom.engine/Cycle.js`):
   runs, extensions, pause, a suspend, the long break, the break's write and a refusal, a
-  goal changed mid-run, bedtime, the night and its notes, the labels, the hand-off. Each
+  goal changed mid-run, bedtime, the night and its journal page (read, save, a save made
+  in Omvision meanwhile, midnight), the labels, the hand-off. Each
   case moves a clock of its own, so a whole night takes milliseconds.
 - `tst_listcontinue.qml` covers Return in a list (`ListContinue.js`), which the journal
   and the break's notes share.
@@ -157,12 +158,13 @@ and a refactor must keep them:
 | `tryAgainButton`, `skipButton`, `notesNotSaved` | a refused write's buttons, and its line |
 | `snoozeButton`, `goodNightButton` | bedtime's `+1 minute` and `Good night` |
 | `goalPicker`, `pickGoal:<slug>`, `noGoalButton` | Ctrl+G's picker and its buttons |
-| `notesPage`, `noteSection:<done\|left\|else>`, `notesBackButton` | the notes page's Flickable, its sections, its `←` |
+| `notesPage`, `noteSection:<done\|left\|else>`, `notesBackButton` | the break's notes page's Flickable, its sections, its `←` |
+| `journalPage`, `journalEditor`, `journalBackButton`, `journalNotSaved` | the night's journal page: its Flickable, its TextEdit (the app's journal uses the same name), its `←`, its error line |
 
 The goal names sit in `GoalsScreen.qml`, and in `GoalDetailScreen.qml` and its parts
 (`GoalHeader.qml`, `TaskRow.qml`, `GoalEndActions.qml`), and the journal's in
 `JournalScreen.qml`, on its TextEdit, its Flickable and its header, and the coaching ones
-in `CoachingScreen.qml`, and the engine's in `plugins/ompom.engine/Overlay.qml`. There is no
+in `CoachingScreen.qml`, and the engine's in `plugins/ompom.engine/Overlay.qml` and `NightJournal.qml`. There is no
 other way to find a control: a fallback that looked items up by their label predated the names and was removed, because
 it let a test pass after the objectName it asked for had been renamed away. A renamed
 control now fails its tests with `no visible item named …`, and the table above is what
@@ -202,7 +204,7 @@ Before every test the fixture is put back and the engine is on a fresh run at no
 today, with no goal, so each test stands alone: `tst_break.qml` (the run, the prompt,
 the break, the picker, the log entry, a refused write, a hand-off), `tst_notes.qml` (the
 notes page: lists, folding, the arrows, scrolling) and `tst_night.qml` (bedtime, the
-snoozes, the night and its notes, 05:30).
+snoozes, the night and its journal page, 05:30).
 
 ## Known failures
 

@@ -1,0 +1,19 @@
+{
+  "servers": {
+    "qmlls": {
+      "command": "./bin/qmlls",
+      "fileTypes": [".qml"],
+      "languageId": "qml",
+      "rootMarkers": ["omvision.qml"]
+    },
+    "clangd": { "rootMarkers": ["omvision.qml"] },
+    "pyright": { "command": "/usr/bin/pyright-langserver", "rootMarkers": ["omvision.qml"] },
+    "ruff": { "command": "/usr/bin/ruff", "rootMarkers": ["omvision.qml"] },
+    "bashls": {
+      "command": "/usr/bin/bash-language-server",
+      "fileTypes": [".sh", ".bash", "check", "test", "shot", "omvision", "omvision-deploy", "ompom-demo", "ompom-stage", "qmlls"],
+      "rootMarkers": ["omvision.qml"]
+    },
+    "marksman": { "command": "/usr/bin/marksman", "rootMarkers": ["omvision.qml"] }
+  }
+}

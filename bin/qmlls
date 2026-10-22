@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# qmlls (the QML language server) for this repo, as omp starts it from
+# .omp/lsp.json. Run on the repo as it stands, qmlls has the same blind spots
+# qmllint has (see .qmllint.ini and qs-kit's lint step): it never sees the
+# qmldir Quickshell synthesizes, so Theme and Paths aren't singletons to it and
+# every `Theme.foo` is a [missing-property]; and `import qs.Commons` in the
+# ompom plugins names omarchy-shell's config root, which isn't on any import
+# path.
+#
+# So this builds a fresh directory under .qmlls/ (gitignored) before starting
+# the server, so a new file is picked up on the next start:
+#   app/      a symlink to every .qml/.js at the repo root, a qmldir declaring
+#             the singletons and nothing else, and app.qrc mapping each real
+#             file into this directory. Given as the build dir, qmlls reads the
+#             .qrc, treats a file at the root as living in app/, and so finds
+#             the qmldir beside it. The symlinks are what the qmldir's entries
+#             resolve to.
+#   imports/  qs/Commons -> the shell's Commons, which has a real qmldir.
+# A committed qmldir at the root would do it more simply, and was rejected for
+# the reason qs-kit gives: a hand-written one switches Quickshell's own off.
+# The repo root goes on the import path too, for `import MarkdownHighlight`
+# (built there by highlighter/build.sh), as bin/omvision does for the app.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+COMMONS=/usr/share/omarchy/shell/Commons
+
+# A directory per server, so two starting at once (two sessions, several
+# agents) never build into, or delete, one another's. A server keeps its
+# directory for as long as it runs; ones left from a day ago are gone.
+mkdir -p "$ROOT/.qmlls"
+find "$ROOT/.qmlls" -mindepth 1 -maxdepth 1 -name 'run.*' -mmin +1440 -exec rm -rf {} +
+SHADOW="$(mktemp -d "$ROOT/.qmlls/run.XXXXXX")"
+mkdir -p "$SHADOW/app" "$SHADOW/imports/qs"
+[ -d "$COMMONS" ] && ln -s "$COMMONS" "$SHADOW/imports/qs/Commons"
+
+{
+  echo '<RCC><qresource prefix="/">'
+  for f in "$ROOT"/*.qml "$ROOT"/*.js; do
+    [ -f "$f" ] || continue
+    name="${f##*/}"
+    ln -s "$f" "$SHADOW/app/$name"
+    echo "<file alias=\"$name\">$f</file>"
+    if [[ "$f" == *.qml ]] && grep -q '^pragma Singleton' "$f"; then
+      printf 'singleton %s 1.0 %s\n' "${name%.qml}" "$name" >>"$SHADOW/app/qmldir"
+    fi
+  done
+  echo '<file alias="qmldir">'"$SHADOW/app/qmldir"'</file>'
+  echo '</qresource></RCC>'
+} >"$SHADOW/app/app.qrc"
+
+exec /usr/lib/qt6/bin/qmlls --no-cmake-calls -b "$SHADOW/app" -I "$SHADOW/imports" -I "$ROOT" "$@"

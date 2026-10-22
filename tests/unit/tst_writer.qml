@@ -57,7 +57,7 @@ TestCase {
   ]
 
   function test_notGoalFiles_are_what_parser_skips() {
-    for (var i = 0; i < notGoalFiles.length; i++)
+    for (let i = 0; i < notGoalFiles.length; i++)
       compare(Parser.parseGoalFile(notGoalFiles[i]), null, JSON.stringify(notGoalFiles[i]))
   }
 
@@ -128,7 +128,7 @@ TestCase {
         why: "Blocks every other milestone — Omvision and the coach skill can't start without it.",
         estimate: 3, doneBy: "2026-09-21" })
     }), text, "updateGoalFields, numeric estimate and padded title")
-    for (var i = 0; i < 3; i++) {
+    for (let i = 0; i < 3; i++) {
       compare(apply(apply(text, function(l) { return Writer.toggleTask(l, i) }),
                     function(l) { return Writer.toggleTask(l, i) }), text, "toggleTask twice, task " + i)
     }
@@ -183,10 +183,10 @@ TestCase {
   function test_toggleTask_agrees_with_parser() {
     var before = Parser.parseGoalFile(oddTasks).tasks
     compare(before.map(function(t) { return t.text }), ["one", "two", "three"])
-    for (var i = 0; i < before.length; i++) {
-      var after = Parser.parseGoalFile(apply(oddTasks, function(l) { return Writer.toggleTask(l, i) })).tasks
+    for (let i = 0; i < before.length; i++) {
+      const after = Parser.parseGoalFile(apply(oddTasks, function(l) { return Writer.toggleTask(l, i) })).tasks
       compare(after.length, before.length)
-      for (var j = 0; j < before.length; j++)
+      for (let j = 0; j < before.length; j++)
         compare(after[j].done, j === i ? !before[j].done : before[j].done, "toggle " + i + ", task " + j)
     }
     compare(apply(oddTasks, function(l) { return Writer.toggleTask(l, 3) }), null,
@@ -322,7 +322,7 @@ TestCase {
   // index 0, so toggleTask and editTask can only be refusing the file.
   function test_task_edits_refuse_non_goal_files_data() {
     var rows = []
-    for (var i = 0; i < notGoalFiles.length; i++) rows.push({ tag: "file " + i, text: notGoalFiles[i] })
+    for (let i = 0; i < notGoalFiles.length; i++) rows.push({ tag: "file " + i, text: notGoalFiles[i] })
     return rows
   }
   function test_task_edits_refuse_non_goal_files(row) {
@@ -353,7 +353,7 @@ TestCase {
 
   function test_setStatus_refuses_non_goal_files_data() {
     var rows = []
-    for (var i = 0; i < notGoalFiles.length; i++) rows.push({ tag: "file " + i, text: notGoalFiles[i] })
+    for (let i = 0; i < notGoalFiles.length; i++) rows.push({ tag: "file " + i, text: notGoalFiles[i] })
     return rows
   }
   function test_setStatus_refuses_non_goal_files(row) {
@@ -392,7 +392,7 @@ TestCase {
     var f = { title: "Ship the goal files doc",
               why: "Blocks every other milestone — Omvision and the coach skill can't start without it.",
               estimate: "3", doneBy: "2026-09-21" }
-    for (var k in over) f[k] = over[k]
+    for (let k in over) f[k] = over[k]
     return f
   }
 
@@ -622,7 +622,7 @@ TestCase {
   // Writer formats durations, Parser reads them back: every minute count
   // must survive the trip.
   function test_formatDuration_parses_back() {
-    for (var m = 0; m <= 600; m++)
+    for (let m = 0; m <= 600; m++)
       compare(Parser.parseDurationToMinutes(Writer.formatDuration(m)), m, String(m))
   }
 

@@ -40,7 +40,7 @@ EngineTest {
     settle(els.edit)
     mouseClick(els.edit, 10, 5)
     verify(els.edit.activeFocus, "the caret in What else?")
-    for (var i = 0; i < 20; i++) type("line " + i + "\n")
+    for (let i = 0; i < 20; i++) type("line " + i + "\n")
     wait(50)
     var caret = els.edit.mapToItem(flick, els.edit.cursorRectangle)
     verify(flick.contentY > 0 && caret.y >= 0 && caret.y + caret.height + flick.bottomRoom <= flick.height + 1,
@@ -50,10 +50,10 @@ EngineTest {
   function test_the_page_fills_the_screen_before_it_scrolls() {
     openNotes()
     var flick = item("notesPage")
-    for (var i = 1; i <= 14; i++) type("line " + i + "\n")
+    for (let i = 1; i <= 14; i++) type("line " + i + "\n")
     wait(50)
     compare(flick.contentY, 0, "fourteen lines don't scroll the page")
-    for (i = 15; i <= 24; i++) type("line " + i + "\n")
+    for (let i = 15; i <= 24; i++) type("line " + i + "\n")
     wait(50)
     var edit = section("done").edit
     var bottom = edit.mapToItem(flick, edit.cursorRectangle).y + edit.cursorRectangle.height
@@ -84,7 +84,7 @@ EngineTest {
     verify(done.heading.activeFocus, "Up off a section's first line lands on its heading")
     // Qt paints no caret on a read-only field, so the heading draws its own.
     var caret = null
-    for (var i = 0; i < done.heading.children.length; i++)
+    for (let i = 0; i < done.heading.children.length; i++)
       if (done.heading.children[i].lit !== undefined) caret = done.heading.children[i]
     verify(caret && caret.visible && caret.height > 0, "the heading shows a caret")
     key(Qt.Key_Up)

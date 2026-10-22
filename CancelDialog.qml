@@ -16,9 +16,9 @@ import QtQuick.Layouts
 // GoalsScreen's "cancelled" tab.
 //
 // True modal: a FocusScope so focus can be pushed into the dialog on
-// open and restored to wherever it was on close, and a scrim beneath the
-// card that dims the content and blocks every click/hover meant for it.
-// Unlike EventDialog, a click on the scrim does NOT dismiss -- this is
+// open and restored to wherever it was on close, and a clear full-window
+// MouseArea beneath the card that blocks every click/hover meant for the
+// content. Unlike EventDialog, a click outside the card does NOT dismiss -- this is
 // the destructive action in the app, so closing it always takes an
 // explicit Back/Cancel press (or Esc), never a stray click. The card is
 // sized to its own content instead of a fixed height -- an unsized
@@ -67,17 +67,13 @@ FocusScope {
   // should never be one accidental keystroke away while typing.
   Keys.onReturnPressed: root.confirm()
 
-  // Scrim: dims the content behind and blocks every click/hover meant
-  // for whatever is beneath it. No onClicked handler -- a stray click
-  // here is swallowed, not treated as a dismissal, because ending a goal
-  // is destructive and closing this dialog must always be an explicit
-  // Back/Cancel press or Esc.
-  Rectangle {
-    id: scrim
-    anchors.fill: parent
-    color: Theme.scrim
-    MouseArea { anchors.fill: parent; hoverEnabled: true }
-  }
+  // Clear, never a scrim: nothing dims the window behind a dialog (the
+  // user never wants a darkened background; bin/check's noscrim step).
+  // It blocks every click/hover meant for whatever is beneath it. No
+  // onClicked handler -- a stray click here is swallowed, not treated as a
+  // dismissal, because ending a goal is destructive and closing this
+  // dialog must always be an explicit Back/Cancel press or Esc.
+  MouseArea { anchors.fill: parent; hoverEnabled: true }
 
   Rectangle {
     id: card
@@ -88,7 +84,7 @@ FocusScope {
     border.color: Theme.border
     border.width: Theme.dialogBorderWidth
 
-    // Swallow clicks/hover so the scrim beneath never sees them.
+    // Swallow clicks/hover so the area beneath never sees them.
     MouseArea { anchors.fill: parent; hoverEnabled: true; onClicked: {} }
 
     ColumnLayout {

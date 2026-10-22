@@ -74,8 +74,8 @@ QtObject {
   function textForContrast(fg, bg, target) {
     if (contrastRatio(fg, bg) < target) return fg // as good as this theme gets
     var lo = 0, hi = 1
-    for (var i = 0; i < 12; i++) {
-      var mid = (lo + hi) / 2
+    for (let i = 0; i < 12; i++) {
+      const mid = (lo + hi) / 2
       if (contrastRatio(blend(fg, bg, mid), bg) >= target) hi = mid
       else lo = mid
     }
@@ -237,16 +237,11 @@ QtObject {
   readonly property int linkHitSlop: spaceSm
 
   // ---- dialogs -----------------------------------------------------------------
-  // The scrim every modal dialog lays over the window behind its card. Black
-  // at a fixed alpha, not a tint of the theme's foreground like the fills
-  // above: a scrim has to push the page back, and on a dark theme the
-  // foreground is light, so a foreground tint would brighten the page it is
-  // meant to dim. 45% takes the page clearly behind the card while its text
-  // stays recognisable, so you can still see what the dialog acts on. It
-  // was typed out in each of the three dialogs until they shared it here.
-  readonly property color scrim: Qt.rgba(0, 0, 0, 0.45)
+  // No scrim: the dialogs used to lay black at 45% over the window, and the
+  // user never wants a darkened background, so nothing dims it now
+  // (docs/layout-rules.md; bin/check's noscrim step).
   // The card's own border, twice a hairline so the card holds its edge
-  // against the scrim.
+  // against the page it sits on.
   readonly property int dialogBorderWidth: 2
   // A field that holds a short value (`How long`, `Estimate`), kept at this
   // width beside a field that fills the row. A size, not spacing.
@@ -358,9 +353,9 @@ QtObject {
   function parseToml(text) {
     var out = {}
     var lines = String(text || "").replace(/\r\n/g, "\n").split("\n")
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i].replace(/\s+$/, "")
-      var m = line.match(/^([A-Za-z0-9_-]+)\s*=\s*"([^"]*)"\s*$/)
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].replace(/\s+$/, "")
+      const m = line.match(/^([A-Za-z0-9_-]+)\s*=\s*"([^"]*)"\s*$/)
       if (!m) continue
       out[m[1]] = m[2]
     }

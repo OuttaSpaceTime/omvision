@@ -75,9 +75,6 @@ Item {
   // sets it.
   property bool writesDisabled: false
 
-  // The TextEdit, for a test that needs to type into it or read its cursor.
-  property alias editor: editor
-
   function openList(open) {
     root.listOpen = open
   }
@@ -123,13 +120,13 @@ Item {
   function buildEntries(files, contents, todayIso) {
     var out = []
     var sawToday = false
-    for (var i = 0; i < files.length; i++) {
-      var f = files[i]
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i]
       // The file list (found in one pass) and each file's content (loaded one
       // FileView at a time) settle at different speeds. Keep every discovered
       // file in the list from the start -- with a blank preview until its
       // content arrives -- so the list never reorders under the cursor.
-      var text = contents[f.path] !== undefined ? contents[f.path] : ""
+      const text = contents[f.path] !== undefined ? contents[f.path] : ""
       if (f.dateIso === todayIso) sawToday = true
       out.push({
         path: f.path,
@@ -157,7 +154,7 @@ Item {
   readonly property var entries: buildEntries(root.journalFiles, root.journalContents, root.todayIso)
 
   function findEntry(path) {
-    for (var i = 0; i < entries.length; i++) if (entries[i].path === path) return entries[i]
+    for (let i = 0; i < entries.length; i++) if (entries[i].path === path) return entries[i]
     return null
   }
 
@@ -327,8 +324,8 @@ Item {
     var day = Paths.journalDateIso(path)
     if (day === "") return ""
     var newer = ""
-    for (var i = 0; i < entries.length; i++) {
-      var d = entries[i].dateIso
+    for (let i = 0; i < entries.length; i++) {
+      const d = entries[i].dateIso
       if (step < 0) {
         if (d < day) return entries[i].path
       } else {
@@ -428,8 +425,8 @@ Item {
   // `@`, on Escape, or on a character a slug cannot hold (a space, say).
   readonly property var goals: {
     var out = []
-    for (var slug in root.goalsData) {
-      var m = root.goalsData[slug] ? root.goalsData[slug].meta : null
+    for (let slug in root.goalsData) {
+      const m = root.goalsData[slug] ? root.goalsData[slug].meta : null
       if (!m) continue
       // A goal file with no status: key is active, as on the Goals screen.
       out.push({ slug: slug, title: m.title, status: m.status || "active" })
@@ -447,7 +444,7 @@ Item {
   // slug -> title, what the highlighter sizes each tag's gap to.
   readonly property var goalTitles: {
     var out = {}
-    for (var i = 0; i < root.goals.length; i++) out[root.goals[i].slug] = root.goals[i].title
+    for (let i = 0; i < root.goals.length; i++) out[root.goals[i].slug] = root.goals[i].title
     return out
   }
 
@@ -541,8 +538,8 @@ Item {
   // highlighter already decided which tags count (a known slug, not inside
   // a code span or a link), so nothing here re-reads the text.
   function mentionAt(x, y) {
-    for (var i = 0; i < root.tagSpans.length; i++) {
-      var s = root.tagSpans[i]
+    for (let i = 0; i < root.tagSpans.length; i++) {
+      const s = root.tagSpans[i]
       if (x >= s.left && x <= s.x + s.width && y >= s.top && y <= s.top + s.height) return s.slug
     }
     return ""
@@ -592,14 +589,14 @@ Item {
     var disk = store.knownText(path)
     if (disk === undefined) return
     if (!root.bufferBased) {
-      var typed = root.bufferText
+      const typed = root.bufferText
       if (typed === "") {
         root.setBuffer(disk, true)
         root.placeCursor()
         return
       }
-      var merged = store.mergeTyped(disk, typed)
-      var cursor = editor.cursorPosition
+      const merged = store.mergeTyped(disk, typed)
+      const cursor = editor.cursorPosition
       root.bufferBased = true
       root.bufferBase = disk
       root.bufferText = merged
@@ -821,14 +818,19 @@ Item {
       // arm's length through a Loader so that a MarkdownHighlight module that
       // is missing, unbuilt or off the import path degrades to a plain-text
       // journal instead of failing the screen's import and taking the app
-      // down with it -- see JournalHighlight.qml.
+      // down with it -- see JournalHighlight.qml. For the same reason the
+      // screen never names the JournalHighlight type (an `as` cast would tie
+      // it to that type's import again), so its properties go in as
+      // setSource()'s initial properties: assigned in onLoaded, they were
+      // writes to members qmllint can't find on a plain QObject.
       Loader {
         id: highlightLoader
-        source: "JournalHighlight.qml"
+        Component.onCompleted: setSource("JournalHighlight.qml", {
+          document: editor.textDocument,
+          mentions: Qt.binding(function() { return root.goalTitles })
+        })
         onLoaded: {
           if (!item) return
-          item.document = editor.textDocument
-          item.mentions = Qt.binding(function() { return root.goalTitles })
           item.mentionSpansChanged.connect(function() { Qt.callLater(root.refreshTagSpans) })
         }
       }

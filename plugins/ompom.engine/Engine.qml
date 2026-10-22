@@ -73,8 +73,11 @@ Item {
   property bool breakIsLong: false
   property int snoozesUsed: 0
   property string sleepSkippedNight: ""
-  property string sleepNotesIso: ""
-  property var sleepNotesSaved: Cycle.fresh().sleepNotesSaved
+  property string journalDay: ""
+  property string journalText: ""
+  property string journalBase: ""
+  property bool journalLoaded: false
+  property bool journalFailed: false
   property bool cycleLogged: false
   property bool notesSaveFailed: false
   property bool notesSavePending: false
@@ -119,7 +122,7 @@ Item {
     return {
       nowMs: root.now().getTime(),
       durations: root.durations,
-      busy: { finishedLog: finishedRunLogProc.running, sleepSave: sleepNoteProc.running }
+      busy: { finishedLog: finishedRunLogProc.running, journalSave: journalWriteProc.running, journalRead: journalReadProc.running }
     }
   }
 
@@ -145,6 +148,8 @@ Item {
   function perform(fx) {
     for (var e of fx) {
       if (e.type === "log") root.startLog(e)
+      else if (e.type === "readJournal") root.readJournal(e)
+      else if (e.type === "writeJournal") root.writeJournal(e)
       else if (e.type === "listGoals") listGoalsProc.running = true
       else if (e.type === "writeActive") root.writeActiveGoal(e.slug)
       else if (e.type === "warn") console.warn(e.message)
@@ -170,6 +175,12 @@ Item {
   // The notes page's only write to the engine. No rule to run: the text is
   // just kept, and the log reads it when the break ends.
   function setNote(field, text) { root[field] = text }
+  // The night page's, likewise; a pause in the typing saves it
+  // (journalSaveTimer).
+  function setJournal(text) {
+    root.journalText = text
+    journalSaveTimer.restart()
+  }
 
   function statusJson() { return JSON.stringify(Cycle.status(root.state(), root.now().getTime())) }
   function snapshotJson() { return JSON.stringify(Cycle.snapshot(root.state(), root.now().getTime())) }
@@ -215,56 +226,81 @@ Item {
     return root.demo ? ["/bin/sh", "-c", "cat >/dev/null"] : [root.pythonBin, root.notesHelperPath].concat(args)
   }
 
-  // A log effect: the goal's log, or the day file when it has no goal.
-  // stdinEnabled must be re-armed before every run: Process.write() is a
-  // no-op once it's been turned off, and onStarted turns it off right after
-  // writing so the helper's stdin read() sees EOF. The demo goes through the
-  // same Process, exit code and all, so the save path it shows is the real
-  // one -- only the sink differs.
+  // A log effect: the goal's log, or the day file when it has no goal. The
+  // demo goes through the same Process, exit code and all, so the save path
+  // it shows is the real one -- only the sink differs.
   function startLog(e) {
-    var proc = { note: noteLogProc, finished: finishedRunLogProc, sleep: sleepNoteProc }[e.via]
-    proc.payload = e.entry
-    proc.cycle = e.cycle
-    proc.saved = e.saved || []
     if (root.demo) console.log("ompom demo, not saved:", e.entry)
-    proc.command = root.writeCommand(e.slug.length > 0 ? ["append-log", e.slug] : ["append-day"])
-    proc.stdinEnabled = true
-    proc.running = true
+    var proc = { note: noteLogProc, finished: finishedRunLogProc }[e.via]
+    proc.start(root.writeCommand(e.slug.length > 0 ? ["append-log", e.slug] : ["append-day"]), [e.cycle, e.entry], e.entry)
   }
 
-  // One log write: the entry goes to the helper's stdin, which is then
-  // closed so its read() sees EOF. When it exits, Cycle.<exited>() is told
-  // the code and the cycle it was started in. See notes-helper.py's own
-  // docstring for append-log/append-day: both are pure appends with no
-  // read-modify-write, opened O_APPEND with no read of the file first, so
-  // this is never racing a coaching session or Omvision rewriting the same
-  // file. Both exit non-zero and write nothing on a malformed entry.
-  component LogProcess: Process {
-    id: logProc
+  // One notes-helper.py call: `input` goes to its stdin, which is then
+  // closed so its read() sees EOF, and on exit Cycle.<exited>(code, ...args,
+  // stdout) runs. Quickshell ends the stdout stream before it emits exited
+  // (Process::onFinished), so the text is all there by then, and the rule
+  // may start the same process again from inside it. stdinEnabled is
+  // re-armed on every start: write() is a no-op once it's off.
+  component HelperProcess: Process {
+    id: helperProc
     property string exited
-    property string payload: ""
-    property int cycle: -1
-    property var saved: []
-    command: []
+    property var args: []
+    property string input: ""
+
+    function start(cmd, args, input) {
+      helperProc.command = cmd
+      helperProc.args = args
+      helperProc.input = input
+      helperProc.stdinEnabled = true
+      helperProc.running = true
+    }
+
+    stdout: StdioCollector { id: helperOut }
     onStarted: {
-      write(payload)
-      stdinEnabled = false
+      helperProc.write(helperProc.input)
+      helperProc.stdinEnabled = false
     }
     onExited: function(exitCode) {
-      var payload = logProc.payload
-      logProc.payload = ""
-      root.run(logProc.exited, exitCode, logProc.cycle, payload, logProc.saved)
+      root.run.apply(root, [helperProc.exited, exitCode].concat(helperProc.args, [helperOut.text]))
     }
   }
 
+  // See notes-helper.py's own docstring for append-log/append-day: both are
+  // pure appends with no read-modify-write, opened O_APPEND with no read of
+  // the file first, so they never race a coaching session or Omvision
+  // rewriting the same file. Both exit non-zero and write nothing on a
+  // malformed entry.
+  //
   // The break's one write (Cycle.saveNote()).
-  LogProcess { id: noteLogProc; exited: "noteLogExited" }
+  HelperProcess { id: noteLogProc; exited: "noteLogExited" }
   // The one write a mode switch and bedtime make on their way out
   // (Cycle.logFinishedRunOnTheWayOut()). Its own process: by the time it
   // exits the next cycle has begun.
-  LogProcess { id: finishedRunLogProc; exited: "finishedLogExited" }
-  // The night's notes (Cycle.saveSleepNotes()).
-  LogProcess { id: sleepNoteProc; exited: "sleepNoteExited" }
+  HelperProcess { id: finishedRunLogProc; exited: "finishedLogExited" }
+
+  // ---- the night's journal ---------------------------------------------------------
+  // Saved after this long without a keystroke: Omvision's journal waits the
+  // same (JournalScreen's writeDebounce), long enough that a write isn't
+  // started for every letter, short enough that a laptop shut mid-sentence
+  // loses at most the last few words.
+  Timer {
+    id: journalSaveTimer
+    interval: 800
+    onTriggered: root.run("saveJournal")
+  }
+
+  // Reads go to the real journal in the demo too, as list-goals does: the
+  // demo's page shows the real day, and only its writes go nowhere (the
+  // sink exits 0 like a write that landed).
+  function readJournal(e) {
+    journalReadProc.start([root.pythonBin, root.notesHelperPath, "read-journal", e.day], [e.cycle, e.day], "")
+  }
+  function writeJournal(e) {
+    journalWriteProc.start(root.writeCommand(["write-journal", e.day]), [e.cycle, e.day, e.base, e.text],
+                           JSON.stringify({ base: e.base, text: e.text }))
+  }
+  HelperProcess { id: journalReadProc; exited: "journalReadExited" }
+  HelperProcess { id: journalWriteProc; exited: "journalWriteExited" }
 
   // Best-effort, matching every other notes-helper call in this file: a
   // failed write here never blocks anything, it just means Omvision's idea

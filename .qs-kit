@@ -1,7 +1,7 @@
 # What ~/Code/qs-kit/bin/qs-check (run by bin/check) needs to know about
 # Omvision. Sourced by bash.
 APP=omvision
-STEPS=(lint px plugins load test)
+STEPS=(lint px noscrim plugins load test)
 # plugins/ holds the ompom omarchy-shell plugins: they import the shell's
 # qs.Commons, not this app's Theme, so neither the lint baseline nor the px
 # rule applies to them. The plugins step checks them instead.

@@ -53,7 +53,7 @@ TestCase {
     var e = Parser.parseLogEntries(c.text, now)
     compare(e.length, 1, "one entry")
     var got = {}
-    for (var k in c.parsed) got[k] = e[0][k]
+    for (let k in c.parsed) got[k] = e[0][k]
     compare(got, c.parsed)
     compare(e[0].type, "pomodoro")
   }
@@ -65,7 +65,7 @@ TestCase {
     var e = Parser.parseLogEntries(c.text, now)
     compare(e.length, 1, "one entry")
     var got = {}
-    for (var k in c.parsed) got[k] = e[0][k]
+    for (let k in c.parsed) got[k] = e[0][k]
     compare(got, c.parsed)
     compare(e[0].type, "event")
   }

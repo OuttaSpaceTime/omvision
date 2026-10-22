@@ -11,9 +11,12 @@ import "Util.js" as Util
 // Writes go through a SerialFileWriter, one at a time, each carrying the
 // path and text it was queued with. That is what makes "switch days
 // mid-write" safe: a write already headed for day A still lands as day A's
-// even when the screen has moved on to B by the time it runs. The journal is
-// Omvision's alone -- no second writer to race against -- so a plain atomic
-// whole-file write is the right tool, no O_APPEND trick like the logs need.
+// even when the screen has moved on to B by the time it runs. The only other
+// writer is the ompom overlay's night page, while it covers the screen and
+// nothing here is being typed, and it never writes over text it didn't read
+// (goal-files.md §5); syncBufferFromDisk() takes its change in. So a plain
+// atomic whole-file write is the right tool, no O_APPEND trick like the logs
+// need.
 //
 // ---- Never write a day whose disk text is unknown ---------------------------
 // omvision.qml discovers journal files with a `find` every 2s and then reads
@@ -86,7 +89,7 @@ QtObject {
   // first; the head is the one in progress.
   property var resolveQueue: []
 
-  readonly property bool busy: files.busy || resolveQueue.length > 0
+  readonly property bool busy: store.files.busy || resolveQueue.length > 0
 
   signal saved(string path, string text)
   signal failed(string path, string message)
@@ -102,18 +105,18 @@ QtObject {
     if (store.journalContents[path] !== undefined) return store.journalContents[path]
     return undefined
   }
-  function pendingTextFor(path) { return files.pendingTextFor(path) }
+  function pendingTextFor(path) { return store.files.pendingTextFor(path) }
   function waitingTextFor(path) { return store.waiting[path] }
   function hasPending(path) {
-    return files.hasPending(path) || store.waiting[path] !== undefined
+    return store.files.hasPending(path) || store.waiting[path] !== undefined
            || store.resolveQueue.indexOf(path) >= 0
   }
 
   function setWaiting(path, text) {
     if (text === undefined || text === "") {
       if (store.waiting[path] === undefined) return
-      var d = {}
-      for (var k in store.waiting) if (k !== path) d[k] = store.waiting[k]
+      const d = {}
+      for (let k in store.waiting) if (k !== path) d[k] = store.waiting[k]
       store.waiting = d
     } else {
       store.waiting = Util.withKey(store.waiting, path, text)
@@ -131,7 +134,7 @@ QtObject {
 
   function save(path, text, based) {
     if (store.writesDisabled || path === "") return
-    var pending = files.pendingTextFor(path)
+    var pending = store.files.pendingTextFor(path)
     var known = pending !== undefined ? pending : store.knownText(path)
     if (!based || known === undefined) {
       // Nothing typed is nothing to keep: opening a day must not create its
@@ -165,21 +168,21 @@ QtObject {
         store.failed(path, "Couldn't save the last change -- it's still here, not on disk.")
       }
     }
-    if (blank) files.remove(path, done, { supersede: true })
-    else files.write(path, text, done, { supersede: true })
+    if (blank) store.files.remove(path, done, { supersede: true })
+    else store.files.write(path, text, done, { supersede: true })
   }
 
   function prune() {
     var d = {}
     var changed = false
-    for (var k in store.written) {
+    for (let k in store.written) {
       // Kept while work on the day is under way, and until omvision.qml's own
       // read says the same thing; then that read answers knownText() alike.
       // The open day is dropped too: its record kept for good would hide
       // a change made to the file from outside, which syncBufferFromDisk()
       // is there to take. A file `find` does not list reads as "", which is
       // how a day this store deleted stops being kept.
-      var disk = store.journalContents[k] !== undefined ? store.journalContents[k] : ""
+      const disk = store.journalContents[k] !== undefined ? store.journalContents[k] : ""
       if (store.hasPending(k) || disk !== store.written[k]) { d[k] = store.written[k]; continue }
       changed = true
     }
@@ -196,8 +199,8 @@ QtObject {
 
   function startResolve() {
     if (store.resolveQueue.length === 0) return
-    mkdirProc.command = ["/usr/bin/mkdir", "-p", Paths.journalDir]
-    mkdirProc.running = true
+    store.mkdirProc.command = ["/usr/bin/mkdir", "-p", Paths.journalDir]
+    store.mkdirProc.running = true
   }
 
   // Ends the head job; `text` is the day's disk text, or undefined when it
@@ -207,7 +210,7 @@ QtObject {
     store.resolveQueue = store.resolveQueue.slice(1)
     if (text !== undefined) {
       store.setWritten(path, text)
-      var typed = store.waiting[path]
+      const typed = store.waiting[path]
       store.setWaiting(path, undefined)
       if (path === store.openPath) {
         // The screen's buffer may hold more than `waiting` by now; it merges
@@ -221,7 +224,8 @@ QtObject {
   }
 
   property Process mkdirProc: Process {
-    id: mkdirProc
+    // No id: one named mkdirProc would shadow this property (qmllint's
+    // [id-shadows-member]), and the functions above reach it as store.mkdirProc.
     onExited: function(exitCode, exitStatus) {
       var path = store.resolveQueue[0]
       if (exitCode !== 0) {
@@ -245,12 +249,12 @@ QtObject {
       }
       // Through the writer's queue, so the read lands after any write to
       // this path that is already on its way.
-      files.probe(path, function(exists, text) {
+      store.files.probe(path, function(exists, text) {
         if (!exists) store.failed(path, "Couldn't read the day's file -- nothing was written.")
         store.finishResolve(path, exists ? text : undefined)
       })
     }
   }
 
-  property SerialFileWriter files: SerialFileWriter { id: files }
+  property SerialFileWriter files: SerialFileWriter {}
 }

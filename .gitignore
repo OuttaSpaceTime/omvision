@@ -12,6 +12,10 @@
 # built by highlighter/build.sh
 /MarkdownHighlight/
 /highlighter/build/
+/highlighter/compile_flags.txt
+
+# built by bin/qmlls each time the language server starts
+/.qmlls/
 
 # agent worktrees (Claude Code): each one is a whole second checkout
 /.claude/worktrees/

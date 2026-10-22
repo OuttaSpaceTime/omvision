@@ -12,9 +12,9 @@ import "Util.js" as Util
 // read-back -- this dialog itself never touches the filesystem).
 //
 // True modal: a FocusScope so focus can be pushed into the dialog on
-// open and restored to wherever it was on close, a scrim beneath the
-// card that dims the content, blocks every click/hover meant for it,
-// and dismisses on a stray click (this dialog is not destructive,
+// open and restored to wherever it was on close, a clear full-window
+// MouseArea beneath the card that blocks every click/hover meant for the
+// content and dismisses on a stray click (this dialog is not destructive,
 // unlike CancelDialog), and a card sized to its own content instead of
 // a fixed height -- an unsized Rectangle here previously rendered as a
 // zero-height box, which is why the dialog used to draw straight over
@@ -86,19 +86,16 @@ FocusScope {
 
   Keys.onEscapePressed: root.dismissed()
 
-  // Scrim: dims the content behind and, being the topmost item under the
-  // pointer with hoverEnabled, absorbs every click and hover meant for
-  // whatever is beneath it. A plain click here dismisses the dialog --
-  // it is additive, not destructive (contrast CancelDialog).
-  Rectangle {
-    id: scrim
+  // Clear, never a scrim: nothing dims the window behind a dialog (the
+  // user never wants a darkened background; bin/check's noscrim step).
+  // Being the topmost item under the pointer with hoverEnabled, it absorbs
+  // every click and hover meant for whatever is beneath it. A plain click
+  // here dismisses the dialog -- it is additive, not destructive (contrast
+  // CancelDialog).
+  MouseArea {
     anchors.fill: parent
-    color: Theme.scrim
-    MouseArea {
-      anchors.fill: parent
-      hoverEnabled: true
-      onClicked: root.dismissed()
-    }
+    hoverEnabled: true
+    onClicked: root.dismissed()
   }
 
   Rectangle {
@@ -110,7 +107,7 @@ FocusScope {
     border.color: Theme.border
     border.width: Theme.dialogBorderWidth
 
-    // Swallow clicks/hover so the scrim beneath never sees them, and a
+    // Swallow clicks/hover so the area beneath never sees them, and a
     // click inside the card never dismisses it.
     MouseArea { anchors.fill: parent; hoverEnabled: true; onClicked: {} }
 

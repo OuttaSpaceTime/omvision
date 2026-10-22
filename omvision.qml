@@ -100,12 +100,12 @@ ShellRoot {
     var lines = String(text || "").split("\n")
     var slugs = []
     var logStems = []
-    for (var i = 0; i < lines.length; i++) {
-      var p = lines[i].trim()
+    for (let i = 0; i < lines.length; i++) {
+      const p = lines[i].trim()
       if (p === "") continue
-      var base = p.replace(/^.*\//, "")
+      const base = p.replace(/^.*\//, "")
       if (!base.match(/\.md$/)) continue
-      var stem = base.replace(/\.md$/, "")
+      const stem = base.replace(/\.md$/, "")
       if (stem.match(/\.log$/)) { // "<slug>.log.md" — the log, not the goal file
         logStems.push(stem.replace(/\.log$/, ""))
         continue
@@ -121,9 +121,9 @@ ShellRoot {
     // Today showed nothing for a run that is sitting right there on disk.
     // They get loaded separately and shown on Today under their slug.
     var have = {}
-    for (var h = 0; h < slugs.length; h++) have[slugs[h]] = true
+    for (let h = 0; h < slugs.length; h++) have[slugs[h]] = true
     var orphans = []
-    for (var l = 0; l < logStems.length; l++) {
+    for (let l = 0; l < logStems.length; l++) {
       if (!have[logStems[l]]) orphans.push(logStems[l])
     }
     orphans.sort()
@@ -296,11 +296,11 @@ ShellRoot {
     var todayKey = Parser.dayKey(new Date())
     var today = []
     function collect(list) {
-      for (var i = 0; i < list.length; i++) {
+      for (let i = 0; i < list.length; i++) {
         if (Parser.dayKey(list[i].date) === todayKey) today.push(list[i])
       }
     }
-    for (var slug in data) collect(data[slug].logEntries || [])
+    for (let slug in data) collect(data[slug].logEntries || [])
     collect(entries || [])
     return { poms: Parser.pomodoroCount(today), minutes: Parser.pomodoroMinutes(today) }
   }
@@ -406,10 +406,10 @@ ShellRoot {
   function applyJournalList(text) {
     var lines = String(text || "").split("\n")
     var files = []
-    for (var i = 0; i < lines.length; i++) {
-      var p = lines[i].trim()
+    for (let i = 0; i < lines.length; i++) {
+      const p = lines[i].trim()
       if (p === "") continue
-      var dateIso = Paths.journalDateIso(p)
+      const dateIso = Paths.journalDateIso(p)
       if (dateIso === "") continue
       files.push({ path: p, dateIso: dateIso })
     }
@@ -533,10 +533,11 @@ ShellRoot {
                 && Quickshell.env("OMVISION_SHOT_DIR") !== ""
         source: "ShotDriver.qml"
         onLoaded: {
-          item.app = root
-          item.journal = journalScreen
-          item.goalDetail = goalDetailScreen
-          item.target = contentRoot
+          const driver = item as ShotDriver
+          driver.app = root
+          driver.journal = journalScreen
+          driver.goalDetail = goalDetailScreen
+          driver.target = contentRoot
         }
       }
 
@@ -545,22 +546,32 @@ ShellRoot {
       // the way ShotDriver does for screenshots. Qt's qmltestrunner can't
       // load Quickshell's modules, so a test that needs the real screens,
       // FileViews and write paths has to run inside `qs` like this. The file
-      // must declare every property set below. Unset or empty, nothing is
+      // must declare every property passed below. Unset or empty, nothing is
       // loaded -- a normal launch never sees it. Behind everything for the
       // same reason as the driver: anything it draws must not cover the app.
+      //
+      // The properties go in as setSource()'s initial properties, not as
+      // assignments in onLoaded the way the driver gets them: the test's
+      // type lives under tests/ and the app can't name it, so `item` would
+      // be a plain QObject to qmllint, with none of these members. Initial
+      // properties still fire their change handlers, in the order listed,
+      // as the properties are set -- before the test file's own bindings
+      // and Component.onCompleted, which works because a read evaluates a
+      // pending binding, so started() still sees `today`.
       Loader {
         anchors.fill: parent
         z: -1
         readonly property string testFile: Quickshell.env("OMVISION_TEST") || ""
-        active: testFile !== ""
-        source: testFile === "" ? "" : (testFile.charAt(0) === "/" ? "file://" + testFile : Qt.resolvedUrl(testFile))
-        onLoaded: {
-          item.app = root
-          item.journal = journalScreen
-          item.goalDetail = goalDetailScreen
-          item.coaching = coachingScreen
-          item.target = contentRoot
-          item.window = window
+        Component.onCompleted: {
+          if (testFile === "") return
+          setSource(testFile.charAt(0) === "/" ? "file://" + testFile : Qt.resolvedUrl(testFile), {
+            app: root,
+            journal: journalScreen,
+            goalDetail: goalDetailScreen,
+            coaching: coachingScreen,
+            target: contentRoot,
+            window: window
+          })
         }
       }
 

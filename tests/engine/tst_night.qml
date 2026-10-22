@@ -3,7 +3,7 @@ import QtQuick
 import "../../Parser.js" as Parser
 
 // Bedtime and the night, on the engine's clock: "Time to sleep" at 22:15,
-// the snoozes, the night's screen from 22:20, its notes, and 05:30.
+// the snoozes, the night's screen from 22:20, its journal page, and 05:30.
 EngineTest {
   name: "night"
 
@@ -23,7 +23,7 @@ EngineTest {
 
   function test_three_snoozes_of_a_minute() {
     clockAt(0, 22, 16)
-    for (var n = 3; n > 0; n--) {
+    for (let n = 3; n > 0; n--) {
       compare(item("snoozeButton").label, "+1 minute (" + n + " left)")
       click("snoozeButton")
       compare(engine.phase, "snooze")
@@ -44,47 +44,54 @@ EngineTest {
     compare(engine.phase, "sleep", "even mid-snooze")
     verify(engine.overlayVisible)
     verify(near(engine.remaining, 7 * 3600 + 9 * 60), "counting down to 05:30")
-    compare(engine.countdownLabel, "7:09", "in hours and minutes")
+    verify(/^7:0[89]:\d\d$/.test(engine.countdownLabel), "in hours, minutes and seconds: " + engine.countdownLabel)
     item("takeNotesButton")
     verify(!shows("extendBreakButton:1") && !shows("snoozeButton") && !shows("goodNightButton"))
     key(Qt.Key_G, Qt.ControlModifier)
     verify(!overlay.goalPickerOpen, "and no goal picker")
   }
 
-  // Each close of the page saves it to the day file, 0 minutes long, under
-  // the night's one heading and id, and the page keeps its text.
-  function test_the_nights_notes_are_saved_on_each_close() {
+  function journalFile() { return "journal/" + Parser.dayKey(engine.now()) + ".md" }
+  function editor() { return item("journalEditor") }
+
+  // Take notes opens the day's journal on its text, with the caret at the
+  // end, and what's typed is saved into the file itself -- the day file
+  // gets nothing. A save Omvision made meanwhile isn't written over.
+  function test_the_nights_page_is_the_days_journal() {
     clockAt(0, 22, 21)
+    writeFile(journalFile(), "morning\n")
     var log = dayLog()
     click("takeNotesButton")
-    tryVerify(function() { return section("done").edit.activeFocus }, 4000, "the caret in What's done?")
+    tryVerify(function() { return editor().activeFocus && editor().text === "morning\n" }, 4000, "today's journal, focused")
+    compare(editor().cursorPosition, editor().length, "the caret at the end")
+    verify(!shows("noteSection:done"), "no questions")
     type("lights out")
-    key(Qt.Key_Escape)
-    compare(engine.phase, "sleep")
-    tryVerify(function() { return allEntries(log).length === 1 }, 4000, "the night's notes are saved")
-    var saved = allEntries(log)[0]
-    compare(saved.minutes, 0)
-    compare(saved.done, "lights out")
-    compare(Parser.pomodoroCount([saved]), 0, "notes, not a pomodoro")
-    tryCompare(engine, "sleepNotesSaved", ["lights out", "", ""])
-    compare(engine.doneText, "lights out", "the page keeps its text")
+    expectFile(journalFile(), "morning\nlights out", 4000, "saved as it's typed")
+    compare(allEntries(log).length, 0, "nothing in the day file")
 
+    key(Qt.Key_Escape)
+    writeFile(journalFile(), "morning\nlights out\nfrom omvision")
     click("takeNotesButton")
-    tryVerify(function() { return section("done").edit.activeFocus }, 4000, "the caret back")
-    compare(section("done").edit.text, "lights out", "a reopened page shows the night's notes")
+    tryCompare(editor(), "text", "morning\nlights out\nfrom omvision", 4000, "a reopened page reads the file again")
+    type(" too")
+    writeFile(journalFile(), "changed in omvision")
+    expectFile(journalFile(), "changed in omvision too", 4000,
+               "a save made meanwhile is kept, with the page's typing after it")
+    tryCompare(editor(), "text", "changed in omvision too", 4000, "the page shows it")
+    compare(editor().cursorPosition, editor().length, "and writing goes on at the end")
+  }
+
+  // Qt drops a byte-order mark the helper would otherwise count as text, so
+  // every save would look like the file had changed under it.
+  function test_a_journal_with_a_byte_order_mark_still_saves() {
+    clockAt(0, 22, 21)
+    writeFile(journalFile(), "\ufeffmorning")
+    click("takeNotesButton")
+    tryCompare(editor(), "text", "morning", 4000)
     key(Qt.Key_End, Qt.ControlModifier)
-    type("\nand a book")
-    key(Qt.Key_Escape)
-    tryVerify(function() { return (readFile(log).match(/ · 0m$/mg) || []).length === 2 }, 4000, "saved again")
-    var night = allEntries(log)
-    compare(night.length, 1, "read as the one entry")
-    compare(night[0].done, "lights out\nand a book")
-    compare(night[0].id, saved.id, "under the same id")
-    tryCompare(engine, "sleepNotesSaved", ["lights out\nand a book", "", ""])
-    click("takeNotesButton")
-    key(Qt.Key_Escape)
-    wait(300)
-    compare((readFile(log).match(/ · 0m$/mg) || []).length, 2, "a close that changed nothing appends nothing")
+    type(".")
+    expectFile(journalFile(), "morning.", 4000)
+    verify(!engine.journalFailed)
   }
 
   function test_skip_sleep_lasts_the_night() {
@@ -99,24 +106,26 @@ EngineTest {
   function test_the_night_survives_a_deploy_at_any_hour() {
     clockAt(1, 1, 0)
     compare(engine.phase, "sleep", "a fresh engine after 22:20 goes straight to the night")
-    engine.setNote("doneText", "late")
+    writeFile(journalFile(), "late")
+    click("takeNotesButton")
+    tryCompare(editor(), "text", "late", 4000)
     var r = engine.restore(engine.snapshotJson())
     compare(r.indexOf("error"), -1, r)
     compare(engine.phase, "sleep")
-    compare(engine.doneText, "late")
+    tryVerify(function() { return engine.journalLoaded && editor().text === "late" }, 4000, "the open page is read again")
   }
 
   function test_05_30_saves_the_page_and_starts_the_day() {
     clockAt(1, 1, 0)
     click("takeNotesButton")
-    tryVerify(function() { return section("done").edit.activeFocus }, 4000, "the caret in What's done?")
+    tryVerify(function() { return editor().activeFocus && engine.journalLoaded }, 4000, "the page, read")
+    var file = journalFile()
     type("x")
-    var log = dayLog()
     clockAt(1, 5, 31)
     compare(engine.phase, "focus", "05:30 starts a fresh run")
     verify(!engine.overlayVisible && !engine.notesOpen)
     verify(near(engine.remaining, engine.normalFocusSec))
-    tryVerify(function() { return allEntries(log).length === 1 }, 4000, "notes left open at 05:30 are saved")
+    expectFile(file, function(t) { return /x$/.test(t) }, 4000, "typing left at 05:30 is saved")
   }
 
   // Bedtime is a hard limit, not a pomodoro: a timer switched off or paused

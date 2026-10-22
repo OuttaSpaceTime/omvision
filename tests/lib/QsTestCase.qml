@@ -120,7 +120,7 @@ TestCase {
     // test (TestCase throws), true lets it go on.
     function outcome(ok, detail) {
       if (pendingXfail !== "") {
-        var why = pendingXfail, aborts = pendingXfailAborts
+        const why = pendingXfail, aborts = pendingXfailAborts
         pendingXfail = ""
         if (ok) { failures = failures.concat(["XPASS (expected to fail: " + why + "): " + detail]); return true }
         xfails = xfails.concat([why])
@@ -159,7 +159,7 @@ TestCase {
   // ---- running ----------------------------------------------------------------
   function testFunctions() {
     var names = []
-    for (var p in base) {
+    for (let p in base) {
       if (p.indexOf("test_") === 0 && typeof base[p] === "function") names.push(p)
     }
     names.sort()
@@ -183,8 +183,8 @@ TestCase {
       return
     }
     var names = testFunctions()
-    for (var i = 0; i < names.length; i++) {
-      var status = runOne(names[i])
+    for (let i = 0; i < names.length; i++) {
+      const status = runOne(names[i])
       counts[status]++
     }
     say("DONE " + base.fileName + " " + counts.pass + " passed, " + counts.fail + " failed, "
@@ -196,7 +196,7 @@ TestCase {
     try {
       fn()
     } catch (e) {
-      var m = String(e && e.message !== undefined ? e.message : e)
+      const m = String(e && e.message !== undefined ? e.message : e)
       if (m.indexOf("QtQuickTest::") !== 0)
         results.failures = results.failures.concat(["uncaught exception: " + m
           + (e && e.fileName ? " (" + String(e.fileName).replace(/^.*\//, "") + ":" + e.lineNumber + ")" : "")])
@@ -231,35 +231,40 @@ TestCase {
       if (result.saveToFile(path)) say("SHOT " + path)
       done = true
     })
-    for (var t = 0; t < 3000 && !done; t += 50) wait(50)
+    for (let t = 0; t < 3000 && !done; t += 50) wait(50)
   }
 
   // ---- shell commands -----------------------------------------------------------
+  // A named type, so run() can cast what createObject() returns to it:
+  // createObject() is typed as returning a plain QObject, and qmllint then
+  // finds none of these members on it.
+  component RunProcess: Process {
+    id: proc
+    property bool finished: false
+    property int code: -1
+    property string out: ""
+    property bool streamDone: false
+    stdout: StdioCollector {
+      onStreamFinished: { proc.out = text; proc.streamDone = true }
+    }
+    onExited: function(exitCode, exitStatus) { proc.code = exitCode; proc.finished = true }
+  }
+
   Component {
     id: processComponent
-    Process {
-      id: proc
-      property bool finished: false
-      property int code: -1
-      property string out: ""
-      property bool streamDone: false
-      stdout: StdioCollector {
-        onStreamFinished: { proc.out = text; proc.streamDone = true }
-      }
-      onExited: function(exitCode, exitStatus) { proc.code = exitCode; proc.finished = true }
-    }
+    RunProcess {}
   }
 
   // Runs argv to completion and returns { code, out }. Waits with wait(),
   // which keeps the event loop turning meanwhile.
   function run(argv, ms) {
-    var p = processComponent.createObject(base, { command: argv })
+    var p = processComponent.createObject(base, { command: argv }) as RunProcess
     p.running = true
     var limit = ms || 10000
     var t = 0
     for (; t < limit && !p.finished; t += 10) wait(10)
     // stdout's end can arrive a turn after the exit.
-    for (var s = 0; s < 500 && !p.streamDone; s += 10) wait(10)
+    for (let s = 0; s < 500 && !p.streamDone; s += 10) wait(10)
     var r = { code: p.finished ? p.code : -1, out: p.out }
     p.destroy()
     return r
@@ -299,7 +304,7 @@ TestCase {
     var limit = ms || base.timeout
     var ok = function(t) { return typeof want === "function" ? want(t) : t === want }
     var text = readFile(rel)
-    for (var t = 0; t < limit && !ok(text); t += 100) { wait(100); text = readFile(rel) }
+    for (let t = 0; t < limit && !ok(text); t += 100) { wait(100); text = readFile(rel) }
     if (!ok(text)) {
       qtest_fail((msg ? msg + ": " : "") + rel + " is " + results.stringify(text)
                  + (typeof want === "function" ? "" : ", expected " + results.stringify(want)), 1)
@@ -313,8 +318,8 @@ TestCase {
   function expectFileUnchanged(rel, ms, msg) {
     var want = fixtureText(rel)
     var limit = ms || 1500
-    for (var t = 0; t <= limit; t += 100) {
-      var text = readFile(rel)
+    for (let t = 0; t <= limit; t += 100) {
+      const text = readFile(rel)
       if (text !== want) {
         qtest_fail((msg ? msg + ": " : "") + rel + " changed to " + results.stringify(text)
                    + ", expected it untouched: " + results.stringify(want), 1)
@@ -328,7 +333,7 @@ TestCase {
   function readFixture(files) {
     var prefix = base.home + "/Notes/Omvision/"
     var fx = {}
-    for (var i = 0; i < files.length; i++) {
+    for (let i = 0; i < files.length; i++) {
       if (files[i].indexOf(prefix) !== 0) continue
       fx[files[i].slice(prefix.length)] = readFile(files[i])
     }
@@ -355,7 +360,7 @@ TestCase {
   // ---- finding and clicking things -----------------------------------------------
   function effectiveOpacity(it) {
     var o = 1
-    for (var p = it; p; p = p.parent) o *= p.opacity
+    for (let p = it; p; p = p.parent) o *= p.opacity
     return o
   }
 
@@ -363,8 +368,8 @@ TestCase {
     if (!root) return null
     if (root.objectName === name && root.visible) return root
     var kids = root.children
-    for (var i = 0; kids && i < kids.length; i++) {
-      var r = findNamed(kids[i], name)
+    for (let i = 0; kids && i < kids.length; i++) {
+      const r = findNamed(kids[i], name)
       if (r) return r
     }
     return null
@@ -393,9 +398,9 @@ TestCase {
   // ends up under that point.
   function settle(it) {
     var last = null
-    for (var t = 0; t < 2000; t += 50) {
-      var p = it.mapToItem(base.target, 0, 0)
-      var here = p.x + "," + p.y + "," + it.width + "," + it.height
+    for (let t = 0; t < 2000; t += 50) {
+      const p = it.mapToItem(base.target, 0, 0)
+      const here = p.x + "," + p.y + "," + it.width + "," + it.height
       if (here === last) return
       last = here
       wait(50)
@@ -417,8 +422,8 @@ TestCase {
   }
 
   function type(text) {
-    for (var i = 0; i < text.length; i++) {
-      var c = text.charAt(i)
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charAt(i)
       if (c === "\n") keyClick(Qt.Key_Return)
       else keyClick(c)
     }

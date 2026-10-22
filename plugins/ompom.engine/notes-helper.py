@@ -18,8 +18,9 @@ is no daily-notes file with a rollover any more -- that mechanism
 the ~/.local/state/ompom/notes-day marker) has been retired along with
 the `save-note` subcommand that owned it. Existing files under those
 paths are left on disk as history; nothing here reads or writes them
-any more. This script now owns three things: goal logs, day logs, and
-the active-goal pointer.
+any more. This script now owns four things: goal logs, day logs, the
+active-goal pointer, and the night overlay's reads and writes of
+Omvision's journal.
 
 Each directory component from $HOME down is opened with O_NOFOLLOW via
 its parent's already-open directory fd (creating it first if missing);
@@ -58,10 +59,28 @@ Subcommands:
                           append-log, for the same reason.
   read-active/write-active  the single-line slug (or empty) at
                           ~/.local/state/omvision/active-goal.
+  read-journal <day>      print ~/Notes/Omvision/journal/<day>.md as it
+                          is (nothing for a day with no file). Exits 1,
+                          printing nothing, for a file it can't read
+                          whole -- over MAX_JOURNAL_BYTES, not UTF-8, not
+                          a plain file -- since the night page would
+                          otherwise save a cut copy back over it.
+  write-journal <day>     read {"base", "text"} from stdin and replace the
+                          day's journal with `text`, but only if the file
+                          still says `base` (what the night page last read
+                          or wrote). If it doesn't -- Omvision wrote the
+                          day meanwhile -- nothing is written, the file's
+                          text goes to stdout, and the exit code is 3, so
+                          the engine can merge and try again. A blank
+                          `text` deletes the day, as Omvision does with an
+                          emptied page. Whole-file and atomic (temp file,
+                          rename), not an append: the journal is free
+                          text edited anywhere, not a log.
 
 <slug> is validated against a closed character class before it is ever
 used as a path component (see SLUG_RE below) -- for append-log that
-validation happens before any directory is even opened.
+validation happens before any directory is even opened. <day> likewise
+(DAY_RE, and a real calendar date).
 """
 import datetime
 import json
@@ -74,6 +93,14 @@ from contextlib import ExitStack, contextmanager
 MAX_NOTE_INPUT_BYTES = 20_000
 MAX_GOAL_FILE_BYTES = 200_000
 MAX_SLUG_BYTES = 128
+# A journal day is a few kilobytes; this is far past any real one, and a
+# file over it is refused whole rather than read in part (see read-journal).
+MAX_JOURNAL_BYTES = 1_000_000
+# write-journal's stdin carries the day twice (base and text), JSON-escaped:
+# a newline is two bytes there, and a control character six.
+MAX_JOURNAL_INPUT_BYTES = 12 * MAX_JOURNAL_BYTES
+# write-journal's exit code when the file no longer says `base`.
+EXIT_JOURNAL_CHANGED = 3
 
 # The character class alone rules out '/', '.', '..', NUL and uppercase;
 # fullmatch pins the check to the whole string, not just a prefix, so
@@ -82,9 +109,24 @@ SLUG_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
 
 ACTIVE_GOAL_NAME = "active-goal"
 
+# Omvision's journal file names (Paths.journalFile): the shape alone keeps
+# '/' and '..' out, and valid_day() then wants a real date, so the engine
+# can't create a file Omvision's journal would never list.
+DAY_RE = re.compile(r"\d{4}-\d\d-\d\d")
+
 
 def valid_slug(slug):
     return bool(SLUG_RE.fullmatch(slug))
+
+
+def valid_day(day):
+    if not DAY_RE.fullmatch(day):
+        return False
+    try:
+        datetime.date.fromisoformat(day)
+    except ValueError:
+        return False
+    return True
 
 
 @contextmanager
@@ -131,14 +173,17 @@ def read_capped(dir_fd, name, cap):
         os.close(fd)
 
 
-def write_atomic(dir_fd, name, data):
+def write_atomic(dir_fd, name, data, mode=0o600):
     """Write `data` to `name` under dir_fd via temp-file-then-rename,
     both confined to dir_fd. The destination is never opened for writing
     directly, so a symlink dropped in its place is never followed --
-    rename() only ever replaces the directory entry named `name`."""
+    rename() only ever replaces the directory entry named `name`. The
+    file ends up with `mode` exactly (fchmod, not the umask-filtered
+    create mode), so a rewrite can keep an existing file's mode."""
     tmp = f".{name}.{os.getpid()}.tmp"
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=dir_fd)
     try:
+        os.fchmod(fd, mode)
         with os.fdopen(fd, "wb") as f:
             f.write(data)
             f.flush()
@@ -284,8 +329,9 @@ def build_log_entry(payload):
         body = f"{title}\n"
     else:
         # The entry's id is its `started`, to the second (goal-files.md
-        # §4): a re-save of the same entry -- the night's notes, every time
-        # the page is closed -- repeats it, and readers keep the last entry
+        # §4): a re-save of the same entry -- as the night's notes were,
+        # each time their page closed, until the night's page became the
+        # journal -- repeats it, and readers keep the last entry
         # per id. A key whose answer was left blank is left out, as §4 has
         # always said. `focus` only comes from older engines, which asked
         # for it before every run.
@@ -336,12 +382,44 @@ def handle_read_active(state_fd):
     print(slug)
 
 
+class JournalUnreadable(Exception):
+    pass
+
+
+def read_journal_day(journal_fd, name):
+    """The day's text, "" for a day with no file. Raises JournalUnreadable
+    for anything it can't read whole: the caller would write the page
+    back over the file, so a part of it read as all of it would cut the
+    rest off for good."""
+    data = read_capped(journal_fd, name, MAX_JOURNAL_BYTES)
+    if data is None:
+        raise JournalUnreadable("not a plain file")
+    if len(data) > MAX_JOURNAL_BYTES:
+        raise JournalUnreadable(f"over {MAX_JOURNAL_BYTES} bytes")
+    try:
+        # utf-8-sig: a byte-order mark isn't part of the text. Qt drops it
+        # when the engine decodes this output, so a BOM kept here would make
+        # every write-journal look like the file changed under it.
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError as e:
+        raise JournalUnreadable(f"not UTF-8: {e}") from None
+
+
+def journal_dir_fd(stack):
+    home_fd = stack.enter_context(opened(home_dir_fd()))
+    notes_fd = stack.enter_context(opened(sub_dir_fd(home_fd, "Notes")))
+    omvision_fd = stack.enter_context(opened(sub_dir_fd(notes_fd, "Omvision")))
+    return stack.enter_context(opened(sub_dir_fd(omvision_fd, "journal")))
+
+
 USAGE = """\
 usage: notes-helper.py list-goals
        notes-helper.py append-log <slug> < entry.json
        notes-helper.py append-day < entry.json
        notes-helper.py read-active
        notes-helper.py write-active < slug
+       notes-helper.py read-journal <YYYY-MM-DD>
+       notes-helper.py write-journal <YYYY-MM-DD> < {"base": ..., "text": ...}
 """
 
 
@@ -454,6 +532,76 @@ def cmd_write_active():
     return 0
 
 
+def cmd_read_journal(day):
+    if not valid_day(day):
+        print(f"notes-helper: bad day {day!r}", file=sys.stderr)
+        return 2
+
+    try:
+        with ExitStack() as stack:
+            text = read_journal_day(journal_dir_fd(stack), day + ".md")
+    except (OSError, JournalUnreadable) as e:
+        print(f"notes-helper: {e}", file=sys.stderr)
+        return 1
+
+    sys.stdout.buffer.write(text.encode("utf-8"))
+    return 0
+
+
+# Compare-and-swap rather than a plain overwrite: the night page writes the
+# text it was editing, and if Omvision saved the same day in between, that
+# save must not vanish under it. The read and the rename aren't one atomic
+# step, but the night overlay covers the screen, so Omvision has no one
+# typing into it while this runs; the check is for the save it had already
+# queued, or a change made from another machine through a synced folder.
+def cmd_write_journal(day):
+    if not valid_day(day):
+        print(f"notes-helper: bad day {day!r}", file=sys.stderr)
+        return 2
+
+    raw = sys.stdin.buffer.read(MAX_JOURNAL_INPUT_BYTES + 1)
+    try:
+        if len(raw) > MAX_JOURNAL_INPUT_BYTES:
+            raise ValueError("input too long")
+        payload = json.loads(raw.decode("utf-8"))
+        base, text = payload["base"], payload["text"]
+        if not isinstance(base, str) or not isinstance(text, str):
+            raise TypeError("base and text must be strings")
+        data = text.encode("utf-8")
+        if len(data) > MAX_JOURNAL_BYTES:
+            raise ValueError(f"text over {MAX_JOURNAL_BYTES} bytes")
+    except (ValueError, KeyError, TypeError) as e:
+        print(f"notes-helper: bad journal write: {e}", file=sys.stderr)
+        return 2
+
+    name = day + ".md"
+    try:
+        with ExitStack() as stack:
+            journal_fd = journal_dir_fd(stack)
+            current = read_journal_day(journal_fd, name)
+            if current != base:
+                sys.stdout.buffer.write(current.encode("utf-8"))
+                return EXIT_JOURNAL_CHANGED
+            if text.strip() == "":
+                # An emptied page deletes the day, as JournalStore.save()
+                # does, so it drops out of Omvision's day list.
+                try:
+                    os.unlink(name, dir_fd=journal_fd)
+                except FileNotFoundError:
+                    pass
+                return 0
+            try:
+                mode = stat.S_IMODE(os.stat(name, dir_fd=journal_fd, follow_symlinks=False).st_mode)
+            except FileNotFoundError:
+                mode = 0o600
+            write_atomic(journal_fd, name, data, mode)
+    except (OSError, JournalUnreadable) as e:
+        print(f"notes-helper: {e}", file=sys.stderr)
+        return 1
+
+    return 0
+
+
 def main():
     argv = sys.argv[1:]
 
@@ -467,6 +615,10 @@ def main():
         return cmd_read_active()
     if len(argv) == 1 and argv[0] == "write-active":
         return cmd_write_active()
+    if len(argv) == 2 and argv[0] == "read-journal":
+        return cmd_read_journal(argv[1])
+    if len(argv) == 2 and argv[0] == "write-journal":
+        return cmd_write_journal(argv[1])
 
     print(USAGE, file=sys.stderr, end="")
     return 2

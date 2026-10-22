@@ -45,29 +45,29 @@ QtObject {
     var job = q.shift()
     appender.queue = q
     appender.running = true
-    proc.pendingText = job.text
-    proc.pendingDone = function(ok) {
+    teeProc.pendingText = job.text
+    teeProc.pendingDone = function(ok) {
       appender.running = false
       if (job.onDone) job.onDone(ok)
       appender.pump()
     }
-    proc.command = ["/usr/bin/tee", "-a", job.path]
-    proc.stdinEnabled = true
-    proc.running = true
+    teeProc.command = ["/usr/bin/tee", "-a", job.path]
+    teeProc.stdinEnabled = true
+    teeProc.running = true
   }
 
   property Process proc: Process {
-    id: proc
+    id: teeProc
     property string pendingText: ""
     property var pendingDone: null
     command: []
     onStarted: {
-      proc.write(proc.pendingText)
-      proc.stdinEnabled = false // closes stdin: tee sees EOF and exits
+      teeProc.write(teeProc.pendingText)
+      teeProc.stdinEnabled = false // closes stdin: tee sees EOF and exits
     }
     onExited: function(exitCode) {
-      var done = proc.pendingDone
-      proc.pendingDone = null
+      var done = teeProc.pendingDone
+      teeProc.pendingDone = null
       if (done) done(exitCode === 0)
     }
   }

@@ -12,7 +12,7 @@ import QtQuick.Layouts
 //
 // True modal, same construct as EventDialog/CancelDialog: a FocusScope
 // so focus can be pushed in on open and popped back out on close, a
-// scrim Rectangle + full-window MouseArea beneath the card that blocks
+// clear full-window MouseArea beneath the card that blocks
 // every click/hover from reaching the content behind and dismisses on a
 // stray click (this dialog is not destructive, unlike Cancel), and a
 // card sized to its own content rather than a fixed height.
@@ -98,20 +98,17 @@ FocusScope {
   Keys.onReturnPressed: root.submit()
   Keys.onEnterPressed: root.submit()
 
-  // Scrim: dims the content behind and, being the topmost item under the
-  // pointer with hoverEnabled, absorbs every click and hover meant for
-  // whatever is beneath it. A plain click here dismisses -- this dialog
-  // is additive, not destructive, so a stray click closing it is fine
-  // (contrast CancelDialog, which deliberately does not do this).
-  Rectangle {
-    id: scrim
+  // Clear, never a scrim: nothing dims the window behind a dialog (the
+  // user never wants a darkened background; bin/check's noscrim step).
+  // Being the topmost item under the pointer with hoverEnabled, it absorbs
+  // every click and hover meant for whatever is beneath it. A plain click
+  // here dismisses -- this dialog is additive, not destructive, so a stray
+  // click closing it is fine (contrast CancelDialog, which deliberately
+  // does not do this).
+  MouseArea {
     anchors.fill: parent
-    color: Theme.scrim
-    MouseArea {
-      anchors.fill: parent
-      hoverEnabled: true
-      onClicked: root.dismissed()
-    }
+    hoverEnabled: true
+    onClicked: root.dismissed()
   }
 
   Rectangle {
@@ -123,7 +120,7 @@ FocusScope {
     border.color: Theme.border
     border.width: Theme.dialogBorderWidth
 
-    // Swallow clicks/hover so the scrim beneath never sees them, and a
+    // Swallow clicks/hover so the area beneath never sees them, and a
     // click inside the card never dismisses it.
     MouseArea { anchors.fill: parent; hoverEnabled: true; onClicked: {} }
 

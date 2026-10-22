@@ -2,11 +2,11 @@ import QtQuick
 import qs.Commons
 
 // The break overlay's screens: the prompt and the break's countdown, the
-// notes page, and the goal picker, and the night's two: "Time to sleep" and
-// the countdown to morning. Holds no cycle state of its own -- it
-// reads Engine.qml and calls its functions -- so Service.qml can put it in
-// the layer-shell window omarchy-shell shows, and tests/engine in a
-// FloatingWindow offscreen.
+// notes page, and the goal picker, and the night's three: "Time to sleep",
+// the countdown to morning, and the journal (NightJournal.qml). Holds no
+// cycle state of its own -- it reads Engine.qml and calls its functions --
+// so Service.qml can put it in the layer-shell window omarchy-shell shows,
+// and tests/engine in a FloatingWindow offscreen.
 Item {
   id: overlay
 
@@ -172,13 +172,15 @@ Item {
             + "  ·  Ctrl+G to change"
     }
 
-    // The one sign that the break's write was refused -- quiet by design
-    // (no dialog), Color.urgent so it still reads as a warning.
+    // The one sign that a write was refused -- quiet by design (no dialog),
+    // Color.urgent so it still reads as a warning. A journal that couldn't be
+    // read has nothing unsaved; the page itself says so.
     Subtitle {
       objectName: "notesNotSaved"
       anchors.horizontalCenter: parent.horizontalCenter
-      visible: overlay.engine.notesSaveFailed
-      text: "Notes not saved"
+      readonly property bool journalUnsaved: overlay.engine.journalFailed && overlay.engine.journalLoaded
+      visible: overlay.engine.notesSaveFailed || journalUnsaved
+      text: journalUnsaved ? "Journal not saved" : "Notes not saved"
       color: Color.urgent
     }
 
@@ -282,6 +284,15 @@ Item {
     }
   }
 
+  // --- the night's notes view: the journal ---
+  NightJournal {
+    anchors.fill: parent
+    visible: overlay.engine.notesOpen && overlay.engine.phase === "sleep"
+    engine: overlay.engine
+    pointSize: overlay.writingPointSize
+    columnWidth: overlay.writingWidth
+  }
+
   // --- notes view: the break's three sections ---
   Item {
     id: notesPage
@@ -292,7 +303,7 @@ Item {
     // sides keep the wide margin, which is what centres the measure.
     anchors.topMargin: Style.space(32)
     anchors.bottomMargin: Style.space(32)
-    visible: overlay.engine.notesOpen
+    visible: overlay.engine.notesOpen && overlay.engine.phase === "break"
 
     readonly property real headerHeight: notesHeaderColumn.implicitHeight + Style.space(16)
     // In page order: the Repeater's sections as the Column holds them (the
@@ -362,7 +373,7 @@ Item {
         for (var i = 0; i < notesPage.sections.length; i++) notesPage.sections[i].open = true
       }
       function onNotesOpenChanged() {
-        if (overlay.engine.notesOpen) Qt.callLater(notesPage.focusFirstOpenSection)
+        if (overlay.engine.notesOpen && overlay.engine.phase === "break") Qt.callLater(notesPage.focusFirstOpenSection)
       }
     }
 
@@ -471,17 +482,14 @@ Item {
             // themes is too close to the background to read. The
             // countdown is here too: the break ends, and the notes are
             // logged, whether or not this page is open.
-            text: (overlay.engine.phase === "sleep" ? "NIGHT NOTES" : "BREAK NOTES") + "  ·  "
-                  + overlay.engine.countdownLabel
+            text: "BREAK NOTES  ·  " + overlay.engine.countdownLabel
             color: Util.alpha(Color.popups.text, 0.6)
           }
         }
 
         Subtitle {
           visible: overlay.engine.notesSaveFailed
-          // The night saves on leaving the page, so leaving it is the retry.
-          text: overlay.engine.phase === "sleep" ? "Notes not saved — Esc tries again"
-                                                 : "Notes not saved — Esc, then Try again"
+          text: "Notes not saved — Esc, then Try again"
           color: Color.urgent
         }
       }

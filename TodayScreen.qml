@@ -35,13 +35,13 @@ Item {
     var todayKey = Parser.dayKey(now)
     var out = []
 
-    for (var slug in data) {
-      var g = data[slug]
+    for (let slug in data) {
+      const g = data[slug]
       if (!g) continue
-      var title = g.meta ? g.meta.title : slug
-      var entries = g.logEntries || []
-      for (var i = 0; i < entries.length; i++) {
-        var e = entries[i]
+      const title = g.meta ? g.meta.title : slug
+      const entries = g.logEntries || []
+      for (let i = 0; i < entries.length; i++) {
+        const e = entries[i]
         if (Parser.dayKey(e.date) !== todayKey) continue
         out.push({
           date: e.date, type: e.type, time: Parser.entryTime(e),
@@ -53,10 +53,10 @@ Item {
     }
 
     var orph = orphans || ({})
-    for (var oslug in orph) {
-      var oentries = orph[oslug] || []
-      for (var o = 0; o < oentries.length; o++) {
-        var eo = oentries[o]
+    for (let oslug in orph) {
+      const oentries = orph[oslug] || []
+      for (let o = 0; o < oentries.length; o++) {
+        const eo = oentries[o]
         if (Parser.dayKey(eo.date) !== todayKey) continue
         out.push({
           date: eo.date, type: eo.type, time: Parser.entryTime(eo),
@@ -68,8 +68,8 @@ Item {
     }
 
     var dl = dayList || []
-    for (var j = 0; j < dl.length; j++) {
-      var e2 = dl[j]
+    for (let j = 0; j < dl.length; j++) {
+      const e2 = dl[j]
       if (Parser.dayKey(e2.date) !== todayKey) continue
       out.push({
         date: e2.date, type: e2.type, time: Parser.entryTime(e2),
@@ -87,7 +87,7 @@ Item {
 
   function totalMinutes(list) {
     var n = 0
-    for (var i = 0; i < list.length; i++) n += list[i].minutes
+    for (let i = 0; i < list.length; i++) n += list[i].minutes
     return n
   }
   readonly property int todayCount: todayList.length
