@@ -6,10 +6,9 @@ import QtQuick.Layouts
 import "Parser.js" as Parser
 
 // "Cancel goal": a reason (one of three fixed choices, radio-style) and a
-// free-text "what do you take from it" line. Confirming emits
-// confirmed(reason, takeaway); omvision.qml, which mounts this dialog over
-// the whole window for GoalDetailScreen, re-reads <slug>.md and applies both
-// the status change and the note in one write (Writer.appendCancelNote).
+// free-text "what do you take from it" line. Confirming calls
+// NotesStore.cancelGoal(), which re-reads <slug>.md and applies both the
+// status change and the note in one write (Writer.appendCancelNote).
 //
 // The approved mockup's footer copy ("moves to goals/archive/") described a
 // filesystem move that goal-files.md's fixed layout has no room for and
@@ -24,10 +23,15 @@ import "Parser.js" as Parser
 DialogFrame {
   id: root
 
-  property string goalTitle: ""
-  property int poms: 0
-  property string errorMessage: ""
-  signal confirmed(string reason, string takeaway)
+  required property App app
+  visible: root.app.dialog === "cancel"
+  onDismissed: root.app.closeDialog()
+
+  readonly property string slug: root.app.dialogSlug
+  readonly property var goal: root.app.notes.goalsData[root.slug] || null
+  readonly property string goalTitle: root.goal && root.goal.meta ? root.goal.meta.title : root.slug
+  readonly property int poms: root.goal ? Parser.pomodoroCount(root.goal.logEntries) : 0
+  property string saveError: ""
 
   readonly property var reasons: [
     "Not relevant any more",
@@ -38,11 +42,20 @@ DialogFrame {
   property string takeawayText: ""
 
   dismissOnOutsideClick: false
-  error: root.errorMessage
+  error: root.saveError
 
-  function confirm() { root.confirmed(root.reasons[root.reasonIndex], root.takeawayText) }
+  function confirm() {
+    root.saveError = ""
+    var opening = root.app.dialogSerial
+    root.app.notes.cancelGoal(root.slug, root.reasons[root.reasonIndex], root.takeawayText, function(ok, why) {
+      if (!root.app.isOpen(opening)) return
+      if (ok) root.app.closeDialog()
+      else root.saveError = why
+    })
+  }
 
   onOpened: {
+    saveError = ""
     reasonIndex = 0
     takeawayText = ""
     takeawayInput.forceActiveFocus()
@@ -57,7 +70,7 @@ DialogFrame {
 
   actions: [
     Button { label: "Back"; onActivated: root.dismissed() },
-    Button { label: "End goal"; danger: true; onActivated: root.confirm() }
+    Button { objectName: "endGoalButton"; label: "End goal"; danger: true; onActivated: root.confirm() }
   ]
 
   ColumnLayout {

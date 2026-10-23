@@ -18,7 +18,7 @@ OmvisionTest {
 
     openGoal("write-the-report")
     click("coachButton")
-    tryCompare(app, "currentScreen", "coaching")
+    tryCompare(app.nav, "screen", "coaching")
     click("coachMethod:polya")
     click("coachStartButton")
 

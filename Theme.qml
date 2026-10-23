@@ -384,15 +384,11 @@ QtObject {
   // last, after the terminals, browsers and editors have been retinted.
   //
   // colors.toml keeps its watch for a theme edited in place, which no hook
-  // announces. watchChanges only emits fileChanged, so it asks for the
-  // reload itself. No onLoadFailed: a reload that finds the file gone keeps
-  // the last theme, for the same reason loadColors() does.
-  property FileView colorsFile: FileView {
+  // announces (WatchedFile). No onLoadFailed: a reload that finds the file
+  // gone keeps the last theme, for the same reason loadColors() does.
+  property WatchedFile colorsFile: WatchedFile {
     id: colorsFile
     path: root.themePath
-    watchChanges: true
-    printErrors: false
-    onFileChanged: reload()
     onLoaded: root.loadColors(text())
   }
 

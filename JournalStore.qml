@@ -19,7 +19,7 @@ import "Util.js" as Util
 // need.
 //
 // ---- Never write a day whose disk text is unknown ---------------------------
-// omvision.qml discovers journal files with a `find` every 2s and then reads
+// NotesStore discovers journal files with a `find` every 2s and then reads
 // each through its own FileView, so for the first moments after launch, and
 // for a day this screen has not written yet, the journal does not know what
 // a day's file says. A page opened then is blank, and text typed into it
@@ -31,7 +31,7 @@ import "Util.js" as Util
 //     still on its way to disk). Only a based buffer is written.
 //   - Text typed into an unbased buffer is held in `waiting`, and the day's
 //     text is found out: mkdir -p, touch, then a read through the writer's
-//     own queue (probe). When it arrives -- or when omvision.qml's FileView
+//     own queue (probe). When it arrives -- or when NotesStore's FileView
 //     delivers it first -- the typed text is added *after* the day's text
 //     (mergeTyped) and that is what gets written. Nothing on disk is lost,
 //     and nothing typed is lost.
@@ -58,13 +58,13 @@ import "Util.js" as Util
 // needed to create a file.
 //
 // ---- API --------------------------------------------------------------------
-//   journalContents  in: omvision.qml's path -> text for the files it has read
+//   journalContents  in: NotesStore's path -> text for the files it has read
 //   openPath         in: the day open in the editor
 //   writesDisabled   in: bin/shot's `mention` typing; nothing is written
 //   written          path -> the text this store last knows is on disk: from
 //                    its own confirmed write or its own read ("" for a day
 //                    it deleted). Newer than
-//                    journalContents until omvision.qml's FileView catches up.
+//                    journalContents until NotesStore's FileView catches up.
 //   knownText(path)       what the day's file says, or undefined if unknown
 //   pendingTextFor(path)  the newest queued/in-flight write's text, or undefined
 //   waitingTextFor(path)  text typed into that day before its disk text was
@@ -73,7 +73,7 @@ import "Util.js" as Util
 //   save(path, text, based)   writes the day, or deletes its file when `text`
 //                             is blank and the day had text
 //   mergeTyped(diskText, typed)  the text a based save writes after a merge
-//   prune()               forget `written` entries omvision.qml has caught up on
+//   prune()               forget `written` entries NotesStore has caught up on
 //   signals: saved(path, text), failed(path, message), diskTextKnown(path)
 QtObject {
   id: store
@@ -91,7 +91,7 @@ QtObject {
   signal saved(string path, string text)
   signal failed(string path, string message)
   // The store has just read `path` itself (see resolve); knownText(path) now
-  // answers. omvision.qml's FileView delivering it is journalContentsChanged.
+  // answers. NotesStore's FileView delivering it is journalContentsChanged.
   signal diskTextKnown(string path)
 
   function setWritten(path, text) { store.written = Util.withKey(store.written, path, text) }
@@ -172,7 +172,7 @@ QtObject {
     var d = {}
     var changed = false
     for (let k in store.written) {
-      // Kept while work on the day is under way, and until omvision.qml's own
+      // Kept while work on the day is under way, and until NotesStore's own
       // read says the same thing; then that read answers knownText() alike.
       // The open day is dropped too: its record kept for good would hide
       // a change made to the file from outside, which syncBufferFromDisk()

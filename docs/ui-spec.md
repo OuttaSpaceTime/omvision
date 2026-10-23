@@ -83,8 +83,8 @@ over a hairline. Then one row per entry, hairline-separated, bleeding a page mar
 the Goals rows but with no hover: the time at body bold, the type in a bold caption
 (`pomodoro`, `event · training`), and the goal's title in accent caption at the right,
 eliding at 40% of the row (nothing for an entry with no goal). Under it, what the entry says,
-as on the timeline. An empty day says `Nothing logged today.` The day file it reads is the one
-for the day the app was started: it doesn't roll over at midnight while the app stays open.
+as on the timeline. An empty day says `Nothing logged today.` At midnight, with the app left
+open, it moves on to the new day (within a minute), as the journal's "Today" does.
 
 ## Screen: Goals
 

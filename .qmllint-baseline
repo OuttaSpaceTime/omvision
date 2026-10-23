@@ -6,5 +6,3 @@
 JournalHighlight.qml	import	Failed to import MarkdownHighlight. Are your import paths set up properly?	import MarkdownHighlight
 JournalHighlight.qml	import	MarkdownHighlighter was not found. Did you add all imports and dependencies?	MarkdownHighlighter {
 JournalHighlight.qml	import	Warnings occurred while importing module "MarkdownHighlight":	import MarkdownHighlight
-JournalScreen.qml	missing-property	Member "mentionSpans" not found on type "QObject"	var spans = h ? h.mentionSpans() : []
-JournalScreen.qml	missing-property	Member "mentionSpansChanged" not found on type "QObject"	item.mentionSpansChanged.connect(function() { Qt.callLater(root.refreshTagSpans) })

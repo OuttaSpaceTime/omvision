@@ -1,489 +1,43 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQml.Models
 import Quickshell
-import Quickshell.Io
-
-import "Parser.js" as Parser
-import "Writer.js" as Writer
-import "Util.js" as Util
 
 // Omvision -- goals, tasks, a daily journal and coaching, over the ompom
-// engine's file contract (docs/goal-files.md). A
-// standalone Quickshell config, launched with bin/omvision rather than
-// `qs -p` by hand: the launcher puts the journal's compiled markdown
-// highlighter on the import path (see bin/omvision for why it has to).
+// engine's file contract (docs/goal-files.md). A standalone Quickshell
+// config, launched with bin/omvision rather than `qs -p` by hand: the
+// launcher puts the journal's compiled markdown highlighter on the import
+// path (see bin/omvision for why it has to).
 //
-// This file owns the app's data. It lists and loads every goal, log, day and
-// journal file and hands the screens results that are already parsed, and it
-// makes every write except the journal's, which the journal screen makes
-// through its own JournalStore.
-// Writes take one of two paths, chosen per goal-files.md §2:
-//   - <slug>.md (tasks, status, the cancel note, a new goal) is
-//     read-modify-write, through goalFiles (SerialFileWriter.qml): one job at
-//     a time, the file always re-read immediately before the change is
-//     applied -- never from a copy taken when the screen opened, per the
-//     contract's own rule for this file -- and written atomically (temp file
-//     + rename, the same guarantee notes-helper.py's write_atomic() gives).
-//   - <slug>.log.md and days/YYYY-MM-DD.md (events) are append-only, through
-//     appender (Appender.qml): `tee -a`, O_APPEND with no read step at all,
-//     the discipline notes-helper.py's append_entry() follows for the same
-//     reason -- a coaching session rewriting <slug>.md concurrently must
-//     never be able to cost an event its entry.
-// Where the files live is Paths.qml's business.
+// This file is only the window and its layout. The app is App.qml: its data
+// (NotesStore), where it is (Navigator) and which dialog is open. Each
+// screen and dialog is handed the App and works through it.
 ShellRoot {
   id: root
 
-  // Evaluated once, at startup, like before Paths existed: the day file the
-  // Today screen reads does not roll over at midnight.
-  readonly property string todayPath: Paths.dayFile(Parser.dayKey(new Date()))
-
-  property string currentScreen: "goals" // today | goals | coaching | journal | goalDetail
-  property string openGoalSlug: ""
-  readonly property var openGoalData: goalsData[openGoalSlug] || null
-  // The screen a goal's back link returns to: the Goals list, or the
-  // journal when the goal was opened from an `@` tag there, so reading up
-  // on a goal mid-sentence puts you back in the sentence.
-  property string goalBackScreen: "goals"
+  readonly property App app: App {}
 
   // Hiding a screen does not take the keyboard from it: the journal's
-  // editor or a task field keeps active focus while invisible, so after
-  // leaving the journal by the rail, typing on Today went into the hidden
-  // day and was saved there. So every change of screen hands the keyboard
-  // back to the window's content, where the shortcuts are handled. The
-  // journal takes it again itself when it is shown (its onVisibleChanged).
-  onCurrentScreenChanged: if (currentScreen !== "journal") contentRoot.forceActiveFocus()
-
-  function openGoal(slug, from) {
-    root.openGoalSlug = slug
-    root.goalBackScreen = from
-    root.currentScreen = "goalDetail"
+  // editor or a task field keeps active focus while invisible, and typing
+  // on Today would go into the hidden day and be saved there. So every
+  // change of screen hands the keyboard back to the window's content, where
+  // the shortcuts are handled. The journal takes it again itself when it is
+  // shown (its onVisibleChanged).
+  Connections {
+    target: root.app.nav
+    function onScreenChanged() { if (root.app.nav.screen !== "journal") contentRoot.forceActiveFocus() }
   }
 
-  // ---- sidebar -------------------------------------------------------------
-  // There is one sidebar and one state for it: the 64px icon rail (see
-  // Sidebar.qml for what was removed and why). The only question left is
-  // whether it is on screen at all, and only the Journal ever answers no:
-  // writing mode hides it, and the journal's own faint control brings it
-  // back for as long as you want it. Leaving the journal restores it, and
-  // entering the journal hides it again however it was left -- writing
-  // always starts with nothing down the side of the page.
-  readonly property bool writingMode: currentScreen === "journal"
-  property bool sidebarRevealed: false
-
-  function sidebarHidden() {
-    return writingMode && !sidebarRevealed
-  }
-  function toggleSidebar() {
-    if (!writingMode) return // nothing to toggle: the rail is the only state
-    sidebarRevealed = !sidebarRevealed
-  }
-  onWritingModeChanged: if (writingMode) sidebarRevealed = false
-
-  // slug -> { meta, logEntries }
-  property var goalsData: ({})
-  property var goalSlugs: []
-  // Logs with no goal file of their own -- see applyGoalsList().
-  property var orphanLogSlugs: []
-  property var orphanLogs: ({}) // slug -> entries
-  property var dayEntries: []
-
-  // Which logs, and whether today's day file, the last listing found. A
-  // FileView only watches a file that exists: one pointed at a file that
-  // isn't there yet never sees it appear, so a goal's first log entry, or
-  // the day's first goal-less run, stayed off screen until a restart. The
-  // listing is what notices a file appear; its loader then reads it
-  // (onLogListedChanged, onTodayFileListedChanged).
-  property var logSlugs: []
-  property bool todayFileListed: false
-  onTodayFileListedChanged: dayFile.reload()
-
-  // Each of these state objects is replaced whole, never edited in place:
-  // see Util.js for why.
-  function syncGoal(slug, meta, entries) {
-    root.goalsData = Util.withKey(root.goalsData, slug, { meta: meta, logEntries: entries || [] })
-  }
-
-  function syncOrphanLog(slug, entries) {
-    root.orphanLogs = Util.withKey(root.orphanLogs, slug, entries || [])
-  }
-
-  // `text` is listProc's output: the goal files and logs, and the day files.
-  function applyGoalsList(text) {
-    var lines = String(text || "").split("\n")
-    var slugs = []
-    var logStems = []
-    var todayListed = false
-    for (let i = 0; i < lines.length; i++) {
-      const p = lines[i].trim()
-      if (p === "") continue
-      if (p.indexOf(Paths.daysDir + "/") === 0) { if (p === root.todayPath) todayListed = true; continue }
-      const base = p.replace(/^.*\//, "")
-      if (!base.match(/\.md$/)) continue
-      const stem = base.replace(/\.md$/, "")
-      if (stem.match(/\.log$/)) { // "<slug>.log.md" — the log, not the goal file
-        logStems.push(stem.replace(/\.log$/, ""))
-        continue
-      }
-      slugs.push(stem)
-    }
-    slugs.sort()
-    logStems.sort()
-    root.todayFileListed = todayListed
-    if (!Util.sameList(logStems, root.logSlugs)) root.logSlugs = logStems
-
-    // A log whose goal file is gone (renamed, deleted, or written by the
-    // timer against a slug that never had one) still describes pomodoros
-    // that really happened. The goal loaders below are driven by `slugs`,
-    // so those entries used to be invisible everywhere in the app --
-    // Today showed nothing for a run that is sitting right there on disk.
-    // They get loaded separately and shown on Today under their slug.
-    var have = {}
-    for (let h = 0; h < slugs.length; h++) have[slugs[h]] = true
-    var orphans = []
-    for (let l = 0; l < logStems.length; l++) {
-      if (!have[logStems[l]]) orphans.push(logStems[l])
-    }
-    orphans.sort()
-    if (!Util.sameList(orphans, root.orphanLogSlugs)) {
-      root.orphanLogSlugs = orphans
-      root.orphanLogs = Util.pickKeys(root.orphanLogs, orphans)
-    }
-
-    if (Util.sameList(slugs, root.goalSlugs)) return
-    root.goalSlugs = slugs
-    // Drop stale entries for goals whose files disappeared.
-    root.goalsData = Util.pickKeys(root.goalsData, slugs)
-  }
-
-  // ---- write path: <slug>.md (read-modify-write, re-read every time) -----
-  // Every change to a goal file, and every new one, goes through goalFiles
-  // (the SerialFileWriter at the bottom of this file), so two writes -- two
-  // tasks ticked quickly -- run one after the other, each on its own fresh
-  // read, and never stomp each other.
-  property string writeError: ""
-
-  function showWriteError(message) {
-    root.writeError = message
-    writeErrorTimer.restart()
-  }
-
-  // What a failed goal-file write is called in the messages the user sees,
-  // by SerialFileWriter's reason for it.
-  function goalWriteMessage(reason) {
-    if (reason === "declined") return "goal file changed unexpectedly"
-    if (reason === "readFailed") return "couldn't read the goal file"
-    if (reason === "saveFailed") return "couldn't save the goal file"
-    return ""
-  }
-
-  // Every edit of an existing goal: toggle, add and edit a task; close,
-  // reopen and cancel the goal; the Edit goal dialog. `editLines(lines)`
-  // gets the file freshly read and split into lines, and returns the new
-  // lines, or null to leave the file alone (Writer.js's functions have
-  // exactly that shape). The file's own line endings are kept.
-  //
-  // `verb` finishes the banner's "Couldn't <verb> (<why>)." on a failure,
-  // e.g. "update the task"; pass "" when the caller shows the failure itself
-  // (the Edit goal dialog does). resultFn(ok, message), if given, gets the
-  // same <why>, "" on success.
-  //
-  // One helper rather than a handler per action: the six handlers this
-  // replaced were the same ten lines with a different Writer call and verb.
-  function editGoalFile(slug, verb, editLines, resultFn) {
-    goalFiles.modify(Paths.goalFile(slug), function(text) {
-      var out = editLines(Writer.splitLines(text))
-      return out ? Writer.joinLines(out, Writer.detectEol(text)) : null
-    }, function(ok, reason) {
-      var message = ok ? "" : root.goalWriteMessage(reason)
-      if (!ok && verb !== "") root.showWriteError("Couldn't " + verb + (message ? " (" + message + ")" : "") + ".")
-      if (resultFn) resultFn(ok, message)
-    })
-  }
-
-  // ---- write path: <slug>.log.md / days/YYYY-MM-DD.md (append-only) ------
-  function handleAddEvent(payload, resultFn) {
-    var entryText = Writer.formatEventEntry(payload.whenDate, payload.minutes, payload.kind, payload.what, payload.countsToward)
-    var slug = String(payload.slug || "")
-    var path
-    if (slug.length > 0 && /^[a-z0-9][a-z0-9-]*$/.test(slug)) {
-      path = Paths.goalLog(slug)
-    } else {
-      path = Paths.dayFile(Parser.dayKey(payload.whenDate))
-    }
-    appender.append(path, entryText, function(ok) {
-      if (!ok) root.showWriteError("Couldn't log the event — nothing was saved. Copy your note before retrying.")
-      if (resultFn) resultFn(ok)
-    })
-  }
-
-  function openEventDialog(slug) {
-    root.eventDialogDefaultSlug = slug
-    root.eventDialogError = ""
-    root.eventDialogOpen = true
-  }
-
-  property bool eventDialogOpen: false
-  property string eventDialogDefaultSlug: ""
-  property string eventDialogError: ""
-
-  function openNewGoalDialog() {
-    root.newGoalError = ""
-    root.editGoalSlug = ""
-    root.newGoalDialogOpen = true
-  }
-
-  // The New goal dialog doubles as Edit goal: same fields, pre-filled,
-  // saved in place instead of creating a file.
-  function openEditGoalDialog(slug) {
-    if (!root.goalsData[slug] || !root.goalsData[slug].meta) return
-    root.newGoalError = ""
-    root.editGoalSlug = slug
-    root.newGoalDialogOpen = true
-  }
-
-  property bool newGoalDialogOpen: false
-  property string newGoalError: ""
-  property string editGoalSlug: ""
-
-  // ---- write path: creating a new goal (<slug>.md), goal-files.md §3 -----
-  // A probe of each candidate slug's path either loads (something is
-  // already there -- read its title to decide "same goal, no-op" vs.
-  // "someone else's goal, try <base>-2, <base>-3, ...") or fails (the slug
-  // is free, write the new file there). Every candidate is a fresh read
-  // right before any decision is made about it, the same "re-read
-  // immediately before mutating" discipline goal edits follow.
-  //
-  // Each step after the first is queued `next`, straight from the previous
-  // step's result: the whole search-and-write runs as one uninterrupted
-  // stretch of the queue, so two goals with the same title created back to
-  // back can't both find the slug free and both write it.
-  function createGoalFile(fields, onDone) {
-    var base = Writer.deriveSlug(fields.title)
-    function attempt(n, options) {
-      var slug = n === 1 ? base : base + "-" + n
-      var path = Paths.goalFile(slug)
-      goalFiles.probe(path, function(exists, text) {
-        if (!exists) {
-          // Nothing at this slug -- free to create. Only reached when the
-          // read just failed, so this never writes over a goal.
-          goalFiles.write(path, Writer.buildNewGoalFile(fields), function(ok) {
-            if (ok) onDone(true, "", slug)
-            else onDone(false, "couldn't create the goal file", "")
-          }, { next: true })
-          return
-        }
-        var meta = Parser.parseGoalFile(text)
-        if (meta && meta.title === fields.title) {
-          // Same title at this slug -- same goal. Creating it again is a
-          // no-op, not an error (goal-files.md §3).
-          onDone(true, "", slug)
-          return
-        }
-        // Slug is taken by a different goal (or an unparseable file). A
-        // generous but finite cap keeps this from spinning forever if
-        // something truly pathological is going on.
-        if (n > 500) { onDone(false, "couldn't find a free slug", ""); return }
-        attempt(n + 1, { next: true })
-      }, options)
-    }
-    attempt(1)
-  }
-
-  function handleCreateGoal(fields, resultFn) {
-    var title = String(fields.title || "").trim()
-    if (title === "") { if (resultFn) resultFn(false, "Title is required.", ""); return }
-    // The dialog's fields as they came, so create and edit take one payload
-    // and a field the dialog gains reaches both: a copy here that listed
-    // each field once dropped `focusable`. Writer makes each value one line.
-    // The title is the trimmed one, since the slug and the same-goal check
-    // are taken from it.
-    root.createGoalFile(Object.assign({}, fields, { title: title }), function(ok, message, slug) {
-      // Don't wait on the 2s directory poll -- a goal just created should
-      // show up in the list right away.
-      if (ok) listProc.running = true
-      if (resultFn) resultFn(ok, message, slug)
-    })
-  }
-
-  // ---- directory listing: polled since Quickshell has no folder watcher --
-  // A folder that doesn't exist yet only costs a line on find's stderr.
-  Process {
-    id: listProc
-    command: ["/usr/bin/find", Paths.goalsDir, Paths.daysDir, "-maxdepth", "1", "-type", "f", "-name", "*.md"]
-    stdout: StdioCollector {
-      id: listCollector
-      onStreamFinished: root.applyGoalsList(text)
-    }
-  }
-
-  Timer {
-    interval: 2000
-    running: true
-    repeat: true
-    triggeredOnStart: true
-    onTriggered: listProc.running = true
-  }
-
-  // ---- per-goal file loaders ----------------------------------------------
-  Instantiator {
-    id: orphanLogLoaders
-    model: root.orphanLogSlugs
-    delegate: QtObject {
-      id: orphanLoader
-      required property string modelData
-
-      property FileView logFile: FileView {
-        path: Paths.goalLog(orphanLoader.modelData)
-        watchChanges: true
-        printErrors: false
-        onLoaded: root.syncOrphanLog(orphanLoader.modelData, Parser.parseLogEntries(text(), new Date()))
-        onLoadFailed: function(error) { root.syncOrphanLog(orphanLoader.modelData, []) }
-        onFileChanged: reload()
-      }
-    }
-  }
-
-  Instantiator {
-    id: goalLoaders
-    model: root.goalSlugs
-    delegate: QtObject {
-      id: loader
-      required property string modelData
-      readonly property string slug: modelData
-      property var meta: null
-      property var entries: []
-      readonly property bool logListed: root.logSlugs.indexOf(loader.slug) >= 0
-      onLogListedChanged: logFile.reload()
-
-      property FileView mdFile: FileView {
-        path: Paths.goalFile(loader.slug)
-        watchChanges: true
-        printErrors: false
-        onLoaded: {
-          loader.meta = Parser.parseGoalFile(text())
-          root.syncGoal(loader.slug, loader.meta, loader.entries)
-        }
-        onLoadFailed: function(error) {
-          loader.meta = null
-          root.syncGoal(loader.slug, null, loader.entries)
-        }
-        onFileChanged: reload()
-      }
-
-      property FileView logFile: FileView {
-        path: Paths.goalLog(loader.slug)
-        watchChanges: true
-        printErrors: false
-        onLoaded: {
-          loader.entries = Parser.parseLogEntries(text(), new Date())
-          root.syncGoal(loader.slug, loader.meta, loader.entries)
-        }
-        onLoadFailed: function(error) {
-          // No log yet is normal (§6): zero entries, not an error.
-          loader.entries = []
-          root.syncGoal(loader.slug, loader.meta, [])
-        }
-        onFileChanged: reload()
-      }
-    }
-  }
-
-  // ---- today's day file (poms/events run with no active goal) ------------
-  FileView {
-    id: dayFile
-    path: root.todayPath
-    watchChanges: true
-    printErrors: false
-    onLoaded: root.dayEntries = Parser.parseLogEntries(text(), new Date())
-    onLoadFailed: function(error) { root.dayEntries = [] }
-    onFileChanged: reload()
-  }
-
-  // ---- journal files: journal/YYYY-MM-DD.md -------------------------------
-  // Same discovery/load idiom as the goal loaders above: poll a `find` for
-  // the file list, then a per-file FileView loads and watches each one.
-  // The Journal screen only ever receives the already-read result.
-  property var journalFiles: []      // [{path, dateIso}]
-  property var journalContents: ({}) // path -> raw text
-
-  function applyJournalList(text) {
-    var lines = String(text || "").split("\n")
-    var files = []
-    for (let i = 0; i < lines.length; i++) {
-      const p = lines[i].trim()
-      if (p === "") continue
-      const dateIso = Paths.journalDateIso(p)
-      if (dateIso === "") continue
-      files.push({ path: p, dateIso: dateIso })
-    }
-    files.sort(function(a, b) { return a.path < b.path ? -1 : (a.path > b.path ? 1 : 0) })
-
-    if (Util.sameList(files, root.journalFiles, function(f) { return f.path })) return
-    root.journalFiles = files
-    root.journalContents = Util.pickKeys(root.journalContents, files.map(function(f) { return f.path }))
-  }
-
-  function setJournalContent(path, text) {
-    root.journalContents = Util.withKey(root.journalContents, path, text)
-  }
-
-  Process {
-    id: journalListProc
-    // Missing directory is not an error here: `find` writes to stderr, stdout
-    // stays empty, and the screen shows today as the one (not-yet-created)
-    // day -- which is exactly the state of a journal nobody has written in.
-    command: ["/usr/bin/find", Paths.journalDir, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "-name", "*.md"]
-    stdout: StdioCollector {
-      id: journalListCollector
-      onStreamFinished: root.applyJournalList(text)
-    }
-  }
-
-  Timer {
-    interval: 2000
-    running: true
-    repeat: true
-    triggeredOnStart: true
-    onTriggered: journalListProc.running = true
-  }
-
-  Instantiator {
-    id: journalLoaders
-    model: root.journalFiles
-    delegate: QtObject {
-      id: jloader
-      required property var modelData
-
-      property FileView file: FileView {
-        path: jloader.modelData.path
-        watchChanges: true
-        printErrors: false
-        onLoaded: root.setJournalContent(jloader.modelData.path, text())
-        onLoadFailed: function(error) { root.setJournalContent(jloader.modelData.path, "") }
-        onFileChanged: reload()
-      }
-    }
-  }
-
-  // The writers. goalFiles serves both editing and creating goals, so a new
-  // goal's slug search and an edit can never interleave; appender serves the
-  // append-only logs. Both are serial -- see their files for the Quickshell
-  // bugs that makes them work around.
-  SerialFileWriter { id: goalFiles }
-  Appender { id: appender }
-
-  Timer {
-    id: writeErrorTimer
-    interval: 5000
-    onTriggered: root.writeError = ""
+  // A goal edit that fails with no field or dialog to show it in.
+  Connections {
+    target: root.app.notes
+    function onWriteFailed(message) { writeErrorBanner.show(message) }
   }
 
   // Closing the window ends the app. Quickshell is built for shells, which
   // outlive their windows, so it keeps running with none, and each launch
-  // left another windowless Omvision behind. Quitting here is what its docs
-  // give for an app that should end with its window.
+  // would leave another windowless Omvision behind. Quitting here is what
+  // its docs give for an app that should end with its window.
   Connections {
     target: Quickshell
     function onLastWindowClosed() { Qt.quit() }
@@ -503,30 +57,8 @@ ShellRoot {
       anchors.fill: parent
       focus: true
       Component.onCompleted: forceActiveFocus()
-      // Keys the focused item leaves unaccepted bubble up to here, so these
-      // work from every screen, the journal's editor and the task fields
-      // included: neither does anything with Ctrl+T/G/J/1-4. Ctrl+K would
-      // have been the obvious letter for Coaching, but a text field takes it
-      // as "delete to the end of the line", so Coaching is Ctrl+3 only.
-      readonly property var screenKeys: ({
-        [Qt.Key_T]: "today", [Qt.Key_G]: "goals", [Qt.Key_J]: "journal",
-        [Qt.Key_1]: "today", [Qt.Key_2]: "goals", [Qt.Key_3]: "coaching", [Qt.Key_4]: "journal"
-      })
-      Keys.onPressed: function(event) {
-        if (!(event.modifiers & Qt.ControlModifier)) return
-        if (event.key === Qt.Key_B) {
-          root.toggleSidebar()
-          event.accepted = true
-          return
-        }
-        var screen = screenKeys[event.key]
-        if (screen === undefined) return
-        event.accepted = true
-        // A dialog sits over the screen it was opened from; leaving that
-        // screen from under it would strand it.
-        if (root.eventDialogOpen || root.newGoalDialogOpen || goalDetailScreen.cancelDialogOpen) return
-        root.currentScreen = screen
-      }
+      // Keys the focused item leaves unaccepted bubble up to here.
+      Keys.onPressed: function(event) { event.accepted = root.app.nav.handleKey(event.key, event.modifiers) }
 
       // Offscreen screenshots for bin/shot; inactive (nothing loaded) in a
       // normal launch. Behind everything, since it also paints the paper
@@ -539,7 +71,7 @@ ShellRoot {
         source: "ShotDriver.qml"
         onLoaded: {
           const driver = item as ShotDriver
-          driver.app = root
+          driver.app = root.app
           driver.journal = journalScreen
           driver.goalDetail = goalDetailScreen
           driver.target = contentRoot
@@ -570,7 +102,7 @@ ShellRoot {
         Component.onCompleted: {
           if (testFile === "") return
           setSource(testFile.charAt(0) === "/" ? "file://" + testFile : Qt.resolvedUrl(testFile), {
-            app: root,
+            app: root.app,
             journal: journalScreen,
             goalDetail: goalDetailScreen,
             coaching: coachingScreen,
@@ -586,13 +118,13 @@ ShellRoot {
 
         // Showing and hiding the sidebar animates the room it takes, not the
         // sidebar itself: this slot opens from 0 to the rail's width, the
-        // rail (always its full 64px, so nothing inside it squeezes) slides
+        // rail (always its full width, so nothing inside it squeezes) slides
         // in along with it, and the content beside it narrows in step
         // instead of jumping sideways.
         Item {
           id: sidebarSlot
           height: parent.height
-          width: root.sidebarHidden() ? 0 : inFlowSidebar.railWidth
+          width: root.app.nav.sidebarHidden ? 0 : inFlowSidebar.railWidth
           visible: width > 0
           clip: true
 
@@ -604,8 +136,8 @@ ShellRoot {
             id: inFlowSidebar
             height: parent.height
             x: sidebarSlot.width - width
-            currentScreen: root.currentScreen === "goalDetail" ? root.goalBackScreen : root.currentScreen
-            onNavigate: function(screen) { root.currentScreen = screen }
+            currentScreen: root.app.nav.railScreen
+            onNavigate: function(screen) { root.app.nav.screen = screen }
           }
         }
 
@@ -618,212 +150,54 @@ ShellRoot {
           height: parent.height
 
           GoalsScreen {
+            app: root.app
             anchors.fill: parent
             leftInset: sidebarSlot.width
-            visible: root.currentScreen === "goals"
-            goalsData: root.goalsData
-            selectedSlug: root.openGoalSlug
-            onOpenGoal: function(slug) { root.openGoal(slug, "goals") }
-            onAddEventRequested: root.openEventDialog("")
-            onNewGoalRequested: root.openNewGoalDialog()
-            onEditGoalRequested: function(slug) { root.openEditGoalDialog(slug) }
+            visible: root.app.nav.screen === "goals"
           }
 
           GoalDetailScreen {
             id: goalDetailScreen
+            app: root.app
             anchors.fill: parent
             leftInset: sidebarSlot.width
-            visible: root.currentScreen === "goalDetail"
-            slug: root.openGoalSlug
-            meta: root.openGoalData ? root.openGoalData.meta : null
-            logEntries: root.openGoalData ? root.openGoalData.logEntries : []
-            backLabel: root.goalBackScreen === "journal" ? "← Journal" : "← Goals"
-            onBack: root.currentScreen = root.goalBackScreen
-            onToggleTask: function(index) {
-              root.editGoalFile(root.openGoalSlug, "update the task", function(lines) {
-                return Writer.toggleTask(lines, index)
-              })
-            }
-            onAddTask: function(text) {
-              root.editGoalFile(root.openGoalSlug, "add the task", function(lines) {
-                return Writer.addTask(lines, text)
-              }, function(ok, message) { goalDetailScreen.onAddTaskResult(ok, message) })
-            }
-            onEditTask: function(index, text) {
-              root.editGoalFile(root.openGoalSlug, "update the task", function(lines) {
-                return Writer.editTask(lines, index, text)
-              }, function(ok, message) { goalDetailScreen.onEditTaskResult(ok, message) })
-            }
-            onCloseGoal: root.editGoalFile(root.openGoalSlug, "close the goal", function(lines) {
-              return Writer.setStatus(lines, "done")
-            })
-            onReopenGoal: root.editGoalFile(root.openGoalSlug, "reopen the goal", function(lines) {
-              return Writer.setStatus(lines, "active")
-            })
-            onCancelGoal: function(reason, takeaway) {
-              root.editGoalFile(root.openGoalSlug, "cancel the goal", function(lines) {
-                var out = Writer.setStatus(lines, "cancelled")
-                if (!out) return null
-                return Writer.appendCancelNote(out, Writer.headingTimestamp(new Date()), reason, takeaway)
-              }, function(ok, message) { goalDetailScreen.onCancelResult(ok, message) })
-            }
-            onAddEventRequested: root.openEventDialog(root.openGoalSlug)
-            onEditGoalRequested: root.openEditGoalDialog(root.openGoalSlug)
-            onCoachRequested: {
-              coachingScreen.selectedSlug = root.openGoalSlug
-              root.currentScreen = "coaching"
-            }
+            visible: root.app.nav.screen === "goalDetail"
           }
 
           TodayScreen {
+            app: root.app
             anchors.fill: parent
             leftInset: sidebarSlot.width
-            visible: root.currentScreen === "today"
-            goalsData: root.goalsData
-            dayEntries: root.dayEntries
-            orphanLogs: root.orphanLogs
+            visible: root.app.nav.screen === "today"
           }
 
           CoachingScreen {
             id: coachingScreen
+            app: root.app
             anchors.fill: parent
             leftInset: sidebarSlot.width
-            visible: root.currentScreen === "coaching"
-            goalsData: root.goalsData
+            visible: root.app.nav.screen === "coaching"
           }
 
           JournalScreen {
             id: journalScreen
+            app: root.app
             anchors.fill: parent
             leftInset: sidebarSlot.width
-            visible: root.currentScreen === "journal"
-            journalFiles: root.journalFiles
-            journalContents: root.journalContents
-            goalsData: root.goalsData
-            sidebarShown: !root.sidebarHidden()
-            onToggleSidebar: root.toggleSidebar()
-            onOpenGoal: function(slug) { root.openGoal(slug, "journal") }
+            visible: root.app.nav.screen === "journal"
           }
         }
       }
 
-      EventDialog {
-        anchors.fill: parent
-        visible: root.eventDialogOpen
-        z: 900
-        goalsData: root.goalsData
-        defaultSlug: root.eventDialogDefaultSlug
-        errorMessage: root.eventDialogError
-        onDismissed: root.eventDialogOpen = false
-        onSubmitted: function(payload) {
-          root.eventDialogError = ""
-          root.handleAddEvent(payload, function(ok) {
-            if (ok) root.eventDialogOpen = false
-            else root.eventDialogError = "Couldn't log the event. Your entry is still here — try again."
-          })
-        }
-      }
+      // At the window root, above the sidebar too, so nothing behind a
+      // dialog can be clicked. Each shows itself while app.dialog names it.
+      EventDialog { app: root.app; anchors.fill: parent; z: 900 }
+      CancelDialog { app: root.app; anchors.fill: parent; z: 900 }
+      NewGoalDialog { app: root.app; anchors.fill: parent; z: 900 }
 
-      // Mounted at the window root, not nested inside GoalDetailScreen
-      // (which only fills the content area to the right of the sidebar):
-      // a modal has to sit above everything, the sidebar included, so it
-      // lives at the same level EventDialog does. Driven entirely by goalDetailScreen's own
-      // cancelDialogOpen/cancelError state and cancelGoal signal --
-      // `goalDetailScreen.cancelGoal(reason, takeaway)` emits that
-      // screen's signal exactly as if it had fired internally, so the
-      // existing onCancelGoal wiring above still owns the actual write.
-      CancelDialog {
-        anchors.fill: parent
-        visible: goalDetailScreen.cancelDialogOpen
-        z: 900
-        goalTitle: goalDetailScreen.meta ? goalDetailScreen.meta.title : goalDetailScreen.slug
-        poms: goalDetailScreen.poms
-        errorMessage: goalDetailScreen.cancelError
-        onConfirmed: function(reason, takeaway) {
-          goalDetailScreen.cancelError = ""
-          goalDetailScreen.cancelGoal(reason, takeaway)
-        }
-        onDismissed: {
-          goalDetailScreen.cancelDialogOpen = false
-          goalDetailScreen.cancelError = ""
-        }
-      }
-
-      NewGoalDialog {
-        anchors.fill: parent
-        visible: root.newGoalDialogOpen
-        z: 900
-        errorMessage: root.newGoalError
-        editSlug: root.editGoalSlug
-        initial: root.editGoalSlug !== "" && root.goalsData[root.editGoalSlug]
-          ? root.goalsData[root.editGoalSlug].meta : null
-        onDismissed: root.newGoalDialogOpen = false
-        onSubmitted: function(fields) {
-          root.newGoalError = ""
-          if (root.editGoalSlug !== "") {
-            // No banner (verb ""): the dialog shows the failure itself.
-            root.editGoalFile(root.editGoalSlug, "", function(lines) {
-              return Writer.updateGoalFields(lines, fields)
-            }, function(ok, message) {
-              if (ok) root.newGoalDialogOpen = false
-              else root.newGoalError = "Couldn't save the goal" + (message ? " (" + message + ")" : "") + "."
-            })
-            return
-          }
-          root.handleCreateGoal(fields, function(ok, message, slug) {
-            if (ok) root.newGoalDialogOpen = false
-            else root.newGoalError = message || "Couldn't create the goal."
-          })
-        }
-      }
-
-      // A failed write is never silent. Every goal edit and event append
-      // reports its failure through showWriteError(), which surfaces here
-      // for a few seconds on whichever screen is showing when it happens.
-      // The New/Edit goal dialog's saves are the exception: the dialog stays
-      // open and shows the failure itself (newGoalError).
-      //
-      // Padded like a Button's label, spaceMd a side and spaceSm above and
-      // below, and kept spaceLg in from the window's edges, close to the
-      // spaceMd it hangs below the top. Before the spacing scale these were
-      // 14 and 20. Their other neighbouring steps were rejected: 16 a side
-      // made the banner roomier than any button, and 24 from the edges would
-      // keep a long message twice as far from the sides as from the top.
-      Rectangle {
+      ErrorBanner {
         id: writeErrorBanner
-        visible: root.writeError.length > 0
-        anchors.top: parent.top
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: Theme.spaceMd
-        width: Math.min(parent.width - Theme.spaceLg * 2, bannerText.implicitWidth + Theme.spaceMd * 2)
-        height: bannerText.implicitHeight + Theme.spaceSm * 2
-        color: Theme.paper
-        border.color: Theme.red
-        border.width: Theme.borderWidth
         z: 1000
-
-        // Bounded by the box and wrapping, so a long message grows the
-        // banner downwards instead of running out of the window at 720px.
-        // The box sizes itself from the text's *implicit* (unwrapped) width
-        // and the text takes its width from the box; sizing the box from
-        // the text's actual width would be a binding loop.
-        Text {
-          id: bannerText
-          anchors.centerIn: parent
-          width: parent.width - Theme.spaceMd * 2
-          wrapMode: Text.Wrap
-          horizontalAlignment: Text.AlignHCenter
-          text: root.writeError
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.bodySmallSize
-          color: Theme.red
-        }
-
-        MouseArea {
-          anchors.fill: parent
-          cursorShape: Qt.PointingHandCursor
-          onClicked: root.writeError = ""
-        }
       }
     }
   }

@@ -14,13 +14,7 @@ Item {
   // How far this screen's left edge sits from the window's; see Theme.pageX.
   property int leftInset: 0
 
-  property var goalsData: ({})
-  property var dayEntries: []
-  // slug -> entries, for `<slug>.log.md` files whose goal file is gone. They
-  // are real pomodoros and belong in today's account of what happened; they
-  // just have a slug where a title would be. See omvision.qml's
-  // applyGoalsList() for how they are found.
-  property var orphanLogs: ({})
+  required property App app
 
   function typeLabel(e) {
     if (e.type === "event") return "event" + (e.kind ? (" · " + String(e.kind)) : "")
@@ -30,8 +24,7 @@ Item {
   // Every log entry (goal logs + the day file) whose timestamp is today,
   // newest first, each as { entry, goalTitle }: the entry as Parser read it,
   // and the goal it was logged against, "" for the day file's.
-  function buildTodayList(data, dayList, orphans) {
-    var todayKey = Parser.dayKey(new Date())
+  function buildTodayList(todayKey, data, dayList, orphans) {
     var out = []
     function collect(entries, goalTitle) {
       for (let i = 0; i < entries.length; i++) {
@@ -48,7 +41,12 @@ Item {
     return out
   }
 
-  readonly property var todayList: buildTodayList(root.goalsData, root.dayEntries, root.orphanLogs)
+  // Orphan logs (`<slug>.log.md` files whose goal file is gone) are real
+  // pomodoros and belong in today's account of what happened; they just
+  // have a slug where a title would be. See NotesStore's applyGoalPaths().
+  // todayKey moves on at midnight, and the list with it.
+  readonly property var todayList: buildTodayList(root.app.notes.todayKey, root.app.notes.goalsData,
+                                                  root.app.notes.dayEntries, root.app.notes.orphanLogs)
 
   readonly property int todayCount: todayList.length
   readonly property int todayMinutesTotal: todayList.reduce(function(n, r) { return n + r.entry.minutes }, 0)

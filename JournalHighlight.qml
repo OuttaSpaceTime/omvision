@@ -14,6 +14,22 @@ import MarkdownHighlight
 // journal follows a theme switch like the rest of the app; the highlighter
 // itself invents nothing.
 MarkdownHighlighter {
+  id: highlight
+
+  // Where the highlighter left a gap for each `@` tag's title, from
+  // mentionSpans(): what JournalMentions hit-tests and the journal draws the
+  // titles over. Read from the text's layout, so it is asked again, a moment
+  // later (once the layout has caught up), whenever the highlighter says the
+  // tags or the layout changed. A day with no tags keeps its empty list, so
+  // the titles' Repeater isn't reset for nothing on every reflow.
+  property var tagSpans: []
+  function refreshTagSpans() {
+    var spans = highlight.mentionSpans()
+    if (spans.length === 0 && highlight.tagSpans.length === 0) return
+    highlight.tagSpans = spans
+  }
+  onMentionSpansChanged: Qt.callLater(highlight.refreshTagSpans)
+
   basePointSize: Theme.writingPointSize
   // Percent. Measured against omawrite on the same file: 135 keeps a list's
   // items together as one list, and a blank line still opens a clear gap

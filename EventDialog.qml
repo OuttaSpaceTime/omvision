@@ -7,19 +7,17 @@ import "Writer.js" as Writer
 import "Util.js" as Util
 
 // "Add event": logs time that wasn't run through the timer -- training, a
-// meeting, reading, deep work, or anything else. Submitting hands the raw,
-// still-unvalidated fields up to omvision.qml as one payload; omvision.qml is
+// meeting, reading, deep work, or anything else. Submitting hands the
+// validated fields to NotesStore.addEvent() as one payload; the store is
 // the one that knows how to turn it into a §4 entry and append it
 // (append-only, no read-back -- this dialog itself never touches the
 // filesystem). Additive, so a stray click outside closes it (DialogFrame).
 DialogFrame {
   id: root
 
-  property var goalsData: ({})
-  property string defaultSlug: ""
-  property string errorMessage: ""
-
-  signal submitted(var payload)
+  required property App app
+  visible: root.app.dialog === "event"
+  onDismissed: root.app.closeDialog()
 
   readonly property var kinds: ["training", "meeting", "reading", "deep work", "other"]
   property int kindIndex: 0
@@ -30,7 +28,7 @@ DialogFrame {
   property bool countsToward: false
   property string localError: ""
 
-  error: root.localError || root.errorMessage
+  error: root.localError
   hint: "Lands on the timeline as an event."
 
   onOpened: {
@@ -38,7 +36,7 @@ DialogFrame {
     whatText = ""
     whenText = "today " + Writer.clockTime(new Date())
     lenText = ""
-    selectedSlug = root.defaultSlug
+    selectedSlug = root.app.dialogSlug
     countsToward = false
     localError = ""
     whatField.focusInput()
@@ -50,13 +48,18 @@ DialogFrame {
     if (when === null) { root.localError = "\"When\" isn't a time I understand — try \"today 14:30\" or \"09:00\"."; return }
     if (!(minutes > 0)) { root.localError = "\"How long\" needs a duration — try \"25\", \"25m\" or \"1h30\"."; return }
     root.localError = ""
-    root.submitted({
+    var opening = root.app.dialogSerial
+    root.app.notes.addEvent({
       kind: root.kinds[root.kindIndex],
       what: root.whatText,
       whenDate: when,
       minutes: minutes,
       slug: root.selectedSlug,
       countsToward: root.countsToward
+    }, function(ok) {
+      if (!root.app.isOpen(opening)) return
+      if (ok) root.app.closeDialog()
+      else root.localError = "Couldn't log the event. Your entry is still here — try again."
     })
   }
 
@@ -148,7 +151,7 @@ DialogFrame {
       }
 
       Repeater {
-        model: Util.goalsByTitle(root.goalsData)
+        model: Util.goalsByTitle(root.app.notes.goalsData)
         delegate: BoxChip {
           id: goalChip
           required property var modelData

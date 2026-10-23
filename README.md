@@ -61,7 +61,7 @@ Writes follow the file contract's two disciplines:
 - `<slug>.md` is **read-modify-write** — through `SerialFileWriter.qml`, a queue over
   one `FileView` with `atomicWrites` (temp file + rename): one job at a time, each
   re-reading the file immediately before its change is applied, never from a copy
-  taken when the screen opened. `omvision.qml` makes these writes; `Writer.js`
+  taken when the screen opened. `NotesStore.qml` makes these writes; `Writer.js`
   computes the new text.
 - `journal/*.md` is written by `JournalStore.qml`, through a `SerialFileWriter` of
   its own, debounced while you type. Each write carries the path it was queued
@@ -87,9 +87,16 @@ fallback if that file is missing or unparseable. It never crashes on a missing t
 
 Everything is QML or plain JS in the top directory, which Quickshell loads as one config.
 
-- `omvision.qml` — the window, navigation and the app's data: it lists and loads
-  every goal, log, day and journal file, hands the screens parsed results, and makes
-  every write except the journal's.
+- `omvision.qml` — only the window and its layout.
+- `App.qml` — the app as screens and dialogs see it: its data (`notes`), where it is
+  (`nav`) and which dialog is open. Screens and dialogs declare `required property App
+  app` and call it directly, so a misspelled member fails `bin/check lint`; small widgets
+  get only what they show and report clicks by signal.
+- `NotesStore.qml` — the app's data: it lists and reads every goal, log, day and journal
+  file (each through a `WatchedFile`), keeps the day (`todayKey`, moved on at midnight),
+  and makes every write except the journal's. No screen reads or writes a file itself.
+- `Navigator.qml` — which screen shows, the open goal and its back link, the sidebar and
+  the keys that work everywhere. Plain QML, unit-tested in `tests/unit/tst_navigator.qml`.
 - `Theme.qml` (tokens) and `Paths.qml` (where the files live) — singletons. There is
   no `qmldir`: Quickshell synthesizes one for `pragma Singleton` files, and a
   hand-written one would switch that off.
@@ -101,12 +108,13 @@ Everything is QML or plain JS in the top directory, which Quickshell loads as on
 - Screens: `TodayScreen`, `GoalsScreen`, `GoalDetailScreen`, `CoachingScreen` and
   `JournalScreen`, with `Sidebar` (the icon rail). The goal detail's parts are
   `GoalHeader`, `GoalFigures`, `Timeline` (one entry is `TimelineEntry`), `TaskRow` and
-  `GoalEndActions`. The journal's are `JournalStore` (its write path), `DayList` (the
-  list of days), `MentionPopup` (the `@` goal list), `CornerButton` (its corner
-  controls) and `JournalHighlight` (the styling, loaded through a `Loader`).
+  `GoalEndActions`. The journal's are `JournalStore` (its write path), `JournalMentions`
+  (the `@` goal tags) and `MentionPopup` (their list), `DayList` (the list of days),
+  `CornerButton` (its corner controls), `TrackpadGlide` (kinetic scrolling) and
+  `JournalHighlight` (the styling, loaded through a `Loader`).
 - The dialogs: `NewGoalDialog.qml` (also Edit goal), `EventDialog.qml` and
   `CancelDialog.qml`, each in a `DialogFrame` (the modal, its card, error line and
-  footer).
+  footer). `ErrorBanner` is the window's write-error line.
 - Shared pieces, each so that one look is drawn in one place: `Button`, `PencilIcon`,
   `CaptionLabel` (a bold caption: a section's or field's name, a badge), `DialogField` (a dialog's labelled
   input), `CheckOption` and `OptionMark` (a dialog's tick box and radio ring), `TextChip`

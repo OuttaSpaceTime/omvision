@@ -13,7 +13,8 @@ import "../../Parser.js" as Parser
 // HOME that bin/test seeded from tests/fixtures/home.
 //
 // What a test file gets, besides QsTestCase's helpers:
-//   properties set by the hook: app (omvision.qml's root), journal,
+//   properties set by the hook: app (App.qml: app.notes, app.nav and the
+//     open dialog), journal,
 //     goalDetail, coaching (the screens), target (the window's content item,
 //     the tree click() searches), window
 //   openGoal(slug)                click the goal's row on the Goals screen
@@ -64,7 +65,7 @@ QsTestCase {
   // The open day carries over from the last test, so this opens today
   // rather than trusting the journal to be on it.
   function openJournal() {
-    base.app.currentScreen = "journal"
+    base.app.nav.screen = "journal"
     base.journal.openToday()
     tryCompare(base.journal, "bufferText", fixtureText(base.today), 5000)
   }
@@ -98,15 +99,15 @@ QsTestCase {
   function resetFixture() {
     resetHome()
 
-    // Back to the Goals screen, and anything left open closed.
+    // Back to the Goals screen, on today, and anything left open closed.
     if (base.goalDetail) {
       base.goalDetail.cancelEditTask()
       base.goalDetail.cancelAddTask()
-      base.goalDetail.cancelDialogOpen = false
     }
-    base.app.eventDialogOpen = false
-    base.app.newGoalDialogOpen = false
-    base.app.currentScreen = "goals"
+    base.app.closeDialog()
+    base.app.notes.followClock = true
+    base.app.notes.now = new Date()
+    base.app.nav.screen = "goals"
     mouseMove(base.target, 1, base.target.height - 1)
 
     tryVerify(function() { return base.appShowsFixture() }, 12000,
@@ -116,7 +117,7 @@ QsTestCase {
   // Whether every fixture file is what the app has loaded -- goal files,
   // logs and journal days -- and nothing else is.
   function appShowsFixture() {
-    var a = base.app
+    var a = base.app.notes
     var slugs = [], journalPaths = []
     var now = new Date()
     for (let rel in base.fixture) {
@@ -146,7 +147,7 @@ QsTestCase {
 
   // Clicks the goal's row on the Goals screen and waits for its detail.
   function openGoal(slug) {
-    base.app.currentScreen = "goals"
+    base.app.nav.screen = "goals"
     var row = item("goalRow:" + slug)
     settle(row)
     // Near the row's left edge: the edit pencil sits at its right.

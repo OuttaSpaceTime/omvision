@@ -18,8 +18,10 @@ Item {
   // How far this screen's left edge sits from the window's; see Theme.pageX.
   property int leftInset: 0
 
-  property var goalsData: ({})
-  property string selectedSlug: ""
+  required property App app
+  // The goal the session is about: the one "Coach this goal" was clicked on,
+  // or picked here.
+  readonly property string selectedSlug: root.app.nav.coachSlug
   property string selectedMethod: ""
 
   // Exactly the two the ompom-coach skill accepts. It parses `--method mi|polya`
@@ -53,7 +55,7 @@ Item {
   // `kitty` by bare name, from PATH: bin/test puts a stub ahead of it.
   function startSession() { Quickshell.execDetached(root.launchArgv) }
 
-  readonly property var goalList: Util.goalsByTitle(root.goalsData)
+  readonly property var goalList: Util.goalsByTitle(root.app.notes.goalsData)
 
   function findGoal(slug) {
     return goalList.find(function(g) { return g.slug === slug }) || null
@@ -64,12 +66,12 @@ Item {
   // appears/disappears on disk) without ever picking on the user's behalf
   // once they've made a real choice that's still valid.
   onGoalListChanged: {
-    if (goalList.length === 0) { selectedSlug = ""; return }
-    if (!findGoal(selectedSlug)) selectedSlug = goalList[0].slug
+    if (goalList.length === 0) { root.app.nav.coachSlug = ""; return }
+    if (!findGoal(selectedSlug)) root.app.nav.coachSlug = goalList[0].slug
   }
   Component.onCompleted: {
     if (selectedMethod === "" && methods.length > 0) selectedMethod = methods[0]
-    if (selectedSlug === "" && goalList.length > 0) selectedSlug = goalList[0].slug
+    if (selectedSlug === "" && goalList.length > 0) root.app.nav.coachSlug = goalList[0].slug
   }
 
   readonly property var sessionsNewestFirst:
@@ -154,7 +156,7 @@ Item {
                 required property var modelData
                 selected: root.selectedSlug === modelData.slug
                 label: modelData.meta.title
-                onClicked: root.selectedSlug = goalChip.modelData.slug
+                onClicked: root.app.nav.coachSlug = goalChip.modelData.slug
               }
             }
           }

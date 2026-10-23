@@ -22,8 +22,8 @@ OmvisionTest {
 
   function started() {
     // The journal's file list and files load later, on the event loop.
-    openedBeforeLoad = app.journalContents[notesPath(today)] === undefined
-    app.currentScreen = "journal"
+    openedBeforeLoad = app.notes.journalContents[notesPath(today)] === undefined
+    app.nav.screen = "journal"
   }
 
   function test_journal_opened_before_load_shows_the_day() {
@@ -31,7 +31,7 @@ OmvisionTest {
     var text = fixtureText(today)
     verify(text !== null && text.length > 0, "the fixture has an entry for today")
     // Let the load land and the debounce run out.
-    tryVerify(function() { return app.journalContents[notesPath(today)] === text }, 8000,
+    tryVerify(function() { return app.notes.journalContents[notesPath(today)] === text }, 8000,
               "the app loaded today's file")
     wait(1500)
 

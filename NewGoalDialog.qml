@@ -1,10 +1,10 @@
 import QtQuick
 import QtQuick.Layouts
 
-// "New goal", and "Edit goal" when `editSlug` is set: title + one-line
+// "New goal", and "Edit goal" when opened for a goal: title + one-line
 // why, optionally an estimate in poms and a done_by date, and whether the
-// goal can be focused on at the laptop. Submitting hands the raw fields up
-// to omvision.qml as one payload -- this dialog never touches the filesystem
+// goal can be focused on at the laptop. Submitting hands the fields to
+// NotesStore as one payload -- this dialog never touches the filesystem
 // itself, it only knows how to validate what the user typed (goal-files.md
 // has nothing to say about *input* validation, only about the file shape
 // once something is about to be written). Additive, so a stray click
@@ -12,14 +12,14 @@ import QtQuick.Layouts
 DialogFrame {
   id: root
 
-  property string errorMessage: ""
-  // Set both to edit an existing goal instead of creating one: `initial`
-  // is that goal's parsed meta (Parser.parseGoalFile), used to pre-fill.
-  property string editSlug: ""
-  property var initial: null
-  readonly property bool editing: editSlug !== ""
+  required property App app
+  visible: root.app.dialog === "goal"
+  onDismissed: root.app.closeDialog()
 
-  signal submitted(var fields)
+  // Opened for a goal, it edits that goal instead of creating one, starting
+  // from its parsed meta (Parser.parseGoalFile).
+  readonly property string editSlug: root.app.dialogSlug
+  readonly property bool editing: editSlug !== ""
 
   property string titleText: ""
   property string whyText: ""
@@ -30,13 +30,14 @@ DialogFrame {
   property bool focusable: true
   property string localError: ""
 
-  error: root.localError || root.errorMessage
+  error: root.localError
   hint: root.editing
     ? "Saves to goals/" + root.editSlug + ".md. The file name stays the same."
     : "Creates ~/Notes/Omvision/goals/<slug>.md with an empty Tasks list."
 
   onOpened: {
-    var g = root.editing ? root.initial : null
+    var goal = root.editing ? root.app.notes.goalsData[root.editSlug] : null
+    var g = goal ? goal.meta : null
     titleText = g ? g.title : ""
     whyText = g ? g.why : ""
     estimateText = g ? root.leadingNumber(g.raw.estimate) : ""
@@ -79,7 +80,21 @@ DialogFrame {
     }
 
     root.localError = ""
-    root.submitted({ title: t, why: root.whyText.trim(), estimate: estimate, doneBy: doneBy, focusable: root.focusable })
+    var opening = root.app.dialogSerial
+    var fields = { title: t, why: root.whyText.trim(), estimate: estimate, doneBy: doneBy, focusable: root.focusable }
+    if (root.editing) {
+      root.app.notes.updateGoal(root.editSlug, fields, function(ok, why) {
+        if (!root.app.isOpen(opening)) return
+        if (ok) root.app.closeDialog()
+        else root.localError = "Couldn't save the goal (" + why + ")."
+      })
+      return
+    }
+    root.app.notes.createGoal(fields, function(ok, message) {
+      if (!root.app.isOpen(opening)) return
+      if (ok) root.app.closeDialog()
+      else root.localError = message || "Couldn't create the goal."
+    })
   }
 
   Keys.onReturnPressed: root.submit()

@@ -19,10 +19,10 @@ Rectangle {
   id: driver
 
   // Set by omvision.qml.
-  property var app: null         // the ShellRoot: currentScreen, openGoalSlug, toggleSidebar()
+  property App app: null
   property Item target: null     // what to grab: the window's content
   property var journal: null     // JournalScreen, for its day list
-  property var goalDetail: null  // GoalDetailScreen, which owns the cancel dialog's state
+  property var goalDetail: null  // GoalDetailScreen, for its task fields
 
   readonly property string outDir: Quickshell.env("OMVISION_SHOT_DIR")
   readonly property string screen: Quickshell.env("OMVISION_SHOT_SCREEN") || "goals"
@@ -45,23 +45,20 @@ Rectangle {
   }
 
   function applyScreen() {
-    if (driver.screen.indexOf("goal:") === 0) {
-      driver.app.openGoalSlug = driver.screen.slice(5)
-      driver.app.currentScreen = "goalDetail"
-    } else {
-      driver.app.currentScreen = driver.screen
-    }
+    if (driver.screen.indexOf("goal:") === 0) driver.app.nav.openGoal(driver.screen.slice(5), "goals")
+    else driver.app.nav.screen = driver.screen
   }
 
   function runAction() {
-    if (driver.action === "sidebar") driver.app.toggleSidebar()
+    var slug = driver.app.nav.screen === "goalDetail" ? driver.app.nav.goalSlug : ""
+    if (driver.action === "sidebar") driver.app.nav.toggleSidebar()
     else if (driver.action === "days" && driver.journal) driver.journal.openList(!driver.journal.listOpen)
     // The dialogs only open -- nothing is typed or submitted, so nothing is
     // written. Opening one is the same call its button makes.
-    else if (driver.action === "event") driver.app.openEventDialog(driver.app.currentScreen === "goalDetail" ? driver.app.openGoalSlug : "")
-    else if (driver.action === "newgoal") driver.app.openNewGoalDialog()
-    else if (driver.action === "cancel" && driver.goalDetail) driver.goalDetail.cancelDialogOpen = true
-    else if (driver.action === "editgoal") driver.app.openEditGoalDialog(driver.app.openGoalSlug)
+    else if (driver.action === "event") driver.app.openDialog("event", slug)
+    else if (driver.action === "newgoal") driver.app.openDialog("goal")
+    else if (driver.action === "cancel" && slug !== "") driver.app.openDialog("cancel", slug)
+    else if (driver.action === "editgoal" && slug !== "") driver.app.openDialog("goal", slug)
     else if (driver.action === "edittask" && driver.goalDetail && driver.goalDetail.tasks.length > 0)
       driver.goalDetail.startEditTask(0, driver.goalDetail.tasks[0].text)
     // Types `@` and a query into the journal to show the goal list. The
@@ -79,7 +76,8 @@ Rectangle {
     // Opens the first goal the journal's tags name, the way clicking it does:
     // from the tags the highlighter styled, so only one a click could open.
     else if (driver.action === "opentag" && driver.journal) {
-      if (driver.journal.tagSpans.length > 0) driver.journal.openGoal(driver.journal.tagSpans[0].slug)
+      const spans = driver.journal.mentions.tagSpans
+      if (spans.length > 0) driver.app.nav.openGoal(spans[0].slug, "journal")
     }
     else if (driver.action !== "") console.warn("shot: unknown action", driver.action)
   }

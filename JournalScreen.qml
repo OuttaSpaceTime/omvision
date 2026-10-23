@@ -3,7 +3,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 
 import "Parser.js" as Parser
-import "GoalMatch.js" as GoalMatch
 import "plugins/ompom.engine/ListContinue.js" as ListContinue
 
 // Journal — a writing surface, not a list screen.
@@ -18,7 +17,7 @@ import "plugins/ompom.engine/ListContinue.js" as ListContinue
 // Writer, Typora and omawrite are. The chrome the rest of the app wears --
 // screen title, buttons, the day list -- is gone, leaving one centred column
 // of text on paper. The app sidebar is gone rather than railed -- collapsed
-// means gone in writing mode (omvision.qml's `writingMode`) -- and the `»`
+// means gone in writing mode (Navigator's `writingMode`) -- and the `»`
 // control here brings back the ordinary sidebar every other screen has.
 //
 // Markdown is styled live, the way omawrite does it: the document holds plain
@@ -30,18 +29,18 @@ import "plugins/ompom.engine/ListContinue.js" as ListContinue
 // regenerates the markdown from the document and rewraps paragraphs at ~78
 // columns on the way out.
 //
-// File discovery/loading happens in omvision.qml (same idiom as the goal
-// loaders); this screen receives that already-read data as props. Writing is
-// JournalStore's: it creates a day's file the first time it is typed into,
+// Reading the files is NotesStore's; this screen receives what it read as
+// props. Writing is JournalStore's: it creates a day's file the first time it is typed into,
 // saves the debounced text through a SerialFileWriter, deletes the file when
 // the day's text is all deleted, and never writes a day whose disk text it
 // does not know (see its header). This screen owns the
 // editor's buffer and decides when to save it.
 //
-// The parts: JournalStore (the write path), DayList (the list of days),
-// MentionPopup (the `@` goal list), CornerButton (the header's controls)
-// and GoalMatch.js (how a query matches a goal). The root keeps the API
-// omvision.qml, ShotDriver and the tests use.
+// The parts: JournalStore (the write path), JournalMentions (the `@` goal
+// tags) and MentionPopup (their list), DayList (the list of days),
+// CornerButton (the header's controls) and TrackpadGlide (the canvas's
+// kinetic scrolling). The root keeps the API omvision.qml, ShotDriver and
+// the tests use.
 Item {
   id: root
   // The day list slides in from off the left edge. With the app sidebar out,
@@ -50,26 +49,12 @@ Item {
   // not cut off by this.)
   clip: true
 
-  property var journalFiles: []      // [{path, dateIso}]
-  property var journalContents: ({}) // path -> raw text
-
-  // Ctrl+B from inside the editor: the TextEdit would otherwise swallow it
-  // before the window-level handler ever saw it. The sidebar itself is the
-  // app's ordinary one -- this screen only asks for it to be toggled, and
-  // only says whether it is currently out, so the reveal control can step
-  // aside while it is.
-  property bool sidebarShown: false
-  signal toggleSidebar()
+  required property App app
+  readonly property var journalContents: root.app.notes.journalContents // path -> raw text
 
   // How far this screen's left edge sits from the window's -- the rail's
   // animated width while it is out; see Theme.pageX.
   property int leftInset: 0
-
-  // slug -> { meta, logEntries }, the app's goals, for `@` tags: the picker
-  // offers them and a click on a tag opens one (openGoal; omvision.qml
-  // brings you back here from the goal's own back link).
-  property var goalsData: ({})
-  signal openGoal(string slug)
 
   // bin/shot only: the driver types into the editor to show the `@` picker,
   // and those keystrokes must never reach the real day's file. Nothing else
@@ -86,26 +71,16 @@ Item {
   // the side of the page, the same way it starts.
   function settleIntoWriting() {
     root.listOpen = false
-    if (root.sidebarShown) root.toggleSidebar()
+    root.app.nav.hideSidebar()
   }
 
-  // Re-evaluated on a timer so an app left open across midnight starts
-  // offering the new day. It never moves the selection on its own -- that
-  // would swap the file out from under a sentence someone is in the middle
-  // of -- it only changes which day the list calls "Today" and which one a
-  // fresh visit to the screen opens.
-  property string todayIso: Parser.dayKey(new Date())
+  // The day it is (NotesStore.todayKey), moved on at midnight. It never
+  // moves the selection on its own -- that would swap the file out from
+  // under a sentence someone is in the middle of -- it only changes which
+  // day the list calls "Today" and which one a fresh visit to the screen
+  // opens.
+  readonly property string todayIso: root.app.notes.todayKey
   readonly property string todayPath: Paths.journalFile(todayIso)
-
-  Timer {
-    interval: 60000
-    running: true
-    repeat: true
-    onTriggered: {
-      var k = Parser.dayKey(new Date())
-      if (k !== root.todayIso) root.todayIso = k
-    }
-  }
 
   property string selectedPath: ""
   property bool listOpen: false
@@ -148,7 +123,7 @@ Item {
     out.sort(function(a, b) { return a.dateIso < b.dateIso ? 1 : (a.dateIso > b.dateIso ? -1 : 0) })
     return out
   }
-  readonly property var entries: buildEntries(root.journalFiles, root.journalContents, root.todayIso)
+  readonly property var entries: buildEntries(root.app.notes.journalFiles, root.journalContents, root.todayIso)
 
   function findEntry(path) {
     for (let i = 0; i < entries.length; i++) if (entries[i].path === path) return entries[i]
@@ -188,9 +163,9 @@ Item {
     }
   }
 
-  // The entry the canvas shows: the disk-confirmed one once omvision.qml knows
+  // The entry the canvas shows: the disk-confirmed one once NotesStore knows
   // about it, else this screen's own record of what it just wrote
-  // (JournalStore.written, which covers the gap until omvision.qml's 2s
+  // (JournalStore.written, which covers the gap until NotesStore's 2s
   // `find` poll lists a file this screen just created, so the canvas never
   // goes blank for it), else an empty day that does not exist on disk yet.
   function entryForDisplay(path) {
@@ -237,7 +212,7 @@ Item {
       if (atTop) root.placeCursor()
       return
     }
-    root.closeMention()
+    root.mentions.close()
     writeDebounce.stop()
     flushWrite() // the day being left is written before the buffer moves on
     // Prefer any not-yet-confirmed text already queued or in flight for this
@@ -320,7 +295,7 @@ Item {
   function turnPage(step) {
     var to = step < 0 ? root.olderPath : root.newerPath
     if (to === "") return
-    root.closeMention()
+    root.mentions.close()
     // While the old page is still leaving (a target is set until
     // commitTurn), the turn just heads for the new target. Once the next
     // page is arriving, a click sends it on out again from wherever it has
@@ -388,137 +363,10 @@ Item {
   }
 
   // ---- `@` goal tags ------------------------------------------------------
-  // Typing `@` opens a list of every goal under the cursor, and what follows
-  // it filters the list. Accepting one writes `@<slug>` into the text: the
-  // slug, not the title, because it is one word (so it cannot be mistaken
-  // for where the tag ends), it never changes when a goal is renamed (the
-  // file name is the slug; Writer.updateGoalFields keeps it), and a reader
-  // -- the coach skill, or grep -- can find every mention of a goal in the
-  // journal with a plain search. What you read is the goal's title as it is
-  // now: the highlighter hides the slug in a gap the title's width, and
-  // tagTitles draws the title in it, so a rename shows at once. The
-  // highlighter styles only tags that name a goal that exists, and those are
-  // what a click opens.
-  //
-  // The list only opens on a typed `@`, never because the cursor happened
-  // to land on an existing tag: arrowing through a paragraph must not keep
-  // popping a menu up. It closes when the cursor leaves the word after the
-  // `@`, on Escape, or on a character a slug cannot hold (a space, say).
-  readonly property var goals: {
-    var out = []
-    for (let slug in root.goalsData) {
-      const m = root.goalsData[slug] ? root.goalsData[slug].meta : null
-      if (!m) continue
-      // Parser reads a goal file with no status: key as active.
-      out.push({ slug: slug, title: m.title, status: m.status })
-    }
-    // Active goals first -- those are what a day's writing is about -- then
-    // done and cancelled ones, each group by title.
-    out.sort(function(a, b) {
-      var ra = a.status === "active" ? 0 : 1, rb = b.status === "active" ? 0 : 1
-      if (ra !== rb) return ra - rb
-      var ta = a.title.toLowerCase(), tb = b.title.toLowerCase()
-      return ta < tb ? -1 : (ta > tb ? 1 : 0)
-    })
-    return out
-  }
-  // slug -> title, what the highlighter sizes each tag's gap to.
-  readonly property var goalTitles: {
-    var out = {}
-    for (let i = 0; i < root.goals.length; i++) out[root.goals[i].slug] = root.goals[i].title
-    return out
-  }
-
-  // Where the highlighter left a gap for a title, from mentionSpans(): what
-  // tagTitles draws and what mentionAt() hit-tests. Read from the text's
-  // layout, so it is asked again, a moment later (once the layout has caught
-  // up), whenever the highlighter says the tags or the layout changed. A day
-  // with no tags keeps its empty list, so the Repeater isn't reset for
-  // nothing on every reflow.
-  property var tagSpans: []
-  function refreshTagSpans() {
-    var h = highlightLoader.item
-    var spans = h ? h.mentionSpans() : []
-    if (spans.length === 0 && root.tagSpans.length === 0) return
-    root.tagSpans = spans
-  }
-
-  property int mentionStart: -1   // index of the `@` while the list is open
-  property string mentionQuery: ""
-  property int mentionIndex: 0    // the highlighted row
-  readonly property bool mentionOpen: root.mentionStart >= 0
-  readonly property var mentionMatches: GoalMatch.filterGoals(root.goals, root.mentionQuery)
-
-  // Called just after a typed `@` has gone into the text. Not after a word
-  // character or another `@`, so writing an e-mail address opens nothing --
-  // the same rule the highlighter's mentionRe uses.
-  function maybeOpenMention() {
-    var t = editor.text
-    var pos = editor.cursorPosition
-    if (pos < 1 || t.charAt(pos - 1) !== "@") return
-    if (pos >= 2 && /[\w@]/.test(t.charAt(pos - 2))) return
-    root.mentionQuery = ""
-    root.mentionIndex = 0
-    root.mentionStart = pos - 1
-  }
-
-  function closeMention() {
-    root.mentionStart = -1
-    root.mentionQuery = ""
-    root.mentionIndex = 0
-  }
-
-  // Follows the text and the cursor while the list is open.
-  function updateMention() {
-    if (!root.mentionOpen) return
-    var t = editor.text
-    var pos = editor.cursorPosition
-    if (t.charAt(root.mentionStart) !== "@" || pos <= root.mentionStart) { root.closeMention(); return }
-    var q = t.substring(root.mentionStart + 1, pos)
-    if (!/^[A-Za-z0-9-]*$/.test(q)) { root.closeMention(); return }
-    if (q !== root.mentionQuery) {
-      root.mentionQuery = q
-      root.mentionIndex = 0
-    }
-  }
-
-  function moveMention(step) {
-    var n = root.mentionMatches.length
-    if (n === 0) return
-    root.mentionIndex = (root.mentionIndex + step + n) % n
-  }
-
-  // Replaces the `@` and whatever of the word follows it -- up to the end
-  // of the word, not just the cursor, so accepting inside `@lea|rn` does
-  // not leave `rn` dangling -- with `@<slug>`. A space follows at the end of
-  // a line, where the next thing typed is a word; before punctuation or an
-  // existing space it does not, so `@slug.` and `@slug ,` stay as written.
-  function acceptMention(i) {
-    var g = root.mentionMatches[i]
-    if (!g) return false
-    var start = root.mentionStart
-    root.closeMention()
-    var t = editor.text
-    var end = editor.cursorPosition
-    while (end < t.length && /[A-Za-z0-9-]/.test(t.charAt(end))) end++
-    var next = t.charAt(end)
-    var insert = "@" + g.slug + ((next === "" || next === "\n") ? " " : "")
-    editor.remove(start, end)
-    editor.insert(start, insert)
-    editor.cursorPosition = start + insert.length + (next === " " ? 1 : 0)
-    return true
-  }
-
-  // The goal slug of the tag drawn at (x, y) in the editor, or "": a hit on
-  // one of tagSpans, from the `@` to the end of the title, on its line. The
-  // highlighter already decided which tags count (a known slug, not inside
-  // a code span or a link), so nothing here re-reads the text.
-  function mentionAt(x, y) {
-    for (let i = 0; i < root.tagSpans.length; i++) {
-      const s = root.tagSpans[i]
-      if (x >= s.left && x <= s.x + s.width && y >= s.top && y <= s.top + s.height) return s.slug
-    }
-    return ""
+  readonly property JournalMentions mentions: JournalMentions {
+    textEdit: editor
+    goalsData: root.app.notes.goalsData
+    highlighter: highlightLoader.item
   }
 
   // bin/shot's `mention` action: writes `@` and a query at the end of the
@@ -530,10 +378,10 @@ Item {
     var lead = editor.text.length > 0 && editor.text.charAt(editor.text.length - 1) !== "\n" ? "\n\n" : ""
     editor.insert(editor.cursorPosition, lead + "@")
     editor.cursorPosition = editor.text.length
-    root.maybeOpenMention()
+    root.mentions.maybeOpen()
     editor.insert(editor.cursorPosition, query)
     editor.cursorPosition = editor.text.length
-    root.updateMention()
+    root.mentions.follow()
   }
 
   function openToday() {
@@ -543,17 +391,16 @@ Item {
 
   // The canvas always shows *some* day, and on a fresh visit that day is
   // today. `bufferText` is the editor's own state, so when the open day's
-  // disk text becomes known after the day was opened -- omvision.qml's
+  // disk text becomes known after the day was opened -- NotesStore's
   // FileView reading it, or JournalStore reading it before a first save --
   // the buffer has to be brought in line here:
-  //   - Unbased and untouched: take the disk text. This is what used to be
-  //     missing: a journal opened before its files were read stayed blank
-  //     over a non-empty day. The old version read `entries`, which had not
-  //     been recomputed yet when journalContentsChanged fired, and it gave up
-  //     for good while the save debounce was running; nothing called it again.
-  //     It now reads the contents themselves (JournalStore.knownText), runs a
-  //     turn later (Qt.callLater, once every binding has settled), and the
-  //     test for unsaved edits is the buffer against its base, not a timer.
+  //   - Unbased and untouched: take the disk text, so a journal opened
+  //     before its files were read doesn't stay blank over a non-empty day.
+  //     It reads the contents themselves (JournalStore.knownText), not
+  //     `entries`, which have not been recomputed yet when
+  //     journalContentsChanged fires; it runs a turn later (Qt.callLater,
+  //     once every binding has settled); and the test for unsaved edits is
+  //     the buffer against its base, not a timer.
   //   - Unbased with typing in it: the day's text first, then what was typed
   //     (JournalStore.mergeTyped), and saved -- never the typed text alone.
   //   - Based, with no unsaved edits and nothing of ours on the way to disk:
@@ -603,7 +450,7 @@ Item {
   onVisibleChanged: {
     if (!root.visible) {
       root.cancelTurn()
-      root.closeMention()
+      root.mentions.close()
       writeDebounce.stop()
       flushWrite()
       root.listOpen = false
@@ -653,57 +500,8 @@ Item {
       }
     }
 
-    // Kinetic scrolling for the trackpad. Other apps keep gliding after you
-    // lift your fingers; Qt Quick on Wayland does not: the compositor sends
-    // no momentum events, only ScrollEnd, and Flickable just stops there. So
-    // Flickable keeps tracking the fingers 1:1 itself, and this handler only
-    // watches -- `blocking: false` passes every event on to it -- measuring
-    // how fast the page was moving and, on ScrollEnd, throwing it on at that
-    // speed.
-    //
-    // Taking the whole gesture over instead was rejected: Flickable would
-    // still see ScrollBegin (it carries no delta, so this handler declines
-    // it) but never the matching ScrollEnd, and be left mid-drag. Mouse wheel
-    // events (NoScrollPhase) are left alone too, to Qt's own wheel handling.
-    // acceptedDevices must name TouchPad: Qt's Wayland backend marks trackpad
-    // scrolls as synthesized, which a WheelHandler ignores by default.
-    WheelHandler {
-      id: trackpadGlide
-      target: null
-      blocking: false
-      acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-
-      // Velocity is read over the last `windowMs` ms of the gesture; if the
-      // fingers rested longer than `restMs` before lifting, there is no glide,
-      // so a careful scroll to a spot stays put.
-      readonly property int windowMs: 80
-      readonly property int restMs: 50
-      readonly property real boost: 1.5
-      readonly property real minVelocity: 100
-      property var samples: []
-
-      onWheel: (event) => {
-        const now = Date.now()
-        if (event.phase === Qt.ScrollUpdate) {
-          samples.push({ t: now, dy: event.pixelDelta.y })
-          while (samples.length > 0 && now - samples[0].t > windowMs) samples.shift()
-        } else if (event.phase === Qt.ScrollEnd) {
-          const s = samples
-          samples = []
-          if (s.length < 2 || now - s[s.length - 1].t > restMs) return
-          let dy = 0
-          for (let i = 1; i < s.length; ++i) dy += s[i].dy
-          const ms = s[s.length - 1].t - s[0].t
-          if (ms <= 0) return
-          const v = dy / ms * 1000 * boost
-          if (Math.abs(v) < minVelocity) return
-          // Later, not now: Flickable handles this same ScrollEnd right
-          // after us, and its returnToBounds() can reset the timeline a
-          // flick started here would run on. Putting fingers back down
-          // (ScrollBegin) resets it on purpose, which catches the glide.
-          Qt.callLater(() => canvas.flick(0, v))
-        }
-      }
+    TrackpadGlide {
+      flickable: canvas
     }
 
     // One column at a fixed measure -- the window can be any width, the line
@@ -740,26 +538,16 @@ Item {
       onTextChanged: {
         root.bufferText = text
         writeDebounce.restart()
-        root.updateMention()
+        root.mentions.follow()
       }
-      onCursorPositionChanged: root.updateMention()
+      onCursorPositionChanged: root.mentions.follow()
       onCursorRectangleChanged: canvas.ensureVisible(cursorRectangle)
       Keys.onEscapePressed: {
-        if (root.mentionOpen) root.closeMention()
+        if (root.mentions.open) root.mentions.close()
         else root.listOpen = false
       }
       Keys.onPressed: function(event) {
-        // The `@` list, while open, takes the keys a menu takes. Return and
-        // Tab with nothing to accept close it and fall through, so Return
-        // still ends the line.
-        if (root.mentionOpen && !(event.modifiers & Qt.ControlModifier)) {
-          if (event.key === Qt.Key_Down) { root.moveMention(1); event.accepted = true; return }
-          if (event.key === Qt.Key_Up) { root.moveMention(-1); event.accepted = true; return }
-          if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Tab) {
-            if (root.acceptMention(root.mentionIndex)) { event.accepted = true; return }
-            root.closeMention()
-          }
-        }
+        if (root.mentions.handleKey(event)) { event.accepted = true; return }
         // Alt+←/→ turn a page, as well as Ctrl+PgUp/PgDn below: the browser's
         // back and forward, and on a laptop PgUp/PgDn sit behind Fn. The
         // editor does nothing with Alt+arrows, and Omarchy binds them only
@@ -772,7 +560,7 @@ Item {
         }
         // After the key has gone into the text, not now: the `@` is not
         // there yet.
-        if (event.text === "@") Qt.callLater(root.maybeOpenMention)
+        if (event.text === "@") Qt.callLater(root.mentions.maybeOpen)
         if (!(event.modifiers & Qt.ControlModifier)) {
           // Anything that produces text (letters, Return, Backspace...) is
           // writing; arrows and Escape carry none and leave things as they are.
@@ -785,7 +573,9 @@ Item {
         }
         if (event.key === Qt.Key_O) { root.openList(!root.listOpen); event.accepted = true }
         else if (event.key === Qt.Key_N) { root.openToday(); event.accepted = true }
-        else if (event.key === Qt.Key_B) { root.toggleSidebar(); event.accepted = true }
+        // Ctrl+B here too: the TextEdit would otherwise swallow it before
+        // the window's handler saw it.
+        else if (event.key === Qt.Key_B) { root.app.nav.toggleSidebar(); event.accepted = true }
         else if (event.key === Qt.Key_PageUp) { root.turnPage(-1); event.accepted = true }
         else if (event.key === Qt.Key_PageDown) { root.turnPage(1); event.accepted = true }
       }
@@ -803,22 +593,18 @@ Item {
         id: highlightLoader
         Component.onCompleted: setSource("JournalHighlight.qml", {
           document: editor.textDocument,
-          mentions: Qt.binding(function() { return root.goalTitles })
+          mentions: Qt.binding(function() { return root.mentions.goalTitles })
         })
-        onLoaded: {
-          if (!item) return
-          item.mentionSpansChanged.connect(function() { Qt.callLater(root.refreshTagSpans) })
-        }
       }
 
-      // The goal titles over the tags' gaps (see the `@` goal tags section).
+      // The goal titles over the tags' gaps (see JournalMentions).
       // Children of the editor, so they share its coordinates and scroll
       // with it, and are drawn over its text. In the slug's own font -- a
       // heading's weight, `**` bold -- and on the line's baseline, the way
       // the text around it is set.
       Repeater {
         id: tagTitles
-        model: root.tagSpans
+        model: root.mentions.tagSpans
         Text {
           required property var modelData
           x: modelData.x
@@ -847,14 +633,14 @@ Item {
       TapHandler {
         acceptedButtons: Qt.LeftButton
         onTapped: function(eventPoint) {
-          var slug = root.mentionAt(eventPoint.position.x, eventPoint.position.y)
-          if (slug !== "") root.openGoal(slug)
+          var slug = root.mentions.slugAt(eventPoint.position.x, eventPoint.position.y)
+          if (slug !== "") root.app.nav.openGoal(slug, "journal")
           else root.settleIntoWriting()
         }
       }
       HoverHandler {
         id: tagHover
-        cursorShape: root.mentionAt(tagHover.point.position.x, tagHover.point.position.y) !== ""
+        cursorShape: root.mentions.slugAt(tagHover.point.position.x, tagHover.point.position.y) !== ""
                      ? Qt.PointingHandCursor : Qt.IBeamCursor
       }
     }
@@ -866,18 +652,18 @@ Item {
   // off, and below the day list, which closes it anyway. See MentionPopup.
   MentionPopup {
     id: mentionPopup
-    visible: root.mentionOpen && root.visible && !root.listOpen
+    visible: root.mentions.open && root.visible && !root.listOpen
     z: 25
     textEdit: editor
     scroller: canvas
-    mentionStart: root.mentionStart
-    matches: root.mentionMatches
-    currentIndex: root.mentionIndex
-    query: root.mentionQuery
-    goalCount: root.goals.length
+    mentionStart: root.mentions.start
+    matches: root.mentions.matches
+    currentIndex: root.mentions.index
+    query: root.mentions.query
+    goalCount: root.mentions.goals.length
     bottomInset: statusBacking.height
-    onHighlight: function(index) { root.mentionIndex = index }
-    onAccept: function(index) { root.acceptMention(index); editor.forceActiveFocus() }
+    onHighlight: function(index) { root.mentions.index = index }
+    onAccept: function(index) { root.mentions.accept(index); editor.forceActiveFocus() }
   }
 
   // ---- corner controls ------------------------------------------------------
@@ -889,7 +675,7 @@ Item {
   // One sticky row: the controls and the day's date, floating over the text
   // rather than scrolling with it. Opaque (paper, not translucent) so lines
   // scrolled past disappear behind it the way a normal editor's header
-  // works -- the text used to slide straight through the controls.
+  // does, instead of sliding through the controls.
   Rectangle {
     id: stickyHeader
     anchors.left: parent.left
@@ -918,8 +704,8 @@ Item {
       CornerButton {
         glyph: "»"
         tip: "Show sidebar (Ctrl+B)"
-        visible: !root.sidebarShown
-        onActivated: { root.listOpen = false; root.toggleSidebar() }
+        visible: root.app.nav.sidebarHidden
+        onActivated: { root.listOpen = false; root.app.nav.toggleSidebar() }
       }
       CornerButton {
         glyph: "≡"
@@ -934,9 +720,9 @@ Item {
       // Set off from `≡` by this spaceSm plus the Row's spaceXs either side:
       // spaceLg in all, the step between controls in a row, where the two
       // controls sit only spaceXs apart, and the same spaceLg the row keeps
-      // from the window's edge. It was 10 (18 in all) before the spacing
-      // scale. spaceMd, the other neighbour, gave 20 in all: more than the
-      // row's margin, for no reason a reader could see.
+      // from the window's edge. spaceMd, the other neighbour, would give 20
+      // in all: more than the row's margin, for no reason a reader could
+      // see.
       Item {
         width: Theme.spaceSm
         height: Theme.smallControlHeight

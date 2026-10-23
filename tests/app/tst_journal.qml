@@ -27,11 +27,24 @@ OmvisionTest {
     expectFile(today, "Again.")
   }
 
+  // `@` opens the goal list under the cursor, what follows filters it, and
+  // Return writes the goal's slug into the day with a space after it.
+  function test_a_goal_tag_writes_the_slug() {
+    openJournal()
+    key(Qt.Key_End, Qt.ControlModifier)
+    type("\n@wri")
+    tryVerify(function() { return journal.mentions.open && journal.mentions.matches.length === 1 }, 3000,
+              "the list shows the one goal matching `wri`")
+    key(Qt.Key_Return)
+    verify(!journal.mentions.open, "accepting closes the list")
+    expectFile(today, fixtureText(today) + "\n@write-the-report ")
+  }
+
   // An emptied day drops out of the day list (today keeps its row whatever
   // is on disk, so this is a past day).
   function test_an_emptied_past_day_leaves_the_day_list() {
     var path = addDays({ 3: "An old day.\n" })[3]
-    app.currentScreen = "journal"
+    app.nav.screen = "journal"
     journal.openDay(path)
     tryCompare(journal, "bufferText", "An old day.\n", 5000)
     key(Qt.Key_A, Qt.ControlModifier)
@@ -47,13 +60,13 @@ OmvisionTest {
   // reached the paper's MouseArea.
   function test_a_click_into_the_text_hides_the_sidebar() {
     openJournal()
-    app.toggleSidebar() // what `»` does
-    tryVerify(function() { return journal.sidebarShown }, 3000, "the sidebar is out")
+    app.nav.toggleSidebar() // what `»` does
+    tryVerify(function() { return !app.nav.sidebarHidden }, 3000, "the sidebar is out")
     var page = item("journalEditor")
     settle(page)
     // On the first line's words, not the paper beside them.
     mouseClick(page, page.width / 8, page.cursorRectangle.height / 2)
-    tryVerify(function() { return !journal.sidebarShown }, 3000, "the click put the sidebar away")
+    tryVerify(function() { return app.nav.sidebarHidden }, 3000, "the click put the sidebar away")
     expectFileUnchanged(today, 1500)
   }
 }

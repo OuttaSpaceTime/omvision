@@ -12,53 +12,17 @@ Item {
   // How far this screen's left edge sits from the window's; see Theme.pageX.
   property int leftInset: 0
 
-  property string slug: ""
-  property var meta: null
-  property var logEntries: []
-  // Where the back link goes, which depends on how you got here: the Goals
-  // list, or a tag in the journal. omvision.qml owns the navigation.
-  property string backLabel: "← Goals"
-  signal back()
+  required property App app
 
-  // Write-path signals. GoalDetailScreen owns none of the filesystem work
-  // -- it only reports what the user did; omvision.qml re-reads
-  // <slug>.md immediately before applying each of these (goal-files.md's
-  // "re-read right before writing, never from a copy taken when the
-  // screen was opened" rule), which this screen has no way to honour on
-  // its own since it only ever sees whatever omvision.qml last loaded.
-  signal toggleTask(int index)
-  signal addTask(string text)
-  signal editTask(int index, string text)
-  signal closeGoal()
-  signal reopenGoal()
-  signal cancelGoal(string reason, string takeaway)
-  signal addEventRequested()
-  signal coachRequested()
-  signal editGoalRequested()
-
-  // Result callbacks from omvision.qml: called directly on this instance
-  // (it holds the id) rather than routed back through a signal, so the
-  // inline add-task field and the cancel dialog can keep what the user
-  // typed on a failed write instead of clearing it optimistically.
-  function onAddTaskResult(ok, message) {
-    if (ok) { addingTask = false; addTaskText = ""; addTaskInput.text = "" }
-    else addTaskError = message || "couldn't save"
-  }
-  function onCancelResult(ok, message) {
-    if (ok) { cancelDialogOpen = false; cancelError = "" }
-    else cancelError = message || "couldn't save"
-  }
-  // Only closes the field if it is still the one that was saved: a click on
-  // another task's pencil saves this edit and opens that one before the
-  // write lands, and the result must not close the new field. A failure
-  // then has no field to show in, but omvision.qml's banner reports it.
-  function onEditTaskResult(ok, message) {
-    var saved = root.savingTaskIndex
-    root.savingTaskIndex = -1
-    if (root.editingTaskIndex !== saved) return
-    if (ok) { root.editingTaskIndex = -1; root.editTaskText = "" }
-    else root.editTaskError = message || "couldn't save"
-  }
+  // The open goal. Every change to it goes through app.notes, which re-reads
+  // <slug>.md immediately before applying it (goal-files.md's "re-read right
+  // before writing, never from a copy taken when the screen was opened"
+  // rule), which this screen has no way to honour on its own since it only
+  // ever sees what the store last loaded.
+  readonly property string slug: root.app.nav.goalSlug
+  readonly property var goal: root.app.notes.goalsData[root.slug] || null
+  readonly property var meta: root.goal ? root.goal.meta : null
+  readonly property var logEntries: root.goal ? root.goal.logEntries : []
 
   function startEditTask(index, text) {
     root.editTaskText = text
@@ -74,7 +38,20 @@ Item {
     if (text === root.editTaskOriginal.trim()) { root.cancelEditTask(); return }
     root.editTaskError = ""
     root.savingTaskIndex = index
-    root.editTask(index, text)
+    // Only closes the field if it is still the one that was saved: a click
+    // on another task's pencil saves this edit and opens that one before
+    // the write lands, and the result must not close the new field. A
+    // failure then has no field to show in, so it goes to the banner
+    // (returning false). Likewise only a save still marked as saving
+    // clears the mark: one that lands while a later save is under way
+    // would otherwise let the click-away catcher commit that later edit a
+    // second time.
+    root.app.notes.editTask(root.slug, index, text, function(ok, why) {
+      if (root.savingTaskIndex === index) root.savingTaskIndex = -1
+      if (root.editingTaskIndex !== index) return false
+      if (ok) { root.editingTaskIndex = -1; root.editTaskText = "" }
+      else root.editTaskError = why
+    })
   }
   function cancelEditTask() {
     root.editingTaskIndex = -1
@@ -86,7 +63,11 @@ Item {
     var text = root.addTaskText.trim()
     if (text === "") { root.addingTask = false; return } // empty input is a no-op
     root.addTaskError = ""
-    root.addTask(text)
+    // Kept in the field on a failed write, not cleared optimistically.
+    root.app.notes.addTask(root.slug, text, function(ok, why) {
+      if (ok) root.cancelAddTask()
+      else root.addTaskError = why
+    })
   }
   function cancelAddTask() {
     root.addingTask = false
@@ -114,8 +95,6 @@ Item {
   // A field left open by a failed save belongs to that goal's task list,
   // not to the same row of the next goal opened.
   onSlugChanged: root.cancelEditTask()
-  property bool cancelDialogOpen: false
-  property string cancelError: ""
 
   readonly property int poms: Parser.pomodoroCount(logEntries)
   readonly property var tasks: meta ? meta.tasks : []
@@ -123,9 +102,9 @@ Item {
 
   // The screen is put together from GoalHeader, GoalFigures, Timeline,
   // TaskRow and GoalEndActions. None of them keeps state or writes: the
-  // state above stays here, where omvision.qml, the tests and the
-  // click-away catcher below reach it, and the parts report what the user
-  // did through their signals.
+  // state above stays here, where ShotDriver, the tests and the click-away
+  // catcher below reach it, and the parts report what the user did through
+  // their signals.
   ColumnLayout {
     // The journal's column, on the journal's line (Theme.pageX).
     x: Theme.pageX(root.width, root.leftInset)
@@ -138,12 +117,12 @@ Item {
       Layout.fillWidth: true
       title: root.meta ? root.meta.title : root.slug
       editable: !!root.meta
-      backLabel: root.backLabel
+      backLabel: root.app.nav.goalBack === "journal" ? "← Journal" : "← Goals"
       running: !!root.meta && root.meta.status === "active"
-      onBack: root.back()
-      onEditGoalRequested: root.editGoalRequested()
-      onAddEventRequested: root.addEventRequested()
-      onCoachRequested: root.coachRequested()
+      onBack: root.app.nav.back()
+      onEditGoalRequested: root.app.openDialog("goal", root.slug)
+      onAddEventRequested: root.app.openDialog("event", root.slug)
+      onCoachRequested: root.app.nav.coach(root.slug)
     }
 
     GoalFigures {
@@ -294,7 +273,7 @@ Item {
                 editing: root.editingTaskIndex === index
                 editText: root.editTaskText
                 editError: root.editTaskError
-                onToggleRequested: root.toggleTask(index)
+                onToggleRequested: root.app.notes.toggleTask(root.slug, index)
                 onEditRequested: root.startEditTask(index, modelData.text)
                 onEditTextEdited: function(text) { root.editTaskText = text }
                 onCommitRequested: root.commitEditTask(index)
@@ -337,9 +316,9 @@ Item {
             id: endActions
             Layout.fillWidth: true
             meta: root.meta
-            onCloseGoal: root.closeGoal()
-            onReopenGoal: root.reopenGoal()
-            onCancelRequested: { root.cancelError = ""; root.cancelDialogOpen = true }
+            onCloseGoal: root.app.notes.closeGoal(root.slug)
+            onReopenGoal: root.app.notes.reopenGoal(root.slug)
+            onCancelRequested: root.app.openDialog("cancel", root.slug)
           }
         }
       }
@@ -377,14 +356,4 @@ Item {
       mouse.accepted = deleting
     }
   }
-
-  // CancelDialog is no longer instantiated here: nested inside this
-  // screen's own Item, it could only ever cover the content area to the
-  // right of the sidebar (the Item this screen fills is already narrower
-  // than the window, see omvision.qml's `width: parent.width -
-  // sidebarSlot.width`), leaving the sidebar itself clickable behind a
-  // dialog that is supposed to be fully modal. omvision.qml mounts one
-  // shared CancelDialog at the window root instead, the same level
-  // EventDialog already lived at, driven by this screen's own
-  // cancelDialogOpen/cancelError state and cancelGoal signal.
 }

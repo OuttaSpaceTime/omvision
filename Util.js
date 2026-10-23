@@ -43,7 +43,7 @@ function sameList(a, b, keyOf) {
   return true
 }
 
-// The goals in `goalsData` (slug -> { meta, logEntries }, as omvision.qml
+// The goals in `goalsData` (slug -> { meta, logEntries }, as NotesStore
 // keeps it), as a list sorted by title: { slug, meta, logEntries } each. A
 // slug whose file didn't parse (no meta) is left out. The Goals and
 // Coaching screens and the event dialog's goal chips all list goals this

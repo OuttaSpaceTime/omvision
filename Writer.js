@@ -8,7 +8,7 @@
 // front-matter keys, section order, blank lines, the user's own prose in
 // "## Coaching" -- survives byte for byte. Nothing here throws: every
 // entry point returns null on anything it can't safely edit, and the
-// caller (omvision.qml) must treat null as "do not write" (same posture
+// caller (NotesStore.qml) must treat null as "do not write" (same posture
 // as every reader in Parser.js, and the same rule goal-files.md §6 sets
 // for a reader that can't parse a file).
 //
@@ -21,7 +21,7 @@
 //
 // `<slug>.md` is the only thing this file edits in place. `<slug>.log.md`
 // and the day files are append-only per the contract (§2) -- Writer.js
-// only *formats* those entries (formatEventEntry); omvision.qml appends
+// only *formats* those entries (formatEventEntry); NotesStore appends
 // the result with a shell-free O_APPEND write (`tee -a`), never through
 // this file's line-editing machinery, and never after a read.
 

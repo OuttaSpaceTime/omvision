@@ -98,6 +98,11 @@ by Qt's own runner: `qmltestrunner -platform offscreen -input tests/unit`.
 The real app, driven from inside. `omvision.qml` has a test hook: when `OMVISION_TEST`
 names a `.qml` file, a Loader beside the screenshot driver's loads it and hands it `app`,
 `journal`, `goalDetail`, `coaching`, `target` (the window's content item) and `window`.
+`app` is the `App` (`App.qml`): what the app has read is on `app.notes` (`NotesStore.qml`:
+`goalsData`, `dayEntries`, `journalContents`, ...; with `app.notes.followClock` off, setting
+`app.notes.now` moves the day on the way midnight does), where it is on `app.nav` (`Navigator.qml`: `screen`, `goalSlug`,
+`sidebarHidden`, ...), and the open dialog is `app.dialog` (`"event"`, `"goal"`, `"cancel"`
+or `""`).
 bin/test starts the app once per `tests/app/tst_*.qml` through `bin/omvision`, with a fresh
 temp HOME seeded from `tests/fixtures/home`. `tests/bin` goes first on its PATH: a program the app
 launches is found there as a stub that records its arguments, not run for real. `kitty`
@@ -124,7 +129,8 @@ The usual `compare`, `verify`, `tryCompare`, `tryVerify`, `mouseClick`, `mouseMo
 `keyClick` and `wait` work as in any TestCase.
 
 Before every test the fixture files are put back (`tests/lib/seed-home.sh`) and the test
-waits until the app shows them again, then goes back to the Goals screen. State the app
+waits until the app shows them again, then goes back to the Goals screen, on today's date,
+with every dialog closed. State the app
 keeps in memory across screens is not reset: the journal's open day, for instance. A test
 that needs the app exactly as it started gets a file of its own and sets
 `resetBeforeEachTest: false` (see `tst_journal_blank.qml`).
@@ -160,6 +166,7 @@ and a refactor must keep them:
 | `taskRow:<i>`, `taskEdit:<i>`, `taskEditField:<i>` | a task row, its pencil, its inline edit |
 | `addTaskButton`, `addTaskField` | `+ task` and its input |
 | `closeGoalButton`, `reopenGoalButton`, `cancelGoalButton` | the goal's close, reopen and cancel |
+| `endGoalButton` | the cancel dialog's `End goal` |
 | `addEventButton`, `coachButton`, `editGoalButton` | the detail header's actions |
 | `backControl` | the detail's `← Goals` / `← Journal` link |
 | `journalEditor`, `journalCanvas` | the journal's page, and the Flickable it scrolls in |

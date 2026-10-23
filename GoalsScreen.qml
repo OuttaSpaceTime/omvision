@@ -13,16 +13,11 @@ Item {
   // How far this screen's left edge sits from the window's; see Theme.pageX.
   property int leftInset: 0
 
-  property var goalsData: ({})
-  property string selectedSlug: ""
-  signal openGoal(string slug)
-  signal addEventRequested()
-  signal newGoalRequested()
-  signal editGoalRequested(string slug)
+  required property App app
 
   property string filterStatus: "active"
 
-  readonly property var goalList: Util.goalsByTitle(goalsData)
+  readonly property var goalList: Util.goalsByTitle(root.app.notes.goalsData)
 
   // Parser reads a goal with no `status:` as active, so status is always set.
   function countByStatus(status) {
@@ -67,8 +62,8 @@ Item {
 
         Item { Layout.fillWidth: true }
 
-        Button { label: "Add event"; onActivated: root.addEventRequested() }
-        Button { label: "New goal"; onActivated: root.newGoalRequested() }
+        Button { label: "Add event"; onActivated: root.app.openDialog("event") }
+        Button { label: "New goal"; onActivated: root.app.openDialog("goal") }
       }
 
       // The filters are always their own row, never sharing the title's.
@@ -145,7 +140,7 @@ Item {
             required property var modelData
             required property int index
 
-            readonly property bool isSelected: root.selectedSlug === modelData.slug
+            readonly property bool isSelected: root.app.nav.goalSlug === modelData.slug
             // Passive, so the row stays hovered while the pointer is over
             // the edit pencil's own MouseArea.
             HoverHandler { id: rowHover }
@@ -273,7 +268,7 @@ Item {
             MouseArea {
               anchors.fill: parent
               cursorShape: Qt.PointingHandCursor
-              onClicked: root.openGoal(rowItem.modelData.slug)
+              onClicked: root.app.nav.openGoal(rowItem.modelData.slug, "goals")
             }
 
             // Overlaid rather than inside rowContent, and declared after the
@@ -287,7 +282,7 @@ Item {
               anchors.right: parent.right
               anchors.rightMargin: Theme.panelPadding
               anchors.verticalCenter: parent.verticalCenter
-              onClicked: root.editGoalRequested(rowItem.modelData.slug)
+              onClicked: root.app.openDialog("goal", rowItem.modelData.slug)
             }
           }
         }
