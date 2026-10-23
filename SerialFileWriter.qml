@@ -86,7 +86,6 @@ import Quickshell.Io
 //       the queue. Each `next` job goes in front of the previous one, so
 //       queue at most one per onDone.
 //
-//   busy                 -- true while any job is queued or in flight.
 //   hasPending(path)     -- a job for `path` is queued or in flight.
 //   pendingTextFor(path) -- the text of the newest write() for `path` that
 //                           is queued or in flight ("" for a remove()), or
@@ -94,7 +93,7 @@ import Quickshell.Io
 //                           it says it.
 //
 // onDone runs once per job, after the job's FileView work is over. By then
-// the job no longer counts toward busy, hasPending() or pendingTextFor(), so
+// the job no longer counts toward hasPending() or pendingTextFor(), so
 // a callback that checks them sees only what is still to come. It may queue
 // more jobs; they start on a later event-loop turn, never inside it.
 //
@@ -103,15 +102,13 @@ import Quickshell.Io
 QtObject {
   id: writer
 
-  // Jobs not yet started, oldest first. Reassigned rather than mutated in
-  // place, so `busy` and anything else bound to it re-evaluates.
+  // Jobs not yet started, oldest first. Nothing binds to it, so it is
+  // changed in place.
   property var queue: []
   // The job being worked on, or null. Its `phase` is "read" while its
   // reload() is out, "save" while its setText() is and "remove" while its
   // `rm` runs.
   property var current: null
-
-  readonly property bool busy: current !== null || queue.length > 0
 
   function modify(path, mutate, onDone, options) {
     enqueue({ kind: "modify", path: path, mutate: mutate, onDone: onDone }, options)
@@ -152,7 +149,7 @@ QtObject {
   function enqueue(job, options) {
     var opts = options || {}
     job.phase = ""
-    var q = writer.queue.slice()
+    var q = writer.queue
     var last = q.length > 0 ? q[q.length - 1] : null
     if (opts.supersede && writer.changesText(job) && last && writer.changesText(last) && last.path === job.path) {
       q[q.length - 1] = job
@@ -161,7 +158,6 @@ QtObject {
     } else {
       q.push(job)
     }
-    writer.queue = q
     writer.kick()
   }
 
@@ -172,9 +168,7 @@ QtObject {
   // Runs from dispatchTimer, never from a FileView handler (bug 4).
   function dispatch() {
     if (writer.current !== null || writer.queue.length === 0) return
-    var q = writer.queue.slice()
-    var job = q.shift()
-    writer.queue = q
+    var job = writer.queue.shift()
     writer.current = job
     if (job.kind === "remove") {
       // Nothing to read first: the file goes whatever it says.

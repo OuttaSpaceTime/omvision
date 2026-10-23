@@ -39,7 +39,6 @@ ColumnLayout {
     // covers title and pencil together, so crossing the gap between them
     // doesn't flicker it off.
     RowLayout {
-      id: titleGroup
       Layout.fillWidth: true
       Layout.maximumWidth: implicitWidth
       spacing: Theme.spaceSm
@@ -68,8 +67,8 @@ ColumnLayout {
 
     Item { Layout.fillWidth: true }
 
-    Button { objectName: "addEventButton"; label: "Add event"; inert: false; onActivated: root.addEventRequested() }
-    Button { objectName: "coachButton"; label: "Coach this goal"; filled: true; inert: false; onActivated: root.coachRequested() }
+    Button { objectName: "addEventButton"; label: "Add event"; onActivated: root.addEventRequested() }
+    Button { objectName: "coachButton"; label: "Coach this goal"; filled: true; onActivated: root.coachRequested() }
   }
 
   Item { Layout.preferredHeight: Theme.spaceLg; Layout.fillWidth: true }
@@ -126,12 +125,9 @@ ColumnLayout {
         }
       }
 
-      Text {
+      CaptionLabel {
         visible: root.running
         text: "running"
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.captionSize
-        font.bold: true
         color: Theme.accentColor
       }
     }

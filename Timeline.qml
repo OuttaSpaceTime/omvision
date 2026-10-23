@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 
@@ -18,28 +20,15 @@ Flickable {
 
   // Day groups, newest day first, each holding its entries newest first.
   function groupByDay(entries) {
-    var byDay = {}
-    var order = []
+    var byDay = {}, out = []
     for (let i = entries.length - 1; i >= 0; i--) { // newest first
-      const e = entries[i]
-      const key = Parser.dayKey(e.date)
-      if (!byDay[key]) { byDay[key] = { key: key, date: e.date, entries: [] }; order.push(key) }
+      const e = entries[i], key = Parser.dayKey(e.date)
+      if (!byDay[key]) out.push(byDay[key] = { key: key, date: e.date, entries: [] })
       byDay[key].entries.push(e)
     }
-    var out = []
-    for (let j = 0; j < order.length; j++) out.push(byDay[order[j]])
     return out
   }
   readonly property var dayGroups: groupByDay(logEntries)
-
-  // A day header's duration: "50 min", "1 h", "1 h 05". Not
-  // Parser.formatHCaption, which leaves the minutes unpadded ("1 h 5").
-  function formatDayDuration(total) {
-    var h = Math.floor(total / 60), m = total % 60
-    if (h === 0) return m + " min"
-    if (m === 0) return h + " h"
-    return h + " h " + (m < 10 ? "0" + m : String(m))
-  }
 
   TextMetrics {
     id: timeMetrics
@@ -55,13 +44,7 @@ Flickable {
     width: parent.width - Theme.spaceLg
     spacing: Theme.spaceSm
 
-    Text {
-      text: "What happened"
-      font.family: Theme.fontFamily
-      font.pixelSize: Theme.captionSize
-      font.bold: true
-      color: Theme.dim
-    }
+    CaptionLabel { text: "What happened" }
 
     Text {
       visible: root.dayGroups.length === 0
@@ -82,19 +65,13 @@ Flickable {
         RowLayout {
           width: dayBlock.width
           spacing: Theme.spaceSm
-          Text {
+          CaptionLabel {
             text: Parser.dayHeaderLabel(dayBlock.modelData.date)
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.captionSize
-            font.bold: true
             color: Theme.ink
           }
           Text {
-            text: {
-              var n = Parser.pomodoroCount(dayBlock.modelData.entries)
-              return n + (n === 1 ? " pom · " : " poms · ")
-                + root.formatDayDuration(Parser.pomodoroMinutes(dayBlock.modelData.entries))
-            }
+            text: Parser.pomsLabel(Parser.pomodoroCount(dayBlock.modelData.entries)) + " · "
+                  + Parser.durationLabel(Parser.pomodoroMinutes(dayBlock.modelData.entries))
             font.family: Theme.fontFamily
             font.pixelSize: Theme.bodySmallSize
             color: Theme.dim

@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -5,11 +7,11 @@ import Quickshell.Io
 
 import "Util.js" as Util
 
-// Coaching — the hand-off screen, minus anything that writes (plan.md
-// Milestone 4 / C2). Goal + method are local UI state only (they pick which
-// command is shown, never touch disk). `start in kitty` opens the session
-// itself; `copy` stays for running it somewhere else (another terminal, a
-// tmux pane), since the ompom-coach skill receives it either way.
+// Coaching — the hand-off screen, minus anything that writes. Goal and
+// method are local UI state only (they pick which command is shown, never
+// touch disk). `start in kitty` opens the session itself; `copy` stays for
+// running it somewhere else (another terminal, a tmux pane), since the
+// ompom-coach skill receives it either way.
 Item {
   id: root
 
@@ -54,8 +56,7 @@ Item {
   readonly property var goalList: Util.goalsByTitle(root.goalsData)
 
   function findGoal(slug) {
-    for (let i = 0; i < goalList.length; i++) if (goalList[i].slug === slug) return goalList[i]
-    return null
+    return goalList.find(function(g) { return g.slug === slug }) || null
   }
   readonly property var selectedGoal: findGoal(root.selectedSlug)
 
@@ -71,16 +72,10 @@ Item {
     if (selectedSlug === "" && goalList.length > 0) selectedSlug = goalList[0].slug
   }
 
-  readonly property var sessionsNewestFirst: {
-    var s = (root.selectedGoal && root.selectedGoal.meta.coaching) ? root.selectedGoal.meta.coaching : []
-    return s.slice().reverse()
-  }
+  readonly property var sessionsNewestFirst:
+    ((root.selectedGoal && root.selectedGoal.meta.coaching) || []).slice().reverse()
 
   readonly property var readsList: ["The goal file", "Log entries since the last session", "Journal entries", "Events"]
-
-  function sectionLabel(text) {
-    return text
-  }
 
   // Feedback lives on the button itself rather than in a floating popup:
   // nothing to position, nothing to dismiss, and it reads where the eye
@@ -147,34 +142,19 @@ Item {
           width: parent.width
           spacing: Theme.spaceSm
 
-          Text {
-            text: "Goal"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.captionSize
-            font.bold: true
-            color: Theme.dim
-          }
+          CaptionLabel { text: "Goal" }
 
           Flow {
             width: parent.width
             spacing: Theme.spaceMd
             Repeater {
               model: root.goalList
-              delegate: Text {
+              delegate: TextChip {
+                id: goalChip
                 required property var modelData
-                readonly property bool isSelected: root.selectedSlug === modelData.slug
-                text: modelData.meta.title
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.bodySize
-                color: isSelected ? Theme.accentColor : Theme.dim
-                font.underline: isSelected
-
-                MouseArea {
-                  anchors.fill: parent
-                  anchors.margins: -Theme.chipHitSlop
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: root.selectedSlug = parent.modelData.slug
-                }
+                selected: root.selectedSlug === modelData.slug
+                label: modelData.meta.title
+                onClicked: root.selectedSlug = goalChip.modelData.slug
               }
             }
           }
@@ -185,35 +165,20 @@ Item {
           width: parent.width
           spacing: Theme.spaceSm
 
-          Text {
-            text: "Method"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.captionSize
-            font.bold: true
-            color: Theme.dim
-          }
+          CaptionLabel { text: "Method" }
 
           Flow {
             width: parent.width
             spacing: Theme.spaceMd
             Repeater {
               model: root.methods
-              delegate: Text {
+              delegate: TextChip {
+                id: methodChip
                 required property string modelData
                 objectName: "coachMethod:" + root.methodFlag(modelData)
-                readonly property bool isSelected: root.selectedMethod === modelData
-                text: modelData
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.bodySize
-                color: isSelected ? Theme.accentColor : Theme.dim
-                font.underline: isSelected
-
-                MouseArea {
-                  anchors.fill: parent
-                  anchors.margins: -Theme.chipHitSlop
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: root.selectedMethod = parent.modelData
-                }
+                selected: root.selectedMethod === modelData
+                label: modelData
+                onClicked: root.selectedMethod = methodChip.modelData
               }
             }
           }
@@ -224,13 +189,7 @@ Item {
           width: parent.width
           spacing: Theme.spaceSm
 
-          Text {
-            text: "Command"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.captionSize
-            font.bold: true
-            color: Theme.dim
-          }
+          CaptionLabel { text: "Command" }
 
           Rectangle {
             width: parent.width
@@ -260,7 +219,6 @@ Item {
               Button {
                 id: copyBtn
                 label: "copy"
-                inert: false
                 // Reserved from the WIDER of the two labels it can show, so
                 // the box doesn't twitch when it flips to "copied!".
                 Layout.preferredWidth: Math.round(copiedMetrics.width) + Theme.spaceXl
@@ -283,7 +241,6 @@ Item {
             objectName: "coachStartButton"
             label: "start in kitty"
             filled: true
-            inert: false
             onActivated: root.startSession()
           }
         }
@@ -293,13 +250,7 @@ Item {
           width: parent.width
           spacing: Theme.spaceSm
 
-          Text {
-            text: "This session reads"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.captionSize
-            font.bold: true
-            color: Theme.dim
-          }
+          CaptionLabel { text: "This session reads" }
 
           Column {
             width: parent.width
@@ -307,6 +258,7 @@ Item {
             Repeater {
               model: root.readsList
               delegate: RowLayout {
+                id: readRow
                 required property string modelData
                 width: parent.width
                 spacing: Theme.spaceSm
@@ -318,7 +270,7 @@ Item {
                 }
                 Text {
                   Layout.fillWidth: true
-                  text: modelData
+                  text: readRow.modelData
                   font.family: Theme.fontFamily
                   font.pixelSize: Theme.bodySize
                   color: Theme.ink
@@ -334,13 +286,7 @@ Item {
           width: parent.width
           spacing: Theme.spaceSm
 
-          Text {
-            text: "Past sessions"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.captionSize
-            font.bold: true
-            color: Theme.dim
-          }
+          CaptionLabel { text: "Past sessions" }
 
           Text {
             visible: root.sessionsNewestFirst.length === 0
@@ -356,6 +302,7 @@ Item {
             Repeater {
               model: root.sessionsNewestFirst
               delegate: Column {
+                id: sessionRow
                 required property var modelData
                 required property int index
                 width: parent.width
@@ -365,23 +312,20 @@ Item {
                   width: parent.width
                   height: Theme.hairlineWidth
                   color: Theme.hairline
-                  visible: index > 0
+                  visible: sessionRow.index > 0
                 }
 
-                Item { width: parent.width; height: index > 0 ? Theme.spaceSm : 0 }
+                Item { width: parent.width; height: sessionRow.index > 0 ? Theme.spaceSm : 0 }
 
                 RowLayout {
                   width: parent.width
                   spacing: Theme.spaceSm
-                  Text {
-                    text: modelData.date
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.captionSize
-                    font.bold: true
+                  CaptionLabel {
+                    text: sessionRow.modelData.date
                     color: Theme.ink
                   }
                   Text {
-                    text: modelData.method
+                    text: sessionRow.modelData.method
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.captionSize
                     color: Theme.dim
@@ -391,8 +335,8 @@ Item {
 
                 Text {
                   width: parent.width
-                  visible: !!modelData.summary
-                  text: modelData.summary
+                  visible: !!sessionRow.modelData.summary
+                  text: sessionRow.modelData.summary
                   wrapMode: Text.WordWrap
                   lineHeight: Theme.proseLineHeight
                   elide: Text.ElideRight

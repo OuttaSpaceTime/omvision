@@ -27,24 +27,28 @@ a rollover — see "Retired paths" at the end of this document.
 ## 1. Layout
 
 ```
-~/Notes/Omvision/goals/<slug>.md                    # Omvision + coach only
-~/Notes/Omvision/goals/<slug>.log.md                 # ompom-engine + Omvision events, append-only
-~/Notes/Omvision/goals/<slug>/journal/YYYY-MM-DD.md  # Omvision only, one file per day
-~/Notes/Omvision/journal/YYYY-MM-DD.md               # the journal: Omvision, and ompom's night page (§5)
-~/Notes/Omvision/days/YYYY-MM-DD.md                  # poms run with no active goal, same grammar, append-only
-~/.local/state/omvision/active-goal                  # slug of the goal ompom shows, or empty
+~/Notes/Omvision/goals/<slug>.md         # Omvision + coach only
+~/Notes/Omvision/goals/<slug>.log.md     # ompom-engine + Omvision events, append-only
+~/Notes/Omvision/journal/YYYY-MM-DD.md   # the journal: Omvision, and ompom's night page (§5)
+~/Notes/Omvision/days/YYYY-MM-DD.md      # poms run with no active goal, same grammar, append-only
+~/.local/state/omvision/active-goal      # slug of the goal ompom shows, or empty
 ```
 
-`<slug>.md` and `<slug>.log.md` are flat files directly under `goals/`, not inside
-the goal's own subdirectory — only the journal gets a subdirectory, because it's
-the only thing that's naturally one-file-per-day. A goal with slug `deep-work-book`
-therefore looks like:
+`<slug>.md` and `<slug>.log.md` are flat files directly under `goals/`. A goal with
+slug `deep-work-book` therefore looks like:
 
 ```
 ~/Notes/Omvision/goals/deep-work-book.md
 ~/Notes/Omvision/goals/deep-work-book.log.md
-~/Notes/Omvision/goals/deep-work-book/journal/2026-09-20.md
 ```
+
+The journal is filed under no goal: one free-form markdown file per calendar day,
+about whatever was on the writer's mind, with no grammar to fail to parse. Its file
+name is the day (`2026-09-20.md`); anything else in `journal/` is not an entry. A
+reader that wants a goal's share of it — the coach does — reads the days it cares
+about and decides for itself what is relevant, or searches for the goal's `@<slug>`
+tags (Omvision writes a mention of a goal that way). An early draft gave each goal
+a `journal/` subdirectory of its own; nothing ever wrote one.
 
 ## 2. Why the log is a separate file
 
@@ -100,8 +104,8 @@ can't do), but because the log isn't inside that file, a stale-copy rewrite of
 
 A slug is derived from a goal's title once, when the goal is created, and then
 fixed for the life of the goal — it's a filename, not a display value, so it
-must not change out from under the log and journal paths that were derived from
-it.
+must not change out from under the log path derived from it, the active-goal
+marker, or the journal's `@<slug>` tags.
 
 Derivation:
 
@@ -186,7 +190,7 @@ valid, and a reader that doesn't know a key skips its line.
 **`done:` and `left:` are notes, not task state.** Finishing a pomodoro never
 ticks a task off in `<slug>.md`. A reader that auto-completes a task because its
 text showed up next to `done:` is misreading the contract — task completion is
-an explicit action in Omvision's `## Tasks` UI (M3/O3), never a side effect of
+an explicit action in Omvision's `## Tasks` UI, never a side effect of
 the timer. The log is a diary; `<slug>.md` is the state.
 
 **Event entry** — written by `ompom` or, later, Omvision for anything logged
@@ -206,7 +210,7 @@ event heading's `<duration>`: minutes under 60 are `<n>m` (`25m`); 60 and over
 are `<h>h` (`1h`) or `<h>h<mm>` with the leftover minutes zero-padded to two
 digits and no trailing `m` (`1h30`, not `1h30m`). Ninety minutes is `1h30`;
 exactly two hours is `2h`. This rule isn't spelled out anywhere upstream of this
-doc — it's read off the one worked example in the plan (`1h30` for 90 minutes)
+doc — it was read off the one worked example in the project's first plan (`1h30` for 90 minutes)
 and generalized; any log writer should reuse it as-is so headings don't diverge
 in style across writers.
 
@@ -300,7 +304,7 @@ Event shape:
 ```
 
 `started`, `minutes`, `kind` are required; `title` is the event's one free-text
-body line (§4) — the name is inherited from the plan's own field list and reads
+body line (§4) — the name is inherited from the first plan's field list and reads
 oddly next to a goal's `title:`, but it means the same thing "a `## Coaching`
 entry's prose" means: the text a human wrote, not a structured field.
 
@@ -405,7 +409,7 @@ should be fatal.
 - **Missing `title` → skip the file.** `list-goals` can't report a goal with no
   name, and nothing downstream should either.
 - **Missing `status` → treat as `active`.** A goal file hand-written for
-  testing (as M1's acceptance step does) won't necessarily set every field.
+  testing won't necessarily set every field.
 - **Missing `estimate` / `done_by` → simply absent**, not an error and not a
   zero. Downstream JSON just omits the key.
 - **`focusable: no` → the goal is no run's goal.** Some goals can't be worked
@@ -527,11 +531,9 @@ focus: Write docs/goal-files.md
 left: still drafting the parsing-rules section
 ```
 
-`~/Notes/Omvision/goals/ship-goal-files-doc/journal/2026-09-20.md` — free-form,
-owned entirely by Omvision (M3/O5); this contract fixes only its
-path, one file per calendar day under the goal's own `journal/` subdirectory.
-The coach reads whatever's in it for the date range since its last session and
-must tolerate arbitrary markdown, same as any other reader here.
+`~/Notes/Omvision/journal/2026-09-20.md` — free-form, the day's journal (§1);
+this contract fixes only its path. The coach reads the days since its last
+session and must tolerate arbitrary markdown, same as any other reader here.
 
 `~/.local/state/omvision/active-goal`:
 

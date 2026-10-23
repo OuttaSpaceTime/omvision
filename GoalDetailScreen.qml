@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 
@@ -116,12 +118,8 @@ Item {
   property string cancelError: ""
 
   readonly property int poms: Parser.pomodoroCount(logEntries)
-  readonly property int minutes: Parser.investedMinutes(logEntries)
-  readonly property var est: meta ? meta.estimate : undefined
-  readonly property var doneBy: meta ? meta.done_by : undefined
   readonly property var tasks: meta ? meta.tasks : []
   readonly property int tasksDone: Parser.doneTaskCount(tasks)
-  readonly property bool isOpenGoal: !!meta && meta.status !== "done" && meta.status !== "cancelled"
 
   // The screen is put together from GoalHeader, GoalFigures, Timeline,
   // TaskRow and GoalEndActions. None of them keeps state or writes: the
@@ -151,8 +149,8 @@ Item {
     GoalFigures {
       Layout.fillWidth: true
       poms: root.poms
-      minutes: root.minutes
-      estimate: root.est
+      minutes: Parser.investedMinutes(root.logEntries)
+      estimate: root.meta ? root.meta.estimate : undefined
       tasksDone: root.tasksDone
       taskCount: root.tasks.length
     }
@@ -216,13 +214,7 @@ Item {
             id: tasksHeader
             Layout.fillWidth: true
             spacing: Theme.spaceSm
-            Text {
-              text: "Tasks"
-              font.family: Theme.fontFamily
-              font.pixelSize: Theme.captionSize
-              font.bold: true
-              color: Theme.dim
-            }
+            CaptionLabel { text: "Tasks" }
             Text {
               text: root.tasksDone + " of " + root.tasks.length + " done"
               font.family: Theme.fontFamily
@@ -233,9 +225,7 @@ Item {
             Button {
               objectName: "addTaskButton"
               label: "+ task"
-              inert: false
               visible: !root.addingTask
-              Layout.preferredWidth: implicitWidth
               Layout.preferredHeight: Theme.smallControlHeight
               Layout.alignment: Qt.AlignVCenter
               onActivated: { root.addTaskError = ""; root.addingTask = true }

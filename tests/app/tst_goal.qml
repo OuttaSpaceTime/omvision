@@ -42,6 +42,20 @@ OmvisionTest {
     expectFile(goal, text)
   }
 
+  // The same box on a new goal: unticked, the file is created with
+  // `focusable: no`. The create path once passed every field but this one
+  // on, so the box did nothing there.
+  function test_create_a_goal_not_focusable() {
+    app.openNewGoalDialog()
+    tryCompare(app, "newGoalDialogOpen", true)
+    type("Train legs")
+    click("goalFocusableToggle")
+    key(Qt.Key_Return)
+    tryCompare(app, "newGoalDialogOpen", false)
+    expectFile("goals/train-legs.md",
+               "---\ntitle: Train legs\nwhy: \nstatus: active\nfocusable: no\n---\n## Tasks\n")
+  }
+
   function toggleFocusable() {
     openGoal("write-the-report")
     click("editGoalButton")

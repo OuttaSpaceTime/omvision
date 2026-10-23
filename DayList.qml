@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 
 // The journal's list of days: an overlay that slides in from the left edge

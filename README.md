@@ -71,7 +71,8 @@ Writes follow the file contract's two disciplines:
   is still what it read (goal-files.md §5, `write-journal`); the Journal screen
   takes such a change in when it has no unsaved edits.
 - `.log.md` and `days/*.md` are **append-only** — `Appender.qml`: `tee -a` with the
-  entry on stdin, so it is `O_APPEND` at the kernel level with no read step at all. A
+  entry on stdin, so it is `O_APPEND` at the kernel level with no read step at all
+  (after a `mkdir -p` of the folder, which a first goal-less event can need). A
   coaching session rewriting `<slug>.md` concurrently can never cost an event its
   entry.
 
@@ -98,21 +99,35 @@ Everything is QML or plain JS in the top directory, which Quickshell loads as on
 - `SerialFileWriter.qml` (whole-file writes, one at a time) and `Appender.qml`
   (`tee -a`) — the two write paths, see **Writing**.
 - Screens: `TodayScreen`, `GoalsScreen`, `GoalDetailScreen`, `CoachingScreen` and
-  `JournalScreen`, with `Sidebar` (the icon rail). The goal detail's larger parts live
-  in files of their own beside it. The journal's are `JournalStore` (its write path),
-  `DayList` (the list of days), `MentionPopup` (the `@` goal list), `CornerButton`
-  (its two corner controls) and `JournalHighlight` (the styling, loaded through a
-  `Loader`).
-- `Button.qml`, `PencilIcon.qml`, and the dialogs `NewGoalDialog.qml` (also Edit
-  goal), `EventDialog.qml` and `CancelDialog.qml`.
+  `JournalScreen`, with `Sidebar` (the icon rail). The goal detail's parts are
+  `GoalHeader`, `GoalFigures`, `Timeline` (one entry is `TimelineEntry`), `TaskRow` and
+  `GoalEndActions`. The journal's are `JournalStore` (its write path), `DayList` (the
+  list of days), `MentionPopup` (the `@` goal list), `CornerButton` (its corner
+  controls) and `JournalHighlight` (the styling, loaded through a `Loader`).
+- The dialogs: `NewGoalDialog.qml` (also Edit goal), `EventDialog.qml` and
+  `CancelDialog.qml`, each in a `DialogFrame` (the modal, its card, error line and
+  footer).
+- Shared pieces, each so that one look is drawn in one place: `Button`, `PencilIcon`,
+  `CaptionLabel` (a bold caption: a section's or field's name, a badge), `DialogField` (a dialog's labelled
+  input), `CheckOption` and `OptionMark` (a dialog's tick box and radio ring), `TextChip`
+  and `BoxChip` (a row of choices, underlined or boxed) and `EntryNotes` (what a log
+  entry says, on Today and the timeline).
 - `ShotDriver.qml` — loaded only by `bin/shot`, never in a normal launch.
 - `highlighter/` — the C++ source of the markdown highlighter; `highlighter/build.sh`
   builds it into `MarkdownHighlight/` (not tracked).
+- `plugins/ompom.engine` and `plugins/ompom.bar` — the omarchy-shell plugins that run
+  the pomodoro and show it in the bar. They share this repo's file contract and
+  highlighter. `bin/omvision-deploy` deploys them without resetting the running timer;
+  `bin/ompom-demo` runs the overlay as a throwaway demo, and `bin/ompom-stage` lays out
+  the `qs` config both it and the engine tests run in. See `plugins/ompom.engine/CLAUDE.md`.
 - `bin/omvision` launches the app, `bin/shot` takes offscreen screenshots, `bin/test`
   runs the tests and `bin/check` runs everything a change should pass: qmllint, the
-  no-pixel-numbers rule, an offscreen load and `bin/test`.
-- `tests/unit` (Writer and Parser, under qmltestrunner), `tests/app` (the whole app,
-  driven from inside `qs`) and `tests/fixtures/home` (the HOME the app tests run in).
+  no-pixel-numbers and no-scrim rules, the plugins' manifests, an offscreen load and
+  `bin/test`. `bin/qmlls` starts the QML language server with the singletons visible.
+- `tests/unit` (the pure JS modules, under qmltestrunner), `tests/contract` (the file
+  grammar's cases, run against both the app and `notes-helper.py`), `tests/app` (the
+  whole app, driven from inside `qs`), `tests/engine` (the engine and its overlay) and
+  `tests/fixtures` (the HOMEs they run in). See `docs/testing.md`.
 - `.qmllint.ini` and `.qmllint-baseline` — qmllint's settings, and the warnings that
   predate `bin/check`.
 
@@ -122,6 +137,10 @@ Everything is QML or plain JS in the top directory, which Quickshell loads as on
 - [`docs/layout-rules.md`](docs/layout-rules.md) — QML layout rules, each one learned by
   shipping the bug first, and how to screenshot the app offscreen with `bin/shot`
 - [`docs/testing.md`](docs/testing.md) — `bin/test`, `bin/check`, and how to write a test
+- [`docs/goal-files.md`](docs/goal-files.md) — the file contract between the engine, the
+  app and the coach skill
+- [`docs/ompom-highlighter.md`](docs/ompom-highlighter.md) — the engine's use of the
+  highlighter, and how a compiled module is deployed into the shell
 
 ## Requirements
 

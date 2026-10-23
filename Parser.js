@@ -26,7 +26,7 @@ function normalize(text) {
 }
 
 function rtrim(line) {
-  return line.replace(/\s+$/, "")
+  return String(line).replace(/\s+$/, "")
 }
 
 // ---- §6 front matter -------------------------------------------------------
@@ -238,13 +238,15 @@ function resolveDate(day, monIdx, hh, mm, now) {
   return d
 }
 
-// Omvision's own "counts toward the goal's invested time" marker on an
-// event's free-text body line -- see Writer.js's EVENT_COUNTS_MARKER for
-// why this is safe to layer on top of §4's freeform body line rather than
-// needing a new field in the fixed grammar. Duplicated here (not
-// imported from Writer.js) so Parser.js keeps its zero-dependency,
-// read-only character; the two files just have to agree on the literal
-// string, which is exactly what the comment on each side is for.
+// Omvision's own convention, layered on top of the free-text event body
+// line the contract already allows to be anything (§4: "one free-text
+// line, no key: prefix"). It marks an event as counting toward the goal's
+// invested-time figure in the Goal Detail header (investedMinutes()). Not
+// part of goal-files.md's grammar (§7 records it) -- a reader that doesn't
+// know this convention just sees it as the start of the note text, which
+// is harmless and exactly what §6's "skip what you don't understand"
+// posture is for. Writer.formatEventEntry() writes it from this same
+// constant.
 var EVENT_COUNTS_MARKER = "[+time] "
 
 function stripEventCountsMarker(title) {
@@ -468,6 +470,23 @@ function doneTaskCount(tasks) {
   return n
 }
 
+// What an entry says, as the lines Today and the timeline show under its
+// heading (EntryNotes.qml): [{ text, prominent }], empty for an entry that
+// says nothing. A pomodoro's `focus:` (older entries only) and an event's
+// free line are prominent; a pomodoro's three notes, "What's done?",
+// "What's left?" and "What else?" (§4), follow, each only if answered.
+function entryNoteLines(e) {
+  var out = []
+  function add(text, prominent) { if (text) out.push({ text: text, prominent: prominent }) }
+  if (e.type === "event") add(e.title, true)
+  if (e.type !== "pomodoro") return out
+  if (e.focus) add("focus: " + e.focus, true)
+  if (e.done) add("done: " + e.done, false)
+  if (e.left) add("left: " + e.left, false)
+  if (e.other) add("else: " + e.other, false)
+  return out
+}
+
 // The clock time an entry's heading carries: "28 Sep 09:30" -> "09:30". The
 // timeline and the Today screen show it in their time column.
 function entryTime(e) {
@@ -498,33 +517,34 @@ function parseCancelNote(lines) {
   return found
 }
 
+// Two digits: 7 -> "07". Every date, clock time and padded minute the app
+// writes or shows goes through it.
+function pad2(n) { return (n < 10 ? "0" : "") + n }
+
 function dayKey(date) {
-  var y = date.getFullYear()
-  var m = ("0" + (date.getMonth() + 1)).slice(-2)
-  var d = ("0" + date.getDate()).slice(-2)
-  return y + "-" + m + "-" + d
+  return date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate())
 }
 
 function dayHeaderLabel(date) {
   return WEEKDAYS_TITLE[date.getDay()] + " " + date.getDate() + " " + MONTHS[date.getMonth()]
 }
 
-function formatHm(totalMinutes) {
-  var h = Math.floor(totalMinutes / 60)
-  var m = totalMinutes % 60
-  if (h === 0) return m + "m"
-  if (m === 0) return h + "h"
-  return h + "h " + m + "m"
-}
-
-// "1 h 15"-style caption: Today's summary line and a timeline event's label.
-function formatHCaption(totalMinutes) {
+// A duration as the app shows it, wherever it does: "50 min", "1 h", "1 h
+// 05". The minutes are padded so "1 h 05" can't be read as five hours. One
+// spelling for every screen: Goal detail's figures ("1h 5m"), Today and the
+// timeline's labels ("1 h 5") and its day headers ("1 h 05") used to have
+// one each. The files spell durations their own way (Writer.formatDuration).
+function durationLabel(totalMinutes) {
   var h = Math.floor(totalMinutes / 60)
   var m = totalMinutes % 60
   if (h === 0) return m + " min"
   if (m === 0) return h + " h"
-  return h + " h " + m
+  return h + " h " + pad2(m)
 }
+
+// "1 pom", "3 poms": a count of runs, the way every caption that has one
+// spells it.
+function pomsLabel(n) { return n + (n === 1 ? " pom" : " poms") }
 
 // ---- Journal --------------------------------------------------------------
 // A journal entry as one run of text for the day list's preview: every
@@ -536,7 +556,7 @@ function formatHCaption(totalMinutes) {
 // the 260px list hold. It also stops the loop there: the day list rebuilds
 // every day's preview after each journal save, so a long journal must cost
 // about the cap per day, not its whole length. Tolerant of anything: an
-// entry is free-form markdown (goal-files.md, journal section) with no
+// entry is free-form markdown (goal-files.md §1) with no
 // grammar to fail to parse.
 var JOURNAL_PREVIEW_MAX = 300
 
@@ -558,54 +578,4 @@ function journalPreview(text) {
     length += t.length + 1
   }
   return out.join(" ").slice(0, JOURNAL_PREVIEW_MAX)
-}
-
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-}
-
-// Inline code + links, applied to already-escaped text. `styles` carries the
-// caller's colours as CSS colour strings (Parser.js has no Theme dependency,
-// so the QML side hands these in already formatted).
-function mdInline(s, styles) {
-  s = s.replace(/`([^`]+)`/g, function(_, code) {
-    return '<span style="background-color:' + styles.codeBg + ';"> ' + code + ' </span>'
-  })
-  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(_, label, url) {
-    return '<a href="' + url + '" style="color:' + styles.accent + '; text-decoration:underline;">' + label + '</a>'
-  })
-  return s
-}
-
-// Renders a journal entry's markdown as Qt rich text (Text.RichText): headings
-// bold at body size (not larger), "-"/"*" list markers dimmed, ">" quotes
-// italic, inline code on a faint fill, links accent-coloured and underlined.
-// The markdown characters themselves are never shown — only their effect.
-function mdToHtml(text, styles) {
-  var lines = normalize(text).split("\n")
-  var out = []
-  for (var i = 0; i < lines.length; i++) {
-    var raw = lines[i]
-    var trimmed = raw.trim()
-
-    var h = trimmed.match(/^(#{1,6})\s+(.*)$/)
-    var listM = trimmed.match(/^[-*]\s+(.*)$/)
-    var quoteM = trimmed.match(/^>\s?(.*)$/)
-
-    if (h) {
-      out.push('<p><b>' + mdInline(escapeHtml(h[2]), styles) + '</b></p>')
-    } else if (listM) {
-      out.push('<p><span style="color:' + styles.dim + ';">-</span> ' + mdInline(escapeHtml(listM[1]), styles) + '</p>')
-    } else if (quoteM) {
-      out.push('<p><i>' + mdInline(escapeHtml(quoteM[1]), styles) + '</i></p>')
-    } else if (trimmed === "") {
-      out.push('<p></p>')
-    } else {
-      out.push('<p>' + mdInline(escapeHtml(raw), styles) + '</p>')
-    }
-  }
-  return out.join("\n")
 }

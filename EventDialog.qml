@@ -1,25 +1,18 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 
 import "Writer.js" as Writer
 import "Util.js" as Util
 
-// "Add event" (plan.md M3/O4, mockup Event.dc.html): logs time that
-// wasn't run through the timer -- training, a meeting, reading, deep
-// work, or anything else. Submitting hands the raw, still-unvalidated
-// fields up to omvision.qml as one payload; omvision.qml is the one that
-// knows how to turn it into a §4 entry and append it (append-only, no
-// read-back -- this dialog itself never touches the filesystem).
-//
-// True modal: a FocusScope so focus can be pushed into the dialog on
-// open and restored to wherever it was on close, a clear full-window
-// MouseArea beneath the card that blocks every click/hover meant for the
-// content and dismisses on a stray click (this dialog is not destructive,
-// unlike CancelDialog), and a card sized to its own content instead of
-// a fixed height -- an unsized Rectangle here previously rendered as a
-// zero-height box, which is why the dialog used to draw straight over
-// the content with no visible card behind it.
-FocusScope {
+// "Add event": logs time that wasn't run through the timer -- training, a
+// meeting, reading, deep work, or anything else. Submitting hands the raw,
+// still-unvalidated fields up to omvision.qml as one payload; omvision.qml is
+// the one that knows how to turn it into a §4 entry and append it
+// (append-only, no read-back -- this dialog itself never touches the
+// filesystem). Additive, so a stray click outside closes it (DialogFrame).
+DialogFrame {
   id: root
 
   property var goalsData: ({})
@@ -27,7 +20,6 @@ FocusScope {
   property string errorMessage: ""
 
   signal submitted(var payload)
-  signal dismissed()
 
   readonly property var kinds: ["training", "meeting", "reading", "deep work", "other"]
   property int kindIndex: 0
@@ -37,40 +29,24 @@ FocusScope {
   property string selectedSlug: ""
   property bool countsToward: false
   property string localError: ""
-  property var previousFocusItem: null
 
-  function pad2(n) { return (n < 10 ? "0" : "") + n }
+  error: root.localError || root.errorMessage
+  hint: "Lands on the timeline as an event."
 
-  onVisibleChanged: {
-    if (!visible) {
-      if (root.previousFocusItem) {
-        root.previousFocusItem.forceActiveFocus()
-        root.previousFocusItem = null
-      }
-      return
-    }
-    root.previousFocusItem = root.Window ? root.Window.activeFocusItem : null
+  onOpened: {
     kindIndex = 0
     whatText = ""
-    var now = new Date()
-    whenText = "today " + pad2(now.getHours()) + ":" + pad2(now.getMinutes())
+    whenText = "today " + Writer.clockTime(new Date())
     lenText = ""
     selectedSlug = root.defaultSlug
     countsToward = false
     localError = ""
-    whatInput.forceActiveFocus()
+    whatField.focusInput()
   }
-
-  function goalList() {
-    return Util.goalsByTitle(root.goalsData).map(function(g) { return { slug: g.slug, title: g.meta.title } })
-  }
-
-  function tryWhen() { return Writer.parseWhen(root.whenText, new Date()) }
-  function tryMinutes() { return Writer.parseDurationInput(root.lenText) }
 
   function submit() {
-    var when = root.tryWhen()
-    var minutes = root.tryMinutes()
+    var when = Writer.parseWhen(root.whenText, new Date())
+    var minutes = Writer.parseDurationInput(root.lenText)
     if (when === null) { root.localError = "\"When\" isn't a time I understand — try \"today 14:30\" or \"09:00\"."; return }
     if (!(minutes > 0)) { root.localError = "\"How long\" needs a duration — try \"25\", \"25m\" or \"1h30\"."; return }
     root.localError = ""
@@ -84,309 +60,110 @@ FocusScope {
     })
   }
 
-  Keys.onEscapePressed: root.dismissed()
+  actions: [
+    Button { label: "Cancel"; onActivated: root.dismissed() },
+    Button { label: "Add"; filled: true; onActivated: root.submit() }
+  ]
 
-  // Clear, never a scrim: nothing dims the window behind a dialog (the
-  // user never wants a darkened background; bin/check's noscrim step).
-  // Being the topmost item under the pointer with hoverEnabled, it absorbs
-  // every click and hover meant for whatever is beneath it. A plain click
-  // here dismisses the dialog -- it is additive, not destructive (contrast
-  // CancelDialog).
-  MouseArea {
-    anchors.fill: parent
-    hoverEnabled: true
-    onClicked: root.dismissed()
+  RowLayout {
+    Layout.fillWidth: true
+    spacing: Theme.spaceSm
+    Text {
+      text: "Add event"
+      font.family: Theme.fontFamily
+      font.pixelSize: Theme.bodySize
+      font.bold: true
+      color: Theme.ink
+    }
+    Text {
+      Layout.fillWidth: true
+      elide: Text.ElideRight
+      text: "time that wasn't a pomodoro"
+      font.family: Theme.fontFamily
+      font.pixelSize: Theme.captionSize
+      color: Theme.dim
+    }
   }
 
-  Rectangle {
-    id: card
-    anchors.centerIn: parent
-    width: Math.min(Theme.dialogWidth, parent.width - Theme.space2xl * 2)
-    height: content.height + Theme.spaceXl * 2
-    color: Theme.paper
-    border.color: Theme.border
-    border.width: Theme.dialogBorderWidth
+  Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
 
-    // Swallow clicks/hover so the area beneath never sees them, and a
-    // click inside the card never dismisses it.
-    MouseArea { anchors.fill: parent; hoverEnabled: true; onClicked: {} }
+  // ---- type chips -----------------------------------------------------
+  Flow {
+    Layout.fillWidth: true
+    spacing: Theme.spaceXs
+    Repeater {
+      model: root.kinds
+      delegate: BoxChip {
+        id: kindChip
+        required property string modelData
+        required property int index
+        label: modelData
+        selected: root.kindIndex === index
+        onClicked: root.kindIndex = kindChip.index
+      }
+    }
+  }
 
-    ColumnLayout {
-      id: content
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.top: parent.top
-      anchors.margins: Theme.spaceXl
-      spacing: Theme.spaceLg
+  DialogField {
+    id: whatField
+    inputName: "eventWhatField"
+    label: "What"
+    text: root.whatText
+    onEdited: function(text) { root.whatText = text }
+    onAccepted: root.submit()
+  }
 
-      RowLayout {
-        Layout.fillWidth: true
-        spacing: Theme.spaceSm
-        Text {
-          text: "Add event"
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.bodySize
-          font.bold: true
-          color: Theme.ink
-        }
-        Text {
-          Layout.fillWidth: true
-          elide: Text.ElideRight
-          text: "time that wasn't a pomodoro"
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.captionSize
-          color: Theme.dim
-        }
+  RowLayout {
+    Layout.fillWidth: true
+    spacing: Theme.spaceSm
+    DialogField {
+      label: "When"
+      text: root.whenText
+      onEdited: function(text) { root.whenText = text }
+      onAccepted: root.submit()
+    }
+    DialogField {
+      fieldWidth: Theme.dialogShortFieldWidth
+      inputName: "eventLengthField"
+      label: "How long"
+      text: root.lenText
+      onEdited: function(text) { root.lenText = text }
+      onAccepted: root.submit()
+    }
+  }
+
+  // ---- goal -------------------------------------------------------------
+  ColumnLayout {
+    Layout.fillWidth: true
+    spacing: Theme.spaceXs
+    CaptionLabel { text: "Goal" }
+    Flow {
+      Layout.fillWidth: true
+      spacing: Theme.spaceXs
+
+      BoxChip {
+        label: "no goal · shows on the day only"
+        selected: root.selectedSlug === ""
+        onClicked: root.selectedSlug = ""
       }
 
-      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
-
-      // ---- type chips -----------------------------------------------------
-      Flow {
-        Layout.fillWidth: true
-        spacing: Theme.spaceXs
-        Repeater {
-          model: root.kinds
-          delegate: Rectangle {
-            required property string modelData
-            required property int index
-            readonly property bool selected: root.kindIndex === index
-            height: Theme.smallControlHeight
-            width: chipLabel.implicitWidth + Theme.spaceLg
-            color: selected ? Theme.accentFill : "transparent"
-            border.color: selected ? Theme.accentColor : Theme.hairline
-            border.width: Theme.borderWidth
-            Text {
-              id: chipLabel
-              anchors.centerIn: parent
-              text: parent.modelData
-              font.family: Theme.fontFamily
-              font.pixelSize: Theme.bodySmallSize
-              color: parent.selected ? Theme.accentColor : Theme.dim
-            }
-            MouseArea {
-              anchors.fill: parent
-              cursorShape: Qt.PointingHandCursor
-              onClicked: root.kindIndex = index
-            }
-          }
-        }
-      }
-
-      // ---- what -------------------------------------------------------------
-      ColumnLayout {
-        Layout.fillWidth: true
-        spacing: Theme.spaceXs
-        Text {
-          text: "What"
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.captionSize
-          font.bold: true
-          color: Theme.dim
-        }
-        Rectangle {
-          Layout.fillWidth: true
-          Layout.preferredHeight: Theme.controlHeight
-          color: Theme.fill
-          border.color: Theme.border
-          border.width: Theme.borderWidth
-          TextInput {
-            id: whatInput
-            anchors.fill: parent
-            anchors.leftMargin: Theme.spaceSm
-            anchors.rightMargin: Theme.spaceSm
-            verticalAlignment: TextInput.AlignVCenter
-            clip: true
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.bodySize
-            color: Theme.ink
-            selectByMouse: true
-            text: root.whatText
-            onTextChanged: root.whatText = text
-            Keys.onReturnPressed: root.submit()
-            Keys.onEnterPressed: root.submit()
-          }
-        }
-      }
-
-      // ---- when / how long ----------------------------------------------
-      RowLayout {
-        Layout.fillWidth: true
-        spacing: Theme.spaceSm
-        ColumnLayout {
-          Layout.fillWidth: true
-          spacing: Theme.spaceXs
-          Text {
-            text: "When"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.captionSize
-            font.bold: true
-            color: Theme.dim
-          }
-          Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: Theme.controlHeight
-            color: Theme.fill
-            border.color: Theme.border
-            border.width: Theme.borderWidth
-            TextInput {
-              anchors.fill: parent
-              anchors.leftMargin: Theme.spaceSm
-              anchors.rightMargin: Theme.spaceSm
-              verticalAlignment: TextInput.AlignVCenter
-              clip: true
-              font.family: Theme.fontFamily
-              font.pixelSize: Theme.bodySize
-              color: Theme.ink
-              selectByMouse: true
-              text: root.whenText
-              onTextChanged: root.whenText = text
-              Keys.onReturnPressed: root.submit()
-              Keys.onEnterPressed: root.submit()
-            }
-          }
-        }
-        ColumnLayout {
-          // Fixed, explicitly: its field's fillWidth would otherwise make
-          // this whole column fill too, and it squeezed its neighbour.
-          Layout.preferredWidth: Theme.dialogShortFieldWidth
-          Layout.fillWidth: false
-          spacing: Theme.spaceXs
-          Text {
-            text: "How long"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.captionSize
-            font.bold: true
-            color: Theme.dim
-          }
-          Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: Theme.controlHeight
-            color: Theme.fill
-            border.color: Theme.border
-            border.width: Theme.borderWidth
-            TextInput {
-              anchors.fill: parent
-              anchors.leftMargin: Theme.spaceSm
-              anchors.rightMargin: Theme.spaceSm
-              verticalAlignment: TextInput.AlignVCenter
-              clip: true
-              font.family: Theme.fontFamily
-              font.pixelSize: Theme.bodySize
-              color: Theme.ink
-              selectByMouse: true
-              text: root.lenText
-              onTextChanged: root.lenText = text
-              Keys.onReturnPressed: root.submit()
-              Keys.onEnterPressed: root.submit()
-            }
-          }
-        }
-      }
-
-      // ---- goal -------------------------------------------------------------
-      ColumnLayout {
-        Layout.fillWidth: true
-        spacing: Theme.spaceXs
-        Text {
-          text: "Goal"
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.captionSize
-          font.bold: true
-          color: Theme.dim
-        }
-        Flow {
-          Layout.fillWidth: true
-          spacing: Theme.spaceXs
-
-          Rectangle {
-            readonly property bool selected: root.selectedSlug === ""
-            height: Theme.smallControlHeight
-            width: noGoalLabel.implicitWidth + Theme.spaceLg
-            color: selected ? Theme.accentFill : "transparent"
-            border.color: selected ? Theme.accentColor : Theme.hairline
-            border.width: Theme.borderWidth
-            Text {
-              id: noGoalLabel
-              anchors.centerIn: parent
-              text: "no goal · shows on the day only"
-              font.family: Theme.fontFamily
-              font.pixelSize: Theme.bodySmallSize
-              color: parent.selected ? Theme.accentColor : Theme.dim
-            }
-            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.selectedSlug = "" }
-          }
-
-          Repeater {
-            model: root.goalList()
-            delegate: Rectangle {
-              required property var modelData
-              readonly property bool selected: root.selectedSlug === modelData.slug
-              height: Theme.smallControlHeight
-              width: goalLabel.implicitWidth + Theme.spaceLg
-              color: selected ? Theme.accentFill : "transparent"
-              border.color: selected ? Theme.accentColor : Theme.hairline
-              border.width: Theme.borderWidth
-              Text {
-                id: goalLabel
-                anchors.centerIn: parent
-                text: parent.modelData.title
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.bodySmallSize
-                color: parent.selected ? Theme.accentColor : Theme.dim
-              }
-              MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.selectedSlug = parent.modelData.slug }
-            }
-          }
-        }
-      }
-
-      CheckOption {
-        Layout.fillWidth: true
-        checked: root.countsToward
-        label: "count the time towards the goal"
-        onToggled: root.countsToward = !root.countsToward
-      }
-
-      Text {
-        Layout.fillWidth: true
-        visible: root.localError.length > 0 || root.errorMessage.length > 0
-        wrapMode: Text.WordWrap
-        text: root.localError.length > 0 ? root.localError : root.errorMessage
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.captionSize
-        color: Theme.red
-      }
-
-      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
-
-      RowLayout {
-        Layout.fillWidth: true
-        spacing: Theme.spaceSm
-        Text {
-          Layout.fillWidth: true
-          wrapMode: Text.WordWrap
-          text: "Lands on the timeline as an event."
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.captionSize
-          color: Theme.faint
-        }
-        Button {
-          label: "Cancel"
-          inert: false
-          Layout.preferredWidth: implicitWidth
-          Layout.preferredHeight: Theme.controlHeight
-          onActivated: root.dismissed()
-        }
-        Button {
-          label: "Add"
-          filled: true
-          inert: false
-          Layout.preferredWidth: implicitWidth
-          Layout.preferredHeight: Theme.controlHeight
-          onActivated: root.submit()
+      Repeater {
+        model: Util.goalsByTitle(root.goalsData)
+        delegate: BoxChip {
+          id: goalChip
+          required property var modelData
+          label: modelData.meta.title
+          selected: root.selectedSlug === modelData.slug
+          onClicked: root.selectedSlug = goalChip.modelData.slug
         }
       }
     }
+  }
+
+  CheckOption {
+    Layout.fillWidth: true
+    checked: root.countsToward
+    label: "count the time towards the goal"
+    onToggled: root.countsToward = !root.countsToward
   }
 }

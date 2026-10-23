@@ -15,7 +15,7 @@
 # state, restarts the shell, and restores the snapshot into the new engine.
 # The snapshot is also kept at $XDG_RUNTIME_DIR/ompom-handoff.json, so a
 # failed restore can be retried by hand while the engine still accepts it
-# (see handoffMaxAgeMs in Engine.qml):
+# (see HANDOFF_MAX_AGE_MS in Cycle.js):
 #   omarchy-shell ompom restore "$(cat "$XDG_RUNTIME_DIR/ompom-handoff.json")"
 #
 # With no engine deployed yet it is a first install: there is no timer to
@@ -65,6 +65,22 @@ changed() {  # <src dir> <dst dir> <files...>: print the files that differ
   done
 }
 
+# Files the live copy has that the repo no longer ships (one deleted from
+# plugins/, say), by the same patterns. Only reported, never removed: a
+# deploy that deletes from the live shell's plugin folder is a step to take
+# by hand, and a QML file left there can still be loaded.
+stale() {  # <dst dir> <shipped files...>
+  local dst="$1"; shift
+  [[ -d $dst ]] || return 0
+  local f
+  while IFS= read -r f; do
+    printf '%s\n' "$@" | grep -qxF -- "$f" || echo "$f"
+  done < <(cd "$dst" && {
+    find . -maxdepth 1 -type f \( -name '*.qml' -o -name '*.js' -o -name '*.py' -o -name manifest.json \) -printf '%P\n'
+    [[ -d icons ]] && find icons -type f
+  })
+}
+
 put() {  # <src> <dst>: atomic replace, keeping the source's mode
   local src="$1" dst="$2"
   local tmp="${dst%/*}/.${dst##*/}.deploy.$$"
@@ -84,6 +100,10 @@ copy_changed() {
 
 mapfile -t engine_changed < <(changed "$engine_src" "$engine_dst" "${engine_files[@]}")
 mapfile -t bar_changed < <(changed "$bar_src" "$bar_dst" "${bar_files[@]}")
+mapfile -t engine_stale < <(stale "$engine_dst" "${engine_files[@]}")
+mapfile -t bar_stale < <(stale "$bar_dst" "${bar_files[@]}")
+(( ${#engine_stale[@]} )) && echo "engine: live only, not removed: ${engine_stale[*]}"
+(( ${#bar_stale[@]} )) && echo "bar:    live only, not removed: ${bar_stale[*]}"
 
 if (( ${#engine_changed[@]} == 0 && ${#bar_changed[@]} == 0 )); then
   echo "omvision-deploy: nothing differs, nothing to do."

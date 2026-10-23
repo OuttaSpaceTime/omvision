@@ -21,10 +21,11 @@ Flow {
   spacing: Theme.spaceXl
 
   Text {
-    // Parser.formatHm, not a local hours-only calculation: flooring to
-    // whole hours rendered two pomodoros as "0 h in", which is both wrong
-    // and the most discouraging possible way to state 50 minutes of work.
-    text: root.poms + (root.poms === 1 ? " pom · " : " poms · ") + Parser.formatHm(root.minutes) + " in"
+    // Parser.durationLabel, not a local hours-only calculation: flooring
+    // to whole hours rendered two pomodoros as "0 h in", which is both
+    // wrong and the most discouraging possible way to state 50 minutes of
+    // work.
+    text: Parser.pomsLabel(root.poms) + " · " + Parser.durationLabel(root.minutes) + " in"
     font.family: Theme.fontFamily
     font.pixelSize: Theme.bodySize
     color: Theme.ink

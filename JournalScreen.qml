@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 
 import "Parser.js" as Parser
@@ -39,8 +41,7 @@ import "plugins/ompom.engine/ListContinue.js" as ListContinue
 // The parts: JournalStore (the write path), DayList (the list of days),
 // MentionPopup (the `@` goal list), CornerButton (the header's controls)
 // and GoalMatch.js (how a query matches a goal). The root keeps the API
-// omvision.qml, ShotDriver and the tests use; functions that moved keep a
-// delegate here under their old name.
+// omvision.qml, ShotDriver and the tests use.
 Item {
   id: root
   // The day list slides in from off the left edge. With the app sidebar out,
@@ -88,9 +89,6 @@ Item {
     if (root.sidebarShown) root.toggleSidebar()
   }
 
-  readonly property string home: Paths.home
-  readonly property string journalDir: Paths.journalDir
-
   // Re-evaluated on a timer so an app left open across midnight starts
   // offering the new day. It never moves the selection on its own -- that
   // would swap the file out from under a sentence someone is in the middle
@@ -112,7 +110,6 @@ Item {
   property string selectedPath: ""
   property bool listOpen: false
 
-  function dateIsoFromPath(path) { return Paths.journalDateIso(path) }
   function labelFor(dateIso) {
     return dateIso === root.todayIso ? "Today" : Parser.formatShortDate(dateIso)
   }
@@ -143,7 +140,7 @@ Item {
       out.push({
         path: Paths.journalFile(todayIso),
         dateIso: todayIso,
-        dateLabel: "Today",
+        dateLabel: root.labelFor(todayIso),
         preview: "",
         content: ""
       })
@@ -171,25 +168,7 @@ Item {
   // unsaved edits exactly when it differs from this.
   property string bufferBase: ""
 
-  // path -> the text last known to be on disk, from this screen's own writes
-  // and reads (JournalStore.written). It covers the gap until omvision.qml's
-  // 2s `find` poll lists a file this screen just created, so the canvas never
-  // goes blank for it.
-  property alias written: store.written
-
   property string writeError: ""
-
-  // Delegates kept under the names the old hand-rolled write queue had.
-  function setWritten(path, text) { store.setWritten(path, text) }
-  function writtenFor(path) { return store.writtenFor(path) }
-  function hasQueued(path) { return store.hasPending(path) }
-  // The most recent not-yet-confirmed text queued or in flight for a path,
-  // if any -- checked so reopening a day this screen is still in the middle
-  // of writing shows that text, not a possibly-stale disk read. Newest
-  // first: the old queue checked the in-flight job before the queue, which
-  // returned older text when a newer write was already queued behind it.
-  function pendingTextFor(path) { return store.pendingTextFor(path) }
-  function pruneWritten() { store.prune() }
 
   JournalStore {
     id: store
@@ -210,8 +189,10 @@ Item {
   }
 
   // The entry the canvas shows: the disk-confirmed one once omvision.qml knows
-  // about it, else this screen's own record of what it just wrote, else an
-  // empty day that does not exist on disk yet.
+  // about it, else this screen's own record of what it just wrote
+  // (JournalStore.written, which covers the gap until omvision.qml's 2s
+  // `find` poll lists a file this screen just created, so the canvas never
+  // goes blank for it), else an empty day that does not exist on disk yet.
   function entryForDisplay(path) {
     if (path === "") return null
     var e = findEntry(path)
@@ -428,8 +409,8 @@ Item {
     for (let slug in root.goalsData) {
       const m = root.goalsData[slug] ? root.goalsData[slug].meta : null
       if (!m) continue
-      // A goal file with no status: key is active, as on the Goals screen.
-      out.push({ slug: slug, title: m.title, status: m.status || "active" })
+      // Parser reads a goal file with no status: key as active.
+      out.push({ slug: slug, title: m.title, status: m.status })
     }
     // Active goals first -- those are what a day's writing is about -- then
     // done and cancelled ones, each group by title.
@@ -467,11 +448,6 @@ Item {
   property int mentionIndex: 0    // the highlighted row
   readonly property bool mentionOpen: root.mentionStart >= 0
   readonly property var mentionMatches: GoalMatch.filterGoals(root.goals, root.mentionQuery)
-
-  // The matching itself lives in GoalMatch.js; these keep the old names.
-  function filterGoals(goals, query) { return GoalMatch.filterGoals(goals, query) }
-  function foldForMatch(s) { return GoalMatch.foldForMatch(s) }
-  function matchScore(t, q) { return GoalMatch.matchScore(t, q) }
 
   // Called just after a typed `@` has gone into the text. Not after a word
   // character or another `@`, so writing an e-mail address opens nothing --

@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 
 // The journal's `@` goal list (see JournalScreen's "`@` goal tags" section
@@ -33,8 +35,8 @@ import QtQuick
 Rectangle {
   id: mentionPopup
 
-  property Item textEdit: null
-  property Item scroller: null
+  property TextEdit textEdit: null
+  property Flickable scroller: null
   property int mentionStart: -1
   property var matches: []
   property int currentIndex: 0

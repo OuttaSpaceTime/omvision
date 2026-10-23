@@ -93,10 +93,10 @@ background: Rosé Pine Dawn's `#cecacd` on `#faf4ed` rendered body text at 1.48:
 A fixed alpha on the foreground is no better, because what 50% buys depends on how
 far apart that theme's foreground and background happen to be.
 
-`Theme.secondaryInk`, `Theme.dim` and `Theme.faint` are solved for at runtime:
-each is the lightest blend of foreground toward background that still meets a
-contrast target (7, 5.5, 4.5). Every one of them is used at 12–15px, so none may go
-below the 4.5:1 AA floor for small text. Use those tokens; do not invent a new grey.
+`Theme.dim` and `Theme.faint` are solved for at runtime: each is the lightest
+blend of foreground toward background that still meets a contrast target (5.5,
+4.5). Both are used at 12–15px, so neither may go below the 4.5:1 AA floor for
+small text. Use those tokens; do not invent a new grey.
 
 ## 9. Controls are quiet
 

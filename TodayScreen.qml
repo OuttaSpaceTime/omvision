@@ -1,12 +1,13 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 
 import "Parser.js" as Parser
 
-// Spec: Today — what happened today across everything. Read-only, like
-// GoalsScreen: same header shape, same full-bleed row list, same shared left
-// edge. Not in docs/ui-spec.md yet (M2 shipped it as an empty state); the
-// detailed shape comes from the coordinator's hand-off brief instead.
+// Spec §Screen: Today — what happened today across everything. Read-only,
+// like GoalsScreen: same header shape, same full-bleed row list, same shared
+// left edge.
 Item {
   id: root
 
@@ -22,76 +23,35 @@ Item {
   property var orphanLogs: ({})
 
   function typeLabel(e) {
-    if (e.type === "pomodoro") return "pomodoro"
-    if (e.type === "coaching") return "coaching"
     if (e.type === "event") return "event" + (e.kind ? (" · " + String(e.kind)) : "")
     return String(e.type || "")
   }
 
   // Every log entry (goal logs + the day file) whose timestamp is today,
-  // newest first. Day-file entries carry no goal.
+  // newest first, each as { entry, goalTitle }: the entry as Parser read it,
+  // and the goal it was logged against, "" for the day file's.
   function buildTodayList(data, dayList, orphans) {
-    var now = new Date()
-    var todayKey = Parser.dayKey(now)
+    var todayKey = Parser.dayKey(new Date())
     var out = []
-
+    function collect(entries, goalTitle) {
+      for (let i = 0; i < entries.length; i++) {
+        if (Parser.dayKey(entries[i].date) === todayKey) out.push({ entry: entries[i], goalTitle: goalTitle })
+      }
+    }
     for (let slug in data) {
       const g = data[slug]
-      if (!g) continue
-      const title = g.meta ? g.meta.title : slug
-      const entries = g.logEntries || []
-      for (let i = 0; i < entries.length; i++) {
-        const e = entries[i]
-        if (Parser.dayKey(e.date) !== todayKey) continue
-        out.push({
-          date: e.date, type: e.type, time: Parser.entryTime(e),
-          focus: e.focus || "", done: e.done || "", left: e.left || "",
-          other: e.other || "", kind: e.kind || "", title2: e.title || "",
-          minutes: e.minutes || 0, goalTitle: title, goalSlug: slug
-        })
-      }
+      if (g) collect(g.logEntries || [], g.meta ? g.meta.title : slug)
     }
-
-    var orph = orphans || ({})
-    for (let oslug in orph) {
-      const oentries = orph[oslug] || []
-      for (let o = 0; o < oentries.length; o++) {
-        const eo = oentries[o]
-        if (Parser.dayKey(eo.date) !== todayKey) continue
-        out.push({
-          date: eo.date, type: eo.type, time: Parser.entryTime(eo),
-          focus: eo.focus || "", done: eo.done || "", left: eo.left || "",
-          other: eo.other || "", kind: eo.kind || "", title2: eo.title || "",
-          minutes: eo.minutes || 0, goalTitle: oslug, goalSlug: oslug
-        })
-      }
-    }
-
-    var dl = dayList || []
-    for (let j = 0; j < dl.length; j++) {
-      const e2 = dl[j]
-      if (Parser.dayKey(e2.date) !== todayKey) continue
-      out.push({
-        date: e2.date, type: e2.type, time: Parser.entryTime(e2),
-        focus: e2.focus || "", done: e2.done || "", left: e2.left || "",
-        other: e2.other || "", kind: e2.kind || "", title2: e2.title || "",
-        minutes: e2.minutes || 0, goalTitle: "", goalSlug: ""
-      })
-    }
-
-    out.sort(function(a, b) { return b.date.getTime() - a.date.getTime() })
+    for (let oslug in (orphans || {})) collect(orphans[oslug] || [], oslug)
+    collect(dayList || [], "")
+    out.sort(function(a, b) { return b.entry.date.getTime() - a.entry.date.getTime() })
     return out
   }
 
   readonly property var todayList: buildTodayList(root.goalsData, root.dayEntries, root.orphanLogs)
 
-  function totalMinutes(list) {
-    var n = 0
-    for (let i = 0; i < list.length; i++) n += list[i].minutes
-    return n
-  }
   readonly property int todayCount: todayList.length
-  readonly property int todayMinutesTotal: totalMinutes(todayList)
+  readonly property int todayMinutesTotal: todayList.reduce(function(n, r) { return n + r.entry.minutes }, 0)
 
   Column {
     // The journal's column, on the journal's line (Theme.pageX).
@@ -101,9 +61,9 @@ Item {
     height: root.height - Theme.panelPadding * 2
     spacing: Theme.sectionGap
 
-    // Header. Title + the count/time summary share the first row, per the
-    // hand-off brief; a hairline bands it off from the list below, same
-    // shape as GoalsScreen's header band.
+    // Header. Title + the count/time summary share the first row; a
+    // hairline bands it off from the list below, same shape as GoalsScreen's
+    // header band.
     Column {
       id: header
       width: parent.width
@@ -124,7 +84,7 @@ Item {
         Text {
           Layout.fillWidth: true
           elide: Text.ElideRight
-          text: root.todayCount + (root.todayCount === 1 ? " entry · " : " entries · ") + Parser.formatHCaption(root.todayMinutesTotal)
+          text: root.todayCount + (root.todayCount === 1 ? " entry · " : " entries · ") + Parser.durationLabel(root.todayMinutesTotal)
           font.family: Theme.fontFamily
           font.pixelSize: Theme.captionSize
           color: Theme.dim
@@ -189,19 +149,13 @@ Item {
                 spacing: Theme.spaceSm
 
                 Text {
-                  text: rowItem.modelData.time
+                  text: Parser.entryTime(rowItem.modelData.entry)
                   font.family: Theme.fontFamily
                   font.pixelSize: Theme.bodySize
                   font.bold: true
                   color: Theme.ink
                 }
-                Text {
-                  text: root.typeLabel(rowItem.modelData)
-                  font.family: Theme.fontFamily
-                  font.pixelSize: Theme.captionSize
-                  font.bold: true
-                  color: Theme.dim
-                }
+                CaptionLabel { text: root.typeLabel(rowItem.modelData.entry) }
                 // The surplus width needs an explicit home. Without this
                 // spacer, a row whose goal label is hidden -- an entry with no
                 // goal -- has no fillWidth item at all, so the layout spreads
@@ -223,59 +177,10 @@ Item {
                 }
               }
 
-              Text {
-                visible: rowItem.modelData.type === "pomodoro" && !!rowItem.modelData.focus
+              EntryNotes {
                 width: parent.width
-                text: "focus: " + rowItem.modelData.focus
-                wrapMode: Text.WordWrap
-                lineHeight: Theme.proseLineHeight
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.bodySize
-                color: Theme.ink
-              }
-              Text {
-                visible: rowItem.modelData.type === "event" && !!rowItem.modelData.title2
-                width: parent.width
-                text: rowItem.modelData.title2
-                wrapMode: Text.WordWrap
-                lineHeight: Theme.proseLineHeight
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.bodySize
-                color: Theme.ink
-              }
-              // What the break actually recorded. Same three lines, same
-              // styling, as the goal-detail timeline -- a run logged with no
-              // `focus:` used to render as a bare timestamp here, with every
-              // word the user wrote about it dropped on the floor.
-              Text {
-                visible: rowItem.modelData.type === "pomodoro" && !!rowItem.modelData.done
-                width: parent.width
-                text: "done: " + rowItem.modelData.done
-                wrapMode: Text.WordWrap
-                lineHeight: Theme.proseLineHeight
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.bodySmallSize
-                color: Theme.dim
-              }
-              Text {
-                visible: rowItem.modelData.type === "pomodoro" && !!rowItem.modelData.left
-                width: parent.width
-                text: "left: " + rowItem.modelData.left
-                wrapMode: Text.WordWrap
-                lineHeight: Theme.proseLineHeight
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.bodySmallSize
-                color: Theme.dim
-              }
-              Text {
-                visible: rowItem.modelData.type === "pomodoro" && !!rowItem.modelData.other
-                width: parent.width
-                text: "else: " + rowItem.modelData.other
-                wrapMode: Text.WordWrap
-                lineHeight: Theme.proseLineHeight
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.bodySmallSize
-                color: Theme.dim
+                spacing: Theme.spaceXs
+                entry: rowItem.modelData.entry
               }
             }
           }

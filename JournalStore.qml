@@ -65,7 +65,6 @@ import "Util.js" as Util
 //                    its own confirmed write or its own read ("" for a day
 //                    it deleted). Newer than
 //                    journalContents until omvision.qml's FileView catches up.
-//   busy             a write, read or file creation is under way
 //   knownText(path)       what the day's file says, or undefined if unknown
 //   pendingTextFor(path)  the newest queued/in-flight write's text, or undefined
 //   waitingTextFor(path)  text typed into that day before its disk text was
@@ -89,8 +88,6 @@ QtObject {
   // first; the head is the one in progress.
   property var resolveQueue: []
 
-  readonly property bool busy: store.files.busy || resolveQueue.length > 0
-
   signal saved(string path, string text)
   signal failed(string path, string message)
   // The store has just read `path` itself (see resolve); knownText(path) now
@@ -98,7 +95,6 @@ QtObject {
   signal diskTextKnown(string path)
 
   function setWritten(path, text) { store.written = Util.withKey(store.written, path, text) }
-  function writtenFor(path) { return store.written[path] !== undefined ? store.written[path] : "" }
 
   function knownText(path) {
     if (store.written[path] !== undefined) return store.written[path]
@@ -223,9 +219,10 @@ QtObject {
     store.startResolve()
   }
 
+  // No ids on these two: one named like its property would shadow it
+  // (qmllint's [id-shadows-member]), so they are reached as store.mkdirProc
+  // and store.touchProc.
   property Process mkdirProc: Process {
-    // No id: one named mkdirProc would shadow this property (qmllint's
-    // [id-shadows-member]), and the functions above reach it as store.mkdirProc.
     onExited: function(exitCode, exitStatus) {
       var path = store.resolveQueue[0]
       if (exitCode !== 0) {
@@ -233,13 +230,12 @@ QtObject {
         store.finishResolve(path, undefined)
         return
       }
-      touchProc.command = ["/usr/bin/touch", path]
-      touchProc.running = true
+      store.touchProc.command = ["/usr/bin/touch", path]
+      store.touchProc.running = true
     }
   }
 
   property Process touchProc: Process {
-    id: touchProc
     onExited: function(exitCode, exitStatus) {
       var path = store.resolveQueue[0]
       if (exitCode !== 0) {

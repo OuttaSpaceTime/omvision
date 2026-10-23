@@ -3,7 +3,7 @@
 # and nothing reads or writes ~/Notes -- the app tests get a throwaway HOME.
 #
 #   bin/test              every layer
-#   bin/test unit         layer 1 only: Writer.js and Parser.js (qmltestrunner), and
+#   bin/test unit         layer 1 only: the pure JS modules (qmltestrunner), and
 #                         tests/contract's cases against notes-helper.py
 #   bin/test app          layer 2 only: the whole app, driven from inside qs
 #   bin/test engine       layer 3 only: the ompom engine and its overlay (tests/engine)
@@ -14,7 +14,7 @@
 #   -v                    print the runners' full output
 #
 # Layer 1 is Qt's qmltestrunner over tests/unit: plain TestCase files that
-# import the two .js files, fast, no app. Layer 2 starts the real app once per
+# import the pure .js modules, fast, no app. Layer 2 starts the real app once per
 # tests/app/tst_*.qml, through bin/omvision (so the journal's compiled
 # highlighter loads too), with OMVISION_TEST pointing omvision.qml's test hook
 # at the file. Each run gets a fresh temp HOME seeded from

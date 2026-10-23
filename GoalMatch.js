@@ -3,7 +3,7 @@
 // Matching a half-typed `@` query against the app's goals, for the journal's
 // goal list (JournalScreen's `@` goal tags). Pure: nothing here touches QML
 // state or files, so it is a shared library rather than functions on the
-// screen, and the screen only keeps thin wrappers for its existing callers.
+// screen, and tests/unit/tst_goalmatch.qml can test it on its own.
 
 // Fuzzy and case-blind: the query's letters have to appear in the slug or
 // the title in order, not side by side, so `wsq` and `WallSq` both find

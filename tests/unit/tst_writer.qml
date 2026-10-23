@@ -642,7 +642,6 @@ TestCase {
     compare(e[0].countsToward, true)
     compare(e[0].title, "two lines")
     compare(e[0].minutes, 45)
-    compare(Writer.EVENT_COUNTS_MARKER, Parser.EVENT_COUNTS_MARKER, "the two files must agree on the marker")
   }
 
   function test_formatEventEntry_appends_cleanly() {

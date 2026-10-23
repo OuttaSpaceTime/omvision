@@ -22,9 +22,9 @@ reading and writing files under `~/Notes/Omvision/`.
 - `bin/check` runs everything a change should pass: lint, the no-pixel-numbers rule, the
   no-scrim rule, the load check and `bin/test`. Run it before you stop. See `docs/testing.md`.
 - Tests: `bin/test` runs every layer offscreen in about a minute. Run it before and after
-  a change. `tests/unit` (qmltestrunner) covers Writer.js, Parser.js and the engine's
-  Cycle.js, and `tests/contract` holds goal-files.md as cases the app and
-  notes-helper.py both run. `tests/app` runs the real app inside `qs` with a throwaway
+  a change. `tests/unit` (qmltestrunner) covers the pure JS modules (Writer.js,
+  Parser.js, Util.js, GoalMatch.js and the engine's Cycle.js), and `tests/contract`
+  holds goal-files.md as cases the app and notes-helper.py both run. `tests/app` runs the real app inside `qs` with a throwaway
   HOME, clicks and types through `OmvisionTest.qml`'s helpers, and checks the bytes on
   disk. `tests/engine` does the same for the ompom engine and its overlay; both share
   `tests/lib/QsTestCase.qml`. `bin/test app tasks` runs one file. See `docs/testing.md`.

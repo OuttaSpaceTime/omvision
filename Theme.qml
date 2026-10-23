@@ -17,9 +17,6 @@ QtObject {
   // ---- Flexoki Light fallback (spec §Tokens) -------------------------------
   readonly property string fallbackBackground: "#FFFCF0"
   readonly property string fallbackForeground: "#100F0F"
-  readonly property string fallbackSecondaryInk: "#403E3C"
-  readonly property string fallbackDim: "#6F6E69"
-  readonly property string fallbackFaint: "#878580"
   readonly property string fallbackHairline: "#DAD8CC"
   readonly property string fallbackBorder: "#B7B5AC"
   readonly property string fallbackFill: "#F6F3E8"
@@ -28,13 +25,14 @@ QtObject {
   readonly property string fallbackRed: "#AF3029"
 
   // ---- live values, overwritten by loadColors() on a successful parse -----
+  // Only these keys are read. The theme's `muted` never colours text
+  // (below, and docs/layout-rules.md §8), and nothing here differs by
+  // `mode`: every colour is solved from foreground and background.
   property bool themeLoaded: false
-  property string mode: "light"
   property color background: fallbackBackground
   property color foreground: fallbackForeground
-  property color accent: fallbackAccent
-  property color mutedColor: fallbackDim
-  property color redColor: fallbackRed
+  property color accentColor: fallbackAccent
+  property color red: fallbackRed
 
   function alpha(c, a) {
     return Qt.rgba(c.r, c.g, c.b, a)
@@ -83,17 +81,17 @@ QtObject {
   }
 
   // Derived surfaces. When the live theme loaded, these are computed from
-  // the alpha rule in the spec's "Surfaces" section (4/8/18/40%). When it
+  // the alpha rule in the spec's "Surfaces" section (fill 4%, hover 8%,
+  // hairline 14%, border 40%). When it
   // didn't, the literal Flexoki fallback hexes are used directly, since
   // those are given precisely in the spec.
   readonly property color paper: background
   readonly property color ink: foreground
-  // Three steps of secondary text, each defined by the contrast it must keep
-  // rather than by a colour. 4.5:1 is the AA floor for body text, and every
-  // one of these is used at 12-15px, so none of them may sit below it; the
-  // hierarchy comes from the gap between 7 and 5.5 and 4.5, not from letting
-  // the quietest one become unreadable.
-  readonly property color secondaryInk: textForContrast(foreground, background, 7.0)
+  // Two steps of secondary text, each defined by the contrast it must keep
+  // rather than by a colour. 4.5:1 is the AA floor for body text, and both
+  // are used at 12-15px, so neither may sit below it; the hierarchy comes
+  // from the gap between 5.5 and 4.5, not from letting the quieter one
+  // become unreadable. (A third step at 7:1 was never used.)
   readonly property color dim: textForContrast(foreground, background, 5.5)
   readonly property color faint: textForContrast(foreground, background, 4.5)
   // The one deliberate exception to that floor: markdown syntax in the
@@ -106,10 +104,7 @@ QtObject {
   readonly property color border: themeLoaded ? alpha(foreground, 0.40) : fallbackBorder
   readonly property color fill: themeLoaded ? alpha(foreground, 0.04) : fallbackFill
   readonly property color hoverFill: alpha(foreground, 0.08)
-  readonly property color selectedFill: alpha(foreground, 0.18)
-  readonly property color accentColor: accent
-  readonly property color accentFill: themeLoaded ? alpha(accent, 0.12) : fallbackAccentFill
-  readonly property color red: redColor
+  readonly property color accentFill: themeLoaded ? alpha(accentColor, 0.12) : fallbackAccentFill
 
   // ---- type scale (spec §Tokens) -------------------------------------------
   // Sized against the journal, not against a toolbar. The app used to set its
@@ -125,7 +120,6 @@ QtObject {
   readonly property int subtitleSize: 16
   readonly property int titleSize: 17
   readonly property int headingSize: 24
-  readonly property int displaySize: 32
 
   // ---- spacing scale -------------------------------------------------------
   // One scale, 4px based, and every margin and gap in the app comes from it.
@@ -185,7 +179,7 @@ QtObject {
   // and its `@` list. A size (the bar's thickness), not spacing.
   readonly property int selectionBarWidth: 3
   // How long the pointer rests on a control before its tooltip shows (the
-  // rail's icons).
+  // rail's icons, the journal's corner controls).
   readonly property int tooltipDelay: 400
   // The window: its size on launch, and the smallest it can be made. 720 is
   // the width every screen is checked at (docs/layout-rules.md); below it
@@ -371,10 +365,8 @@ QtObject {
     if (!t.background || !t.foreground || !t.accent) return
     background = t.background
     foreground = t.foreground
-    accent = t.accent
-    mutedColor = t.muted ? t.muted : fallbackDim
-    redColor = t.red ? t.red : fallbackRed
-    mode = t.mode ? t.mode : "light"
+    accentColor = t.accent
+    red = t.red ? t.red : fallbackRed
     themeLoaded = true
   }
 

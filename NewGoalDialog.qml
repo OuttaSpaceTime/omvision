@@ -1,22 +1,15 @@
 import QtQuick
 import QtQuick.Layouts
 
-// "New goal" (the last inert control in a fresh install, plan.md O2):
-// title + one-line why, optionally an estimate in poms and a done_by
-// date, and whether the goal can be focused on at the laptop.
-// Submitting hands the raw fields up to omvision.qml as one payload --
-// this dialog never touches the filesystem itself, it only
-// knows how to validate what the user typed (goal-files.md has nothing
-// to say about *input* validation, only about the file shape once
-// something is about to be written).
-//
-// True modal, same construct as EventDialog/CancelDialog: a FocusScope
-// so focus can be pushed in on open and popped back out on close, a
-// clear full-window MouseArea beneath the card that blocks
-// every click/hover from reaching the content behind and dismisses on a
-// stray click (this dialog is not destructive, unlike Cancel), and a
-// card sized to its own content rather than a fixed height.
-FocusScope {
+// "New goal", and "Edit goal" when `editSlug` is set: title + one-line
+// why, optionally an estimate in poms and a done_by date, and whether the
+// goal can be focused on at the laptop. Submitting hands the raw fields up
+// to omvision.qml as one payload -- this dialog never touches the filesystem
+// itself, it only knows how to validate what the user typed (goal-files.md
+// has nothing to say about *input* validation, only about the file shape
+// once something is about to be written). Additive, so a stray click
+// outside closes it (DialogFrame).
+DialogFrame {
   id: root
 
   property string errorMessage: ""
@@ -27,7 +20,6 @@ FocusScope {
   readonly property bool editing: editSlug !== ""
 
   signal submitted(var fields)
-  signal dismissed()
 
   property string titleText: ""
   property string whyText: ""
@@ -37,17 +29,13 @@ FocusScope {
   // the picker should skip is the exception (goal-files.md §6).
   property bool focusable: true
   property string localError: ""
-  property var previousFocusItem: null
 
-  onVisibleChanged: {
-    if (!visible) {
-      if (root.previousFocusItem) {
-        root.previousFocusItem.forceActiveFocus()
-        root.previousFocusItem = null
-      }
-      return
-    }
-    root.previousFocusItem = root.Window ? root.Window.activeFocusItem : null
+  error: root.localError || root.errorMessage
+  hint: root.editing
+    ? "Saves to goals/" + root.editSlug + ".md. The file name stays the same."
+    : "Creates ~/Notes/Omvision/goals/<slug>.md with an empty Tasks list."
+
+  onOpened: {
     var g = root.editing ? root.initial : null
     titleText = g ? g.title : ""
     whyText = g ? g.why : ""
@@ -55,7 +43,7 @@ FocusScope {
     doneByText = g && g.done_by ? g.done_by : ""
     focusable = g ? g.focusable !== false : true
     localError = ""
-    titleInput.forceActiveFocus()
+    titleField.focusInput()
   }
 
   // The leading digits of the raw front-matter value, not meta.estimate.
@@ -94,253 +82,65 @@ FocusScope {
     root.submitted({ title: t, why: root.whyText.trim(), estimate: estimate, doneBy: doneBy, focusable: root.focusable })
   }
 
-  Keys.onEscapePressed: root.dismissed()
   Keys.onReturnPressed: root.submit()
   Keys.onEnterPressed: root.submit()
 
-  // Clear, never a scrim: nothing dims the window behind a dialog (the
-  // user never wants a darkened background; bin/check's noscrim step).
-  // Being the topmost item under the pointer with hoverEnabled, it absorbs
-  // every click and hover meant for whatever is beneath it. A plain click
-  // here dismisses -- this dialog is additive, not destructive, so a stray
-  // click closing it is fine (contrast CancelDialog, which deliberately
-  // does not do this).
-  MouseArea {
-    anchors.fill: parent
-    hoverEnabled: true
-    onClicked: root.dismissed()
+  actions: [
+    Button { label: "Cancel"; onActivated: root.dismissed() },
+    Button { label: root.editing ? "Save" : "Create goal"; filled: true; onActivated: root.submit() }
+  ]
+
+  Text {
+    text: root.editing ? "Edit goal" : "New goal"
+    font.family: Theme.fontFamily
+    font.pixelSize: Theme.bodySize
+    font.bold: true
+    color: Theme.ink
   }
 
-  Rectangle {
-    id: card
-    anchors.centerIn: parent
-    width: Math.min(Theme.dialogWidth, parent.width - Theme.space2xl * 2)
-    height: content.height + Theme.spaceXl * 2
-    color: Theme.paper
-    border.color: Theme.border
-    border.width: Theme.dialogBorderWidth
+  Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
 
-    // Swallow clicks/hover so the area beneath never sees them, and a
-    // click inside the card never dismisses it.
-    MouseArea { anchors.fill: parent; hoverEnabled: true; onClicked: {} }
+  // The only required field; "*" marks it instead of a header caption.
+  DialogField {
+    id: titleField
+    label: "Title *"
+    text: root.titleText
+    onEdited: function(text) { root.titleText = text }
+    onAccepted: root.submit()
+  }
 
-    ColumnLayout {
-      id: content
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.top: parent.top
-      anchors.margins: Theme.spaceXl
-      spacing: Theme.spaceLg
+  DialogField {
+    label: "Why"
+    text: root.whyText
+    onEdited: function(text) { root.whyText = text }
+    onAccepted: root.submit()
+  }
 
-      Text {
-        text: root.editing ? "Edit goal" : "New goal"
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.bodySize
-        font.bold: true
-        color: Theme.ink
-      }
-
-      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
-
-      // ---- title --------------------------------------------------------
-      ColumnLayout {
-        Layout.fillWidth: true
-        spacing: Theme.spaceXs
-        Text {
-          // The only required field; "*" marks it instead of a header caption.
-          text: "Title *"
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.captionSize
-          font.bold: true
-          color: Theme.dim
-        }
-        Rectangle {
-          Layout.fillWidth: true
-          Layout.preferredHeight: Theme.controlHeight
-          color: Theme.fill
-          border.color: Theme.border
-          border.width: Theme.borderWidth
-          TextInput {
-            id: titleInput
-            anchors.fill: parent
-            anchors.leftMargin: Theme.spaceSm
-            anchors.rightMargin: Theme.spaceSm
-            verticalAlignment: TextInput.AlignVCenter
-            clip: true
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.bodySize
-            color: Theme.ink
-            selectByMouse: true
-            text: root.titleText
-            onTextChanged: root.titleText = text
-            Keys.onReturnPressed: root.submit()
-            Keys.onEnterPressed: root.submit()
-          }
-        }
-      }
-
-      // ---- why ------------------------------------------------------------
-      ColumnLayout {
-        Layout.fillWidth: true
-        spacing: Theme.spaceXs
-        Text {
-          text: "Why"
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.captionSize
-          font.bold: true
-          color: Theme.dim
-        }
-        Rectangle {
-          Layout.fillWidth: true
-          Layout.preferredHeight: Theme.controlHeight
-          color: Theme.fill
-          border.color: Theme.border
-          border.width: Theme.borderWidth
-          TextInput {
-            id: whyInput
-            anchors.fill: parent
-            anchors.leftMargin: Theme.spaceSm
-            anchors.rightMargin: Theme.spaceSm
-            verticalAlignment: TextInput.AlignVCenter
-            clip: true
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.bodySize
-            color: Theme.ink
-            selectByMouse: true
-            text: root.whyText
-            onTextChanged: root.whyText = text
-            Keys.onReturnPressed: root.submit()
-            Keys.onEnterPressed: root.submit()
-          }
-        }
-      }
-
-      // ---- estimate / done by ---------------------------------------------
-      RowLayout {
-        Layout.fillWidth: true
-        spacing: Theme.spaceSm
-        ColumnLayout {
-          // Fixed, explicitly: its field's fillWidth would otherwise make
-          // this whole column fill too, and it squeezed its neighbour.
-          Layout.preferredWidth: Theme.dialogShortFieldWidth
-          Layout.fillWidth: false
-          spacing: Theme.spaceXs
-          Text {
-            text: "Estimate (poms)"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.captionSize
-            font.bold: true
-            color: Theme.dim
-          }
-          Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: Theme.controlHeight
-            color: Theme.fill
-            border.color: Theme.border
-            border.width: Theme.borderWidth
-            TextInput {
-              anchors.fill: parent
-              anchors.leftMargin: Theme.spaceSm
-              anchors.rightMargin: Theme.spaceSm
-              verticalAlignment: TextInput.AlignVCenter
-              clip: true
-              font.family: Theme.fontFamily
-              font.pixelSize: Theme.bodySize
-              color: Theme.ink
-              selectByMouse: true
-              text: root.estimateText
-              onTextChanged: root.estimateText = text
-              Keys.onReturnPressed: root.submit()
-              Keys.onEnterPressed: root.submit()
-            }
-          }
-        }
-        ColumnLayout {
-          Layout.fillWidth: true
-          spacing: Theme.spaceXs
-          Text {
-            text: "Done by (YYYY-MM-DD)"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.captionSize
-            font.bold: true
-            color: Theme.dim
-          }
-          Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: Theme.controlHeight
-            color: Theme.fill
-            border.color: Theme.border
-            border.width: Theme.borderWidth
-            TextInput {
-              anchors.fill: parent
-              anchors.leftMargin: Theme.spaceSm
-              anchors.rightMargin: Theme.spaceSm
-              verticalAlignment: TextInput.AlignVCenter
-              clip: true
-              font.family: Theme.fontFamily
-              font.pixelSize: Theme.bodySize
-              color: Theme.ink
-              selectByMouse: true
-              text: root.doneByText
-              onTextChanged: root.doneByText = text
-              Keys.onReturnPressed: root.submit()
-              Keys.onEnterPressed: root.submit()
-            }
-          }
-        }
-      }
-
-      // ---- focusable ----------------------------------------------------
-      // The same box as EventDialog's "count the time".
-      CheckOption {
-        objectName: "goalFocusableToggle"
-        Layout.fillWidth: true
-        checked: root.focusable
-        label: "can be focused on at the laptop"
-        onToggled: root.focusable = !root.focusable
-      }
-
-      Text {
-        Layout.fillWidth: true
-        visible: root.localError.length > 0 || root.errorMessage.length > 0
-        wrapMode: Text.WordWrap
-        text: root.localError.length > 0 ? root.localError : root.errorMessage
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.captionSize
-        color: Theme.red
-      }
-
-      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
-
-      RowLayout {
-        Layout.fillWidth: true
-        spacing: Theme.spaceSm
-        Text {
-          Layout.fillWidth: true
-          wrapMode: Text.WordWrap
-          text: root.editing
-            ? "Saves to goals/" + root.editSlug + ".md. The file name stays the same."
-            : "Creates ~/Notes/Omvision/goals/<slug>.md with an empty Tasks list."
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.captionSize
-          color: Theme.faint
-        }
-        Button {
-          label: "Cancel"
-          inert: false
-          Layout.preferredWidth: implicitWidth
-          Layout.preferredHeight: Theme.controlHeight
-          onActivated: root.dismissed()
-        }
-        Button {
-          label: root.editing ? "Save" : "Create goal"
-          filled: true
-          inert: false
-          Layout.preferredWidth: implicitWidth
-          Layout.preferredHeight: Theme.controlHeight
-          onActivated: root.submit()
-        }
-      }
+  RowLayout {
+    Layout.fillWidth: true
+    spacing: Theme.spaceSm
+    DialogField {
+      fieldWidth: Theme.dialogShortFieldWidth
+      label: "Estimate (poms)"
+      text: root.estimateText
+      onEdited: function(text) { root.estimateText = text }
+      onAccepted: root.submit()
     }
+    DialogField {
+      label: "Done by (YYYY-MM-DD)"
+      text: root.doneByText
+      onEdited: function(text) { root.doneByText = text }
+      onAccepted: root.submit()
+    }
+  }
+
+  // ---- focusable ----------------------------------------------------
+  // The same box as EventDialog's "count the time".
+  CheckOption {
+    objectName: "goalFocusableToggle"
+    Layout.fillWidth: true
+    checked: root.focusable
+    label: "can be focused on at the laptop"
+    onToggled: root.focusable = !root.focusable
   }
 }

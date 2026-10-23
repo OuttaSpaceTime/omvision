@@ -40,6 +40,6 @@ Rectangle {
   }
 
   ToolTip.visible: cb.hot
-  ToolTip.delay: 400
+  ToolTip.delay: Theme.tooltipDelay
   ToolTip.text: cb.tip
 }

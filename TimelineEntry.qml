@@ -3,9 +3,8 @@ import QtQuick
 import "Parser.js" as Parser
 
 // One entry on the goal detail's timeline (Timeline.qml): its time, a node
-// on the vertical rule, and what the entry says. A pomodoro's node is a
-// bordered square, a coaching session's is filled accent, an event's is
-// dashed.
+// on the vertical rule, and what the entry says (EntryNotes). A pomodoro's
+// node is a bordered square, an event's is dashed.
 Item {
   id: root
 
@@ -18,9 +17,8 @@ Item {
   height: contentCol.height + Theme.spaceMd
 
   function entryLabel(e) {
-    if (e.type === "pomodoro") return e.minutes + " min"
-    if (e.type === "coaching") return "coaching"
-    if (e.type === "event") return "event · " + String(e.kind || "") + " · " + Parser.formatHCaption(e.minutes)
+    if (e.type === "pomodoro") return Parser.durationLabel(e.minutes)
+    if (e.type === "event") return "event · " + String(e.kind || "") + " · " + Parser.durationLabel(e.minutes)
     return ""
   }
 
@@ -58,10 +56,11 @@ Item {
     anchors.horizontalCenter: rule.horizontalCenter
     anchors.top: parent.top
     anchors.topMargin: Theme.spaceXs
-    color: root.entry.type === "coaching" ? Theme.accentColor : Theme.paper
-    border.color: root.entry.type === "coaching" ? Theme.accentColor : Theme.ink
-    border.width: Theme.borderWidth
-    radius: 0
+    color: Theme.paper
+    border.color: Theme.ink
+    // An event's outline is the dashed Canvas below: a solid border under it
+    // filled the dashes' gaps, and its node read as a pomodoro's.
+    border.width: root.entry.type === "event" ? 0 : Theme.borderWidth
 
     // Dashed look for events: Quickshell/QtQuick has no
     // native dashed border, so approximate with a dashed
@@ -90,64 +89,11 @@ Item {
     anchors.top: parent.top
     spacing: Theme.spaceXxs
 
-    Text {
-      text: root.entryLabel(root.entry)
-      font.family: Theme.fontFamily
-      font.pixelSize: Theme.captionSize
-      font.bold: true
-      color: Theme.dim
-    }
-    Text {
-      visible: root.entry.type === "pomodoro" && !!root.entry.focus
+    CaptionLabel { text: root.entryLabel(root.entry) }
+    EntryNotes {
       width: contentCol.width
-      text: "focus: " + root.entry.focus
-      wrapMode: Text.WordWrap
-      lineHeight: Theme.proseLineHeight
-      font.family: Theme.fontFamily
-      font.pixelSize: Theme.bodySize
-      color: Theme.ink
-    }
-    Text {
-      visible: root.entry.type === "event" && !!root.entry.title
-      width: contentCol.width
-      text: root.entry.title ? root.entry.title : ""
-      wrapMode: Text.WordWrap
-      lineHeight: Theme.proseLineHeight
-      font.family: Theme.fontFamily
-      font.pixelSize: Theme.bodySize
-      color: Theme.ink
-    }
-    Text {
-      visible: root.entry.type === "pomodoro" && !!root.entry.done
-      width: contentCol.width
-      text: "done: " + root.entry.done
-      wrapMode: Text.WordWrap
-      lineHeight: Theme.proseLineHeight
-      font.family: Theme.fontFamily
-      font.pixelSize: Theme.bodySmallSize
-      color: Theme.dim
-    }
-    Text {
-      visible: root.entry.type === "pomodoro" && !!root.entry.left
-      width: contentCol.width
-      text: "left: " + root.entry.left
-      wrapMode: Text.WordWrap
-      lineHeight: Theme.proseLineHeight
-      font.family: Theme.fontFamily
-      font.pixelSize: Theme.bodySmallSize
-      color: Theme.dim
-    }
-    Text {
-      // goal-files.md §4's "Anything else?" line, written
-      // only when the break's open question was answered.
-      visible: root.entry.type === "pomodoro" && !!root.entry.other
-      width: contentCol.width
-      text: "else: " + root.entry.other
-      wrapMode: Text.WordWrap
-      lineHeight: Theme.proseLineHeight
-      font.family: Theme.fontFamily
-      font.pixelSize: Theme.bodySmallSize
-      color: Theme.dim
+      spacing: Theme.spaceXxs
+      entry: root.entry
     }
   }
 }

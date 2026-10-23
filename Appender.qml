@@ -18,57 +18,59 @@ import Quickshell.Io
 // ---- API --------------------------------------------------------------------
 //   append(path, text, onDone)
 //     Queues one append and returns at once. Appends run strictly in the
-//     order they were queued, one Process at a time. `text` goes in as given:
-//     the caller supplies any trailing newline. onDone(ok) runs when `tee`
-//     exits; ok is exit code 0.
-//   busy -- true while an append is queued or running.
+//     order they were queued, one at a time. `text` goes in as given: the
+//     caller supplies any trailing newline. The file's folder is created
+//     first if it is missing. onDone(ok) runs when `tee` exits; ok is exit
+//     code 0 from both steps.
 QtObject {
   id: appender
 
+  // Appends not yet started, oldest first, and the one under way, or null.
+  // Nothing binds to either, so the queue is changed in place.
   property var queue: []
-  property bool running: false
-  readonly property bool busy: running || queue.length > 0
+  property var current: null
 
   function append(path, text, onDone) {
-    var q = appender.queue.slice()
-    q.push({ path: path, text: text, onDone: onDone })
-    appender.queue = q
+    appender.queue.push({ path: path, text: text, onDone: onDone })
     appender.pump()
   }
 
-  // Unlike SerialFileWriter this starts the next Process straight from the
+  // Unlike SerialFileWriter this starts the next append straight from the
   // previous one's onExited. Process has none of FileView's dropped-signal
   // bugs, and back-to-back appends have always gone out this way.
   function pump() {
-    if (appender.running || appender.queue.length === 0) return
-    var q = appender.queue.slice()
-    var job = q.shift()
-    appender.queue = q
-    appender.running = true
-    teeProc.pendingText = job.text
-    teeProc.pendingDone = function(ok) {
-      appender.running = false
-      if (job.onDone) job.onDone(ok)
-      appender.pump()
-    }
-    teeProc.command = ["/usr/bin/tee", "-a", job.path]
-    teeProc.stdinEnabled = true
-    teeProc.running = true
+    if (appender.current !== null || appender.queue.length === 0) return
+    appender.current = appender.queue.shift()
+    appender.mkdirProc.command = ["/usr/bin/mkdir", "-p", "--", appender.current.path.replace(/\/[^\/]*$/, "")]
+    appender.mkdirProc.running = true
   }
 
-  property Process proc: Process {
-    id: teeProc
-    property string pendingText: ""
-    property var pendingDone: null
-    command: []
-    onStarted: {
-      teeProc.write(teeProc.pendingText)
-      teeProc.stdinEnabled = false // closes stdin: tee sees EOF and exits
-    }
+  function finish(ok) {
+    var job = appender.current
+    appender.current = null
+    if (job.onDone) job.onDone(ok)
+    appender.pump()
+  }
+
+  // The folder first, as notes-helper.py's sub_dir_fd() does: `tee` can't
+  // create one, and the first event logged with no goal, on a machine where
+  // nothing had written a day file yet, failed for want of `days/`.
+  // No ids on these two: one named like its property would shadow it
+  // (qmllint's [id-shadows-member]).
+  property Process mkdirProc: Process {
     onExited: function(exitCode) {
-      var done = teeProc.pendingDone
-      teeProc.pendingDone = null
-      if (done) done(exitCode === 0)
+      if (exitCode !== 0) { appender.finish(false); return }
+      appender.teeProc.command = ["/usr/bin/tee", "-a", "--", appender.current.path]
+      appender.teeProc.stdinEnabled = true
+      appender.teeProc.running = true
     }
+  }
+
+  property Process teeProc: Process {
+    onStarted: {
+      appender.teeProc.write(appender.current.text)
+      appender.teeProc.stdinEnabled = false // closes stdin: tee sees EOF and exits
+    }
+    onExited: function(exitCode) { appender.finish(exitCode === 0) }
   }
 }

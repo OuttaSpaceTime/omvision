@@ -44,9 +44,6 @@ ColumnLayout {
       Button {
         objectName: "closeGoalButton"
         label: "Close goal · done"
-        inert: false
-        Layout.preferredWidth: implicitWidth
-        Layout.preferredHeight: Theme.controlHeight
         onActivated: root.closeGoal()
       }
       Item { Layout.fillWidth: true }
@@ -81,9 +78,6 @@ ColumnLayout {
     Button {
       objectName: "reopenGoalButton"
       label: "Reopen goal"
-      inert: false
-      Layout.preferredWidth: implicitWidth
-      Layout.preferredHeight: Theme.controlHeight
       onActivated: root.reopenGoal()
     }
   }
@@ -96,11 +90,8 @@ ColumnLayout {
     visible: root.hasCancelNote
     spacing: Theme.spaceXs
     Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
-    Text {
+    CaptionLabel {
       text: "Cancelled"
-      font.family: Theme.fontFamily
-      font.pixelSize: Theme.captionSize
-      font.bold: true
       color: Theme.red
     }
     Text {

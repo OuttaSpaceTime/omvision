@@ -287,6 +287,23 @@ TestCase {
     compare(twoNights.length, 2, "only the same heading collapses")
   }
 
+  function test_entryNoteLines() {
+    function texts(e) { return Parser.entryNoteLines(e).map(function(l) { return (l.prominent ? "!" : "") + l.text }) }
+    compare(texts({ type: "pomodoro", focus: "f", done: "d", left: "", other: "o" }),
+            ["!focus: f", "done: d", "else: o"], "unanswered notes are left out")
+    compare(texts({ type: "pomodoro", focus: "", done: "", left: "l", other: "" }), ["left: l"],
+            "a run logged without focus: still shows its notes")
+    compare(texts({ type: "event", title: "Bouldering" }), ["!Bouldering"])
+    compare(texts({ type: "pomodoro", focus: "", done: "", left: "", other: "" }), [], "a bare entry says nothing")
+  }
+
+  function test_pad2_and_pomsLabel() {
+    compare(Parser.pad2(7), "07")
+    compare(Parser.pad2(12), "12")
+    compare(Parser.pomsLabel(1), "1 pom")
+    compare(Parser.pomsLabel(0), "0 poms")
+  }
+
   function test_entryTime() {
     var e = Parser.parseLogEntries(log, now)
     compare(Parser.entryTime(e[0]), "16:10")
@@ -439,17 +456,12 @@ TestCase {
     compare(Parser.formatShortDate(""), "")
   }
 
-  function test_formatHm_data() {
-    return [ { tag: "0", m: 0, s: "0m" }, { tag: "50", m: 50, s: "50m" }, { tag: "60", m: 60, s: "1h" },
-             { tag: "75", m: 75, s: "1h 15m" }, { tag: "605", m: 605, s: "10h 5m" } ]
+  function test_durationLabel_data() {
+    return [ { tag: "0", m: 0, s: "0 min" }, { tag: "5", m: 5, s: "5 min" }, { tag: "60", m: 60, s: "1 h" },
+             { tag: "65", m: 65, s: "1 h 05" }, { tag: "75", m: 75, s: "1 h 15" },
+             { tag: "605", m: 605, s: "10 h 05" } ]
   }
-  function test_formatHm(row) { compare(Parser.formatHm(row.m), row.s) }
-
-  function test_formatHCaption_data() {
-    return [ { tag: "5", m: 5, s: "5 min" }, { tag: "60", m: 60, s: "1 h" },
-             { tag: "75", m: 75, s: "1 h 15" }, { tag: "90", m: 90, s: "1 h 30" } ]
-  }
-  function test_formatHCaption(row) { compare(Parser.formatHCaption(row.m), row.s) }
+  function test_durationLabel(row) { compare(Parser.durationLabel(row.m), row.s) }
 
   // ---- journal ------------------------------------------------------------------------
   function test_journalPreview_data() {
@@ -472,22 +484,5 @@ TestCase {
     var lines = []
     for (let i = 0; i * line.length <= Parser.JOURNAL_PREVIEW_MAX; i++) lines.push(line)
     compare(Parser.journalPreview(lines.join("\n")).length, Parser.JOURNAL_PREVIEW_MAX)
-  }
-
-  function test_escapeHtml() {
-    compare(Parser.escapeHtml("<a & b>"), "&lt;a &amp; b&gt;")
-  }
-
-  function test_mdToHtml() {
-    var styles = { codeBg: "#eee", accent: "#00f", dim: "#999" }
-    compare(Parser.mdToHtml("# Title", styles), "<p><b>Title</b></p>")
-    compare(Parser.mdToHtml("> q", styles), "<p><i>q</i></p>")
-    compare(Parser.mdToHtml("- a", styles), '<p><span style="color:#999;">-</span> a</p>')
-    compare(Parser.mdToHtml("", styles), "<p></p>")
-    compare(Parser.mdToHtml("<b>x</b>", styles), "<p>&lt;b&gt;x&lt;/b&gt;</p>", "markup in the text is escaped")
-    compare(Parser.mdToHtml("see [x](u)", styles),
-            '<p>see <a href="u" style="color:#00f; text-decoration:underline;">x</a></p>')
-    compare(Parser.mdToHtml("a\r\nb", styles), "<p>a</p>\n<p>b</p>")
-    compare(Parser.mdInline("`c`", styles), '<span style="background-color:#eee;"> c </span>')
   }
 }

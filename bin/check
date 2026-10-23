@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Everything a change should pass, in one command: lint, px, load, test (and
-# whatever else .qs-kit lists). Offscreen, on fixtures, never opens a window.
+# Everything a change should pass, in one command: the steps .qs-kit lists
+# (lint, px, noscrim, plugins, load, test; docs/testing.md has each). Offscreen, on fixtures, never opens a window.
 # The steps live in ~/Code/qs-kit/bin/qs-check, shared by the Quickshell
 # apps; .qs-kit in this repo says what is particular to this one.
 # bin/check -h lists the steps and options.

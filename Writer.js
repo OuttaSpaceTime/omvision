@@ -12,11 +12,12 @@
 // as every reader in Parser.js, and the same rule goal-files.md §6 sets
 // for a reader that can't parse a file).
 //
-// What counts as a goal file, and how a task line splits into text and
-// estimate, are Parser.js's rules, imported rather than copied: Writer
-// may only edit what the reader would show, and two copies of a rule
-// drift (they did -- see setFrontMatterValue and editTask). The
-// dependency runs one way, so Parser.js stays free of imports.
+// What counts as a goal file, how a task line splits into text and
+// estimate, the month names, the `[+time]` marker and how a duration is
+// read are Parser.js's, imported rather than copied: Writer may only edit
+// what the reader would show, and two copies of a rule drift (they did --
+// see setFrontMatterValue and editTask). The dependency runs one way, so
+// Parser.js stays free of imports.
 //
 // `<slug>.md` is the only thing this file edits in place. `<slug>.log.md`
 // and the day files are append-only per the contract (§2) -- Writer.js
@@ -24,33 +25,29 @@
 // the result with a shell-free O_APPEND write (`tee -a`), never through
 // this file's line-editing machinery, and never after a read.
 
-var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
-// Omvision's own convention, layered on top of the free-text event body
-// line the contract already allows to be anything (§4: "one free-text
-// line, no key: prefix"). It marks an event as counting toward the
-// goal's invested-time figure in the Goal Detail header (see
-// Parser.investedMinutes). Not part of goal-files.md's grammar -- a
-// reader that doesn't know this convention just sees it as the start of
-// the note text, which is harmless and exactly what §6's "skip what you
-// don't understand" posture is for.
-var EVENT_COUNTS_MARKER = "[+time] "
-
 function detectEol(text) {
   return String(text || "").indexOf("\r\n") !== -1 ? "\r\n" : "\n"
 }
 
+// Lines as Parser reads them, line endings dropped; joinLines() puts back
+// the ones detectEol() found.
 function splitLines(text) {
-  return String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")
+  return Parser.normalize(text).split("\n")
 }
 
 function joinLines(lines, eol) {
   return lines.join(eol || "\n")
 }
 
-function rtrim(line) {
-  return String(line).replace(/\s+$/, "")
+// A value as one line of a file: a front-matter value, a task, a cancel
+// note's line or an event's body. Every one of those is a single line in
+// the grammar (§4, §6), so pasted text or a stray CR would silently break
+// the file's shape: line breaks become spaces, and the ends are trimmed.
+// Only null and undefined count as "no value": a `value || ""` test here
+// once turned an estimate of 0 into "estimate: " with nothing after it.
+function oneLine(value) {
+  var s = (value === undefined || value === null) ? "" : String(value)
+  return s.replace(/[\r\n]+/g, " ").trim()
 }
 
 // ---- front matter ----------------------------------------------------------
@@ -96,7 +93,7 @@ function setFrontMatterValue(lines, key, value) {
   var fm = Parser.goalFrontMatter(lines)
   if (!fm) return null
   var out = lines.slice()
-  var v = (value === undefined || value === null) ? "" : String(value).replace(/[\r\n]+/g, " ").trim()
+  var v = oneLine(value)
   if (v === "") {
     for (var i = fm.close - 1; i > fm.open; i--) {
       if (fm.keyAt[i] === key) out.splice(i, 1)
@@ -144,11 +141,11 @@ function setFocusable(lines, focusable) {
 // the same lines Parser.parseTasks() is handed.
 function findTasksSection(lines, from) {
   for (var i = from || 0; i < lines.length; i++) {
-    if (/^##\s+Tasks\s*$/.test(rtrim(lines[i]))) {
+    if (/^##\s+Tasks\s*$/.test(Parser.rtrim(lines[i]))) {
       var start = i + 1
       var end = lines.length
       for (var j = start; j < lines.length; j++) {
-        if (/^##\s+/.test(rtrim(lines[j]))) { end = j; break }
+        if (/^##\s+/.test(Parser.rtrim(lines[j]))) { end = j; break }
       }
       return { heading: i, start: start, end: end }
     }
@@ -195,7 +192,7 @@ function toggleTask(lines, taskIndex) {
 // for blank input, matching the UI spec ("empty input is a no-op"), and
 // for a file that isn't a goal file, which gets no section added either.
 function addTask(lines, taskText) {
-  var text = String(taskText || "").replace(/[\r\n]+/g, " ").trim()
+  var text = oneLine(taskText)
   if (text === "") return null
   var fm = Parser.goalFrontMatter(lines)
   if (!fm) return null
@@ -205,7 +202,7 @@ function addTask(lines, taskText) {
   if (sec) {
     var insertAt = sec.start
     for (var i = sec.start; i < sec.end; i++) {
-      if (/^-\s*\[( |x|X)\]/.test(rtrim(out[i]))) insertAt = i + 1
+      if (/^-\s*\[( |x|X)\]/.test(Parser.rtrim(out[i]))) insertAt = i + 1
     }
     out.splice(insertAt, 0, "- [ ] " + text)
     return out
@@ -213,7 +210,7 @@ function addTask(lines, taskText) {
 
   var anchor = fm.close + 1
   for (var k = anchor; k < out.length; k++) {
-    if (/^##\s+Coaching\s*$/.test(rtrim(out[k]))) { anchor = k; break }
+    if (/^##\s+Coaching\s*$/.test(Parser.rtrim(out[k]))) { anchor = k; break }
   }
   out.splice(anchor, 0, "## Tasks", "- [ ] " + text)
   return out
@@ -231,7 +228,7 @@ function addTask(lines, taskText) {
 // it means "remove it". Returns null (do not write) for a file that isn't
 // a goal file or an out-of-range index, same as toggleTask.
 function editTask(lines, taskIndex, newText) {
-  var text = String(newText || "").replace(/[\r\n]+/g, " ").trim()
+  var text = oneLine(newText)
 
   var fm = Parser.goalFrontMatter(lines)
   if (!fm) return null
@@ -271,21 +268,25 @@ function appendCancelNote(lines, headingTs, reasonLabel, takeaway) {
   if (!Parser.goalFrontMatter(lines)) return null
   var out = lines.slice()
   var finalNewline = out[out.length - 1] === ""
-  while (out.length > 0 && rtrim(out[out.length - 1]) === "") out.pop()
+  while (out.length > 0 && Parser.rtrim(out[out.length - 1]) === "") out.pop()
   out.push("")
   out.push("## Cancelled")
   out.push("### " + headingTs)
-  out.push("reason: " + String(reasonLabel || "").replace(/[\r\n]+/g, " ").trim())
-  out.push("takeaway: " + String(takeaway || "").replace(/[\r\n]+/g, " ").trim())
+  out.push(fmLine("reason", reasonLabel))
+  out.push(fmLine("takeaway", takeaway))
   if (finalNewline) out.push("")
   return out
 }
 
+// "09:05", the clock as §4's headings write it, and as the Add event
+// dialog's `When` field starts out.
+function clockTime(date) {
+  return Parser.pad2(date.getHours()) + ":" + Parser.pad2(date.getMinutes())
+}
+
 function headingTimestamp(date) {
   var d = date || new Date()
-  var hh = ("0" + d.getHours()).slice(-2)
-  var mm = ("0" + d.getMinutes()).slice(-2)
-  return d.getDate() + " " + MONTHS[d.getMonth()] + " " + hh + ":" + mm
+  return d.getDate() + " " + Parser.MONTHS[d.getMonth()] + " " + clockTime(d)
 }
 
 // ---- log/day entry formatting (goal-files.md §4) ---------------------------
@@ -298,7 +299,7 @@ function formatDuration(minutes) {
   if (m < 60) return m + "m"
   var h = Math.floor(m / 60), rem = m % 60
   if (rem === 0) return h + "h"
-  return h + "h" + (rem < 10 ? "0" + rem : String(rem))
+  return h + "h" + Parser.pad2(rem)
 }
 
 // Builds one event entry block exactly per §4: "### <D Mon HH:MM> ·
@@ -310,8 +311,8 @@ function formatDuration(minutes) {
 function formatEventEntry(started, minutes, kind, what, countsToward) {
   var ts = headingTimestamp(started || new Date())
   var dur = formatDuration(minutes)
-  var body = String(what || "").replace(/[\r\n]+/g, " ").trim()
-  if (countsToward) body = EVENT_COUNTS_MARKER + body
+  var body = oneLine(what)
+  if (countsToward) body = Parser.EVENT_COUNTS_MARKER + body
   return "### " + ts + " · event · " + String(kind || "other") + " · " + dur + "\n" + body + "\n\n"
 }
 
@@ -344,17 +345,13 @@ function parseWhen(str, now) {
 }
 
 // Accepts a bare integer ("25", minutes) in addition to the "<h>h<mm>" /
-// "<n>m" shapes §4 writes -- a duration the user types is free-form,
-// unlike one this app formats itself. Returns 0 (which the dialog treats
-// as invalid) if nothing matches.
+// "<n>m" shapes §4 writes (Parser.parseDurationToMinutes) -- a duration the
+// user types is free-form, unlike one this app formats itself. Returns 0
+// (which the dialog treats as invalid) if nothing matches.
 function parseDurationInput(str) {
   var s = String(str || "").trim()
   if (/^\d+$/.test(s)) return Number(s)
-  var m = s.match(/^(\d+)h(\d{2})?$/)
-  if (m) return Number(m[1]) * 60 + (m[2] ? Number(m[2]) : 0)
-  m = s.match(/^(\d+)m$/)
-  if (m) return Number(m[1])
-  return 0
+  return Parser.parseDurationToMinutes(s)
 }
 
 // ---- new goal creation (Omvision only, goal-files.md §3 + §7) -------------
@@ -370,15 +367,9 @@ function deriveSlug(title) {
   return s.length > 0 ? s : "goal"
 }
 
-// One "key: value" front-matter line. The grammar (§6) is one key: value
-// pair per line with no multi-line values, so a value that contains a
-// newline (pasted text, a stray CR) would silently corrupt the file's
-// shape -- collapse it to spaces and trim before it ever reaches a line.
-// Only null and undefined count as "no value": a `value || ""` test here
-// once turned an estimate of 0 into "estimate: " with nothing after it.
+// One "key: value" line, its value made one line (oneLine).
 function fmLine(key, value) {
-  var s = (value === undefined || value === null) ? "" : String(value)
-  return key + ": " + s.replace(/[\r\n]+/g, " ").trim()
+  return key + ": " + oneLine(value)
 }
 
 // Builds a brand-new <slug>.md from scratch: front matter (title, why,

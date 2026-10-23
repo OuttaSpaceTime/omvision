@@ -1,13 +1,17 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 
-// "Cancel goal" flow (plan.md M3/O3, mockup Cancel.dc.html): a reason
-// (one of three fixed choices, radio-style) and a free-text "what do you
-// take from it" line. Confirming emits confirmed(reason, takeaway); the
-// caller (GoalDetailScreen) re-reads <slug>.md and applies both the
-// status change and the note in one write (Writer.appendCancelNote).
+import "Parser.js" as Parser
+
+// "Cancel goal": a reason (one of three fixed choices, radio-style) and a
+// free-text "what do you take from it" line. Confirming emits
+// confirmed(reason, takeaway); omvision.qml, which mounts this dialog over
+// the whole window for GoalDetailScreen, re-reads <slug>.md and applies both
+// the status change and the note in one write (Writer.appendCancelNote).
 //
-// The mockup's own footer copy ("moves to goals/archive/") describes a
+// The approved mockup's footer copy ("moves to goals/archive/") described a
 // filesystem move that goal-files.md's fixed layout has no room for and
 // that would break the existing status-filter UI in GoalsScreen -- this
 // dialog follows the written task spec instead: front matter changes to
@@ -15,24 +19,15 @@ import QtQuick.Layouts
 // file, exactly like every other cancelled goal already filed under
 // GoalsScreen's "cancelled" tab.
 //
-// True modal: a FocusScope so focus can be pushed into the dialog on
-// open and restored to wherever it was on close, and a clear full-window
-// MouseArea beneath the card that blocks every click/hover meant for the
-// content. Unlike EventDialog, a click outside the card does NOT dismiss -- this is
-// the destructive action in the app, so closing it always takes an
-// explicit Back/Cancel press (or Esc), never a stray click. The card is
-// sized to its own content instead of a fixed height -- an unsized
-// Rectangle here previously rendered as a zero-height box, which is why
-// the dialog used to draw straight over the content with no visible card
-// behind it.
-FocusScope {
+// The destructive dialog in the app, so a stray click outside never
+// closes it: that takes Back or Esc (DialogFrame).
+DialogFrame {
   id: root
 
   property string goalTitle: ""
   property int poms: 0
   property string errorMessage: ""
   signal confirmed(string reason, string takeaway)
-  signal dismissed()
 
   readonly property var reasons: [
     "Not relevant any more",
@@ -41,25 +36,18 @@ FocusScope {
   ]
   property int reasonIndex: 0
   property string takeawayText: ""
-  property var previousFocusItem: null
+
+  dismissOnOutsideClick: false
+  error: root.errorMessage
 
   function confirm() { root.confirmed(root.reasons[root.reasonIndex], root.takeawayText) }
 
-  onVisibleChanged: {
-    if (!visible) {
-      if (root.previousFocusItem) {
-        root.previousFocusItem.forceActiveFocus()
-        root.previousFocusItem = null
-      }
-      return
-    }
-    root.previousFocusItem = root.Window ? root.Window.activeFocusItem : null
+  onOpened: {
     reasonIndex = 0
     takeawayText = ""
     takeawayInput.forceActiveFocus()
   }
 
-  Keys.onEscapePressed: root.dismissed()
   // Only ever reaches here when the takeaway TextEdit does NOT have
   // active focus -- TextEdit accepts Return itself (to insert a
   // newline), so this never fires while the user is mid-sentence in the
@@ -67,184 +55,101 @@ FocusScope {
   // should never be one accidental keystroke away while typing.
   Keys.onReturnPressed: root.confirm()
 
-  // Clear, never a scrim: nothing dims the window behind a dialog (the
-  // user never wants a darkened background; bin/check's noscrim step).
-  // It blocks every click/hover meant for whatever is beneath it. No
-  // onClicked handler -- a stray click here is swallowed, not treated as a
-  // dismissal, because ending a goal is destructive and closing this
-  // dialog must always be an explicit Back/Cancel press or Esc.
-  MouseArea { anchors.fill: parent; hoverEnabled: true }
+  actions: [
+    Button { label: "Back"; onActivated: root.dismissed() },
+    Button { label: "End goal"; danger: true; onActivated: root.confirm() }
+  ]
 
-  Rectangle {
-    id: card
-    anchors.centerIn: parent
-    width: Math.min(Theme.dialogWidth, parent.width - Theme.space2xl * 2)
-    height: content.height + Theme.spaceXl * 2
-    color: Theme.paper
-    border.color: Theme.border
-    border.width: Theme.dialogBorderWidth
+  ColumnLayout {
+    Layout.fillWidth: true
+    spacing: Theme.spaceXs
+    Text {
+      Layout.fillWidth: true
+      wrapMode: Text.WordWrap
+      text: "Cancel “" + root.goalTitle + "”?"
+      font.family: Theme.fontFamily
+      font.pixelSize: Theme.bodySize
+      font.bold: true
+      color: Theme.ink
+    }
+    Text {
+      Layout.fillWidth: true
+      wrapMode: Text.WordWrap
+      text: Parser.pomsLabel(root.poms) + " stay in the history. Status becomes “cancelled” — it drops out of Active and shows under its own filter."
+      font.family: Theme.fontFamily
+      font.pixelSize: Theme.bodySmallSize
+      color: Theme.dim
+    }
+  }
 
-    // Swallow clicks/hover so the area beneath never sees them.
-    MouseArea { anchors.fill: parent; hoverEnabled: true; onClicked: {} }
+  Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
 
-    ColumnLayout {
-      id: content
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.top: parent.top
-      anchors.margins: Theme.spaceXl
-      spacing: Theme.spaceLg
-
-      ColumnLayout {
+  ColumnLayout {
+    Layout.fillWidth: true
+    spacing: Theme.spaceSm
+    CaptionLabel { text: "Why" }
+    Repeater {
+      model: root.reasons
+      delegate: Item {
+        id: reasonRow
+        required property string modelData
+        required property int index
+        readonly property bool selected: root.reasonIndex === index
         Layout.fillWidth: true
-        spacing: Theme.spaceXs
-        Text {
-          Layout.fillWidth: true
-          wrapMode: Text.WordWrap
-          text: "Cancel “" + root.goalTitle + "”?"
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.bodySize
-          font.bold: true
-          color: Theme.ink
-        }
-        Text {
-          Layout.fillWidth: true
-          wrapMode: Text.WordWrap
-          text: root.poms + (root.poms === 1 ? " pom" : " poms") + " stay in the history. Status becomes “cancelled” — it drops out of Active and shows under its own filter."
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.bodySmallSize
-          color: Theme.dim
-        }
-      }
+        implicitHeight: Theme.smallControlHeight
 
-      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
+        RowLayout {
+          anchors.fill: parent
+          spacing: Theme.spaceSm
 
-      ColumnLayout {
-        Layout.fillWidth: true
-        spacing: Theme.spaceSm
-        Text {
-          text: "Why"
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.captionSize
-          font.bold: true
-          color: Theme.dim
-        }
-        Repeater {
-          model: root.reasons
-          delegate: Item {
-            id: reasonRow
-            required property string modelData
-            required property int index
-            readonly property bool selected: root.reasonIndex === index
-            Layout.fillWidth: true
-            implicitHeight: Theme.smallControlHeight
-
-            RowLayout {
-              anchors.fill: parent
-              spacing: Theme.spaceSm
-
-              OptionMark {
-                round: true
-                checked: reasonRow.selected
-              }
-              Text {
-                Layout.fillWidth: true
-                text: reasonRow.modelData
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.bodySize
-                color: reasonRow.selected ? Theme.ink : Theme.dim
-              }
-            }
-            MouseArea {
-              anchors.fill: parent
-              cursorShape: Qt.PointingHandCursor
-              onClicked: root.reasonIndex = reasonRow.index
-            }
+          OptionMark {
+            round: true
+            checked: reasonRow.selected
           }
-        }
-      }
-
-      ColumnLayout {
-        Layout.fillWidth: true
-        spacing: Theme.spaceXs
-        Text {
-          text: "What do you take from it?"
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.captionSize
-          font.bold: true
-          color: Theme.dim
-        }
-        Rectangle {
-          Layout.fillWidth: true
-          Layout.preferredHeight: Theme.dialogTextAreaHeight
-          color: Theme.fill
-          border.color: Theme.border
-          border.width: Theme.borderWidth
-
-          Flickable {
-            anchors.fill: parent
-            anchors.margins: Theme.spaceSm
-            clip: true
-            contentHeight: Math.max(height, takeawayInput.contentHeight)
-            TextEdit {
-              id: takeawayInput
-              width: parent.width
-              wrapMode: TextEdit.Wrap
-              font.family: Theme.fontFamily
-              font.pixelSize: Theme.bodySize
-              color: Theme.ink
-              selectByMouse: true
-              text: root.takeawayText
-              onTextChanged: root.takeawayText = text
-              Keys.onEscapePressed: root.dismissed()
-            }
-          }
-        }
-      }
-
-      Text {
-        Layout.fillWidth: true
-        visible: root.errorMessage.length > 0
-        wrapMode: Text.WordWrap
-        text: root.errorMessage
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.captionSize
-        color: Theme.red
-      }
-
-      Rectangle { Layout.fillWidth: true; Layout.preferredHeight: Theme.hairlineWidth; color: Theme.hairline }
-
-      RowLayout {
-        Layout.fillWidth: true
-        spacing: Theme.spaceSm
-        Item { Layout.fillWidth: true }
-        Button {
-          label: "Back"
-          inert: false
-          Layout.preferredWidth: implicitWidth
-          Layout.preferredHeight: Theme.controlHeight
-          onActivated: root.dismissed()
-        }
-        Rectangle {
-          Layout.preferredWidth: endLabel.implicitWidth + Theme.spaceXl
-          Layout.preferredHeight: Theme.controlHeight
-          color: "transparent"
-          border.color: Theme.red
-          border.width: Theme.borderWidth
           Text {
-            id: endLabel
-            anchors.centerIn: parent
-            text: "End goal"
+            Layout.fillWidth: true
+            text: reasonRow.modelData
             font.family: Theme.fontFamily
             font.pixelSize: Theme.bodySize
-            font.bold: true
-            color: Theme.red
+            color: reasonRow.selected ? Theme.ink : Theme.dim
           }
-          MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: root.confirm()
-          }
+        }
+        MouseArea {
+          anchors.fill: parent
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.reasonIndex = reasonRow.index
+        }
+      }
+    }
+  }
+
+  ColumnLayout {
+    Layout.fillWidth: true
+    spacing: Theme.spaceXs
+    CaptionLabel { text: "What do you take from it?" }
+    Rectangle {
+      Layout.fillWidth: true
+      Layout.preferredHeight: Theme.dialogTextAreaHeight
+      color: Theme.fill
+      border.color: Theme.border
+      border.width: Theme.borderWidth
+
+      Flickable {
+        anchors.fill: parent
+        anchors.margins: Theme.spaceSm
+        clip: true
+        contentHeight: Math.max(height, takeawayInput.contentHeight)
+        TextEdit {
+          id: takeawayInput
+          width: parent.width
+          wrapMode: TextEdit.Wrap
+          font.family: Theme.fontFamily
+          font.pixelSize: Theme.bodySize
+          color: Theme.ink
+          selectByMouse: true
+          text: root.takeawayText
+          onTextChanged: root.takeawayText = text
+          Keys.onEscapePressed: root.dismissed()
         }
       }
     }

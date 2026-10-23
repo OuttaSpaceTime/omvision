@@ -37,6 +37,10 @@ mkdir -p "$BUILD" "$OUT"
 # .so mapped, and overwriting that file in place can hand it pages of the new
 # one (docs/ompom-highlighter.md, "The crash"). A rename leaves the
 # mapped file untouched.
+#
+# pkg-config's flags are left unquoted on purpose: each one has to reach g++
+# as a word of its own.
+# shellcheck disable=SC2046
 g++ -std=c++17 -fPIC -shared -O2 -Wall \
   -fvisibility=hidden -fvisibility-inlines-hidden \
   $(pkg-config --cflags Qt6Quick Qt6Qml Qt6Gui Qt6Core) \

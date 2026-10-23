@@ -21,7 +21,7 @@ drifted from the file contract.
 
 ## `bin/check`: everything a change should pass
 
-`bin/check` runs four steps, all of them even when one fails, prints a summary and exits
+`bin/check` runs six steps, all of them even when one fails, prints a summary and exits
 non-zero if any failed. `bin/check lint px` runs only the steps named; `-v` prints each
 step's full output. The steps live in `~/Code/qs-kit/bin/qs-check`, shared with Omvida;
 `bin/check` runs it with this repo's `.qs-kit` (the app name, the steps, and how the load
@@ -45,6 +45,15 @@ step starts the app). A rule change for both apps goes there.
   rule has `Theme.hairlineWidth`; a number something is multiplied or divided by is a
   ratio and doesn't. A number that has to stay takes a marker with a reason on the same
   line: `implicitWidth: 1440  // check: allow-px the window's default size`.
+- **noscrim** — nothing dims the window behind a dialog (CLAUDE.md, Rules;
+  `docs/layout-rules.md` rule 10). It fails on what a dimming layer is made of: a
+  colour named scrim, or translucent black, in any `.qml` file outside `tests/` and
+  `plugins/`.
+- **plugins** — `omarchy plugin validate` on each of `plugins/*/`, the manifest check
+  omarchy-shell applies when it loads a plugin, so a broken manifest or entry point shows
+  up here and not in the live shell that runs the pomodoro. Defined in `.qs-kit`, since
+  only this repo has plugins; lint and px skip `plugins/`, whose QML imports the shell's
+  `qs.Commons`. Not run where `omarchy` isn't installed.
 - **load** — the app offscreen for 10s against a temp HOME seeded from
   `tests/fixtures/home`, failing on any QML warning or error it logs. Only what exists at
   startup is covered. A `ReferenceError` in a binding went unlogged when this was tried;
@@ -53,8 +62,9 @@ step starts the app). A rule change for both apps goes there.
 
 ## Layer 1: `tests/unit`
 
-Plain Qt `TestCase` files that import `Writer.js` and `Parser.js` directly, run by Qt's
-own runner: `qmltestrunner -platform offscreen -input tests/unit`.
+Plain Qt `TestCase` files that import the pure JS modules directly (Writer.js,
+Parser.js, Util.js, GoalMatch.js, and the engine's Cycle.js and ListContinue.js), run
+by Qt's own runner: `qmltestrunner -platform offscreen -input tests/unit`.
 
 - `tst_writer.qml` is golden tests of every Writer edit. Each states the whole expected
   file, since Writer promises that everything it was not asked to change survives byte for
@@ -63,6 +73,9 @@ own runner: `qmltestrunner -platform offscreen -input tests/unit`.
 - `tst_parser.qml` covers goal files, tasks, coaching, log entries (`else:`, dedupe, year
   wrap, the `[+time]` marker), `estimate:` as poms *left*, and the small formatters.
 - `tst_util.qml` covers Util.js's list helpers (`goalsByTitle`).
+- `tst_goalmatch.qml` covers the journal's `@` goal matching (`GoalMatch.js`): case and
+  accents folded, letters in order, the ranking tiers, initials before letters inside
+  words.
 - `tst_cycle.qml` covers the ompom engine's rules (`plugins/ompom.engine/Cycle.js`):
   runs, extensions, pause, a suspend, the long break, the break's write and a refusal, a
   goal changed mid-run, bedtime, the night and its journal page (read, save, a save made
@@ -153,6 +166,7 @@ and a refactor must keep them:
 | `prevDayButton`, `nextDayButton` | the journal's page turns, `‹` and `›` |
 | `coachMethod:<mi\|polya>`, `coachStartButton` | the Coaching screen's method chips, `start in kitty` |
 | `goalFocusableToggle` | the goal dialog's "can be focused on at the laptop" box |
+| `eventWhatField`, `eventLengthField` | the Add event dialog's `What` and `How long` inputs |
 | `extendRunButton`, `startBreakButton` | the engine's prompt: `+1 minute`, `Start break` |
 | `extendBreakButton:<1\|2\|3>`, `takeNotesButton` | the break's `+N min`, and `Take notes` (the night's too) |
 | `tryAgainButton`, `skipButton`, `notesNotSaved` | a refused write's buttons, and its line |
@@ -230,8 +244,10 @@ There are none at the moment.
 ## Adding a test
 
 - A change to Writer.js or Parser.js gets a case in `tests/unit`, stated as the whole
-  expected file.
-- A change to the ompom engine's cycle or overlay gets a step in `tests/engine/tst_break.qml`.
+  expected file. A change to the file grammar gets a case in `tests/contract/cases.json`.
+- A change to a rule of the ompom engine's cycle gets a case in `tests/unit/tst_cycle.qml`
+  (the rules are all in `Cycle.js`); a change to the overlay, or to what reaches
+  `notes-helper.py`, gets a step in the matching `tests/engine/tst_*.qml`.
 - A change to what a click or a key does gets a flow in `tests/app`: act through
   `click`/`type`/`key`, then check the file with `expectFile`, not only the screen.
 - Then break the feature on purpose, check that the test fails, and restore it.

@@ -11,23 +11,25 @@ Do not import `qs.Commons` — that is the shell's own module and is not availab
 standalone config. Omvision carries its own `Theme.qml` singleton with the same values,
 read where possible from the live omarchy theme at
 `~/.local/state/omarchy/current/theme/colors.toml` (keys `background`, `foreground`,
-`accent`, `muted`, plus `mode = "light"|"dark"`), with the hardcoded fallback below if the
+`accent` and `red`; secondary text is solved from foreground and background, never taken
+from `muted`, see `docs/layout-rules.md` §8), with the hardcoded fallback below if the
 file is missing or unparseable. Never crash on a missing theme. A theme switch or an edit
 to `colors.toml` in place recolours the open app; a reload that finds the file gone or
 half-written keeps the last theme rather than falling back.
 
 - Corners: **0 radius everywhere.** Hyprland's `decoration:rounding` is 0 on this machine.
 - Font: `monospace` (resolves to JetBrainsMono Nerd Font). One family for the whole app.
-- Type scale, exactly: caption 12, bodySmall 14, body 15, subtitle 16, title 17, heading 24,
-  display 32. Sized against the journal's 15pt (≈20px) page, not against a toolbar: body is a
+- Type scale, exactly: caption 12, bodySmall 14, body 15, subtitle 16, title 17, heading 24. Sized against the journal's 15pt (≈20px) page, not against a toolbar: body is a
   notch under the journal so the writing stays the largest text in the app, and a screen's
   title is the one large thing on it. Section labels are caption, **bold, sentence case**
   (`What happened`, not `WHAT HAPPENED`), dimmed; captions built from data are lower case too
   (`0 of 3 tasks done`, `event · training · 1 h 30`). Nothing is set in capitals.
+- Durations read one way everywhere (`Parser.durationLabel`): `50 min`, `1 h`, `1 h 05`,
+  the minutes padded. The files spell them their own way (`1h05`, goal-files.md §4).
 - Wrapped prose (break notes, coaching summaries, hints) takes `Theme.proseLineHeight`, 1.4.
   Single-line labels keep the font's own line height, so they stay on the marker or control
   they sit beside.
-- Surfaces: fills are the foreground colour at 4% alpha (8% hover, 18% selected); borders are
+- Surfaces: fills are the foreground colour at 4% alpha (8% under the pointer); borders are
   1px at 40% alpha. No drop shadows, no gradients.
 - **Spacing is a scale, and nothing outside it is allowed.** 4px based, nine steps:
   `spaceXxs` 2, `spaceXs` 4, `spaceSm` 8, `spaceMd` 12, `spaceLg` 16, `spaceXl` 24,
@@ -49,9 +51,9 @@ half-written keeps the last theme rather than falling back.
   screens changes what is on the page, never where the page is, and the column holds still
   while the rail slides in or out. At narrow widths it shrinks to leave a `panelPadding`
   margin each side. Hairlines stop at the column; hover fills bleed a margin past it.
-- Fallback palette (Flexoki Light): paper `#FFFCF0`, ink `#100F0F`, secondary ink `#403E3C`,
-  dim `#6F6E69`, faint `#878580`, hairline `#DAD8CC`, border `#B7B5AC`, fill `#F6F3E8`,
-  accent `#205EA6`, accent fill `#E8EDF4`, red `#AF3029`.
+- Fallback palette (Flexoki Light): paper `#FFFCF0`, ink `#100F0F`, hairline `#DAD8CC`,
+  border `#B7B5AC`, fill `#F6F3E8`, accent `#205EA6`, accent fill `#E8EDF4`, red `#AF3029`.
+  Dim and faint text are solved from paper and ink here too.
 
 ## Window
 
@@ -72,6 +74,18 @@ typing never lands in a hidden journal.
 The only screen that changes this is the Journal, which hides the rail entirely while you
 write and brings it back from its own control — see **Screen: Journal**.
 
+## Screen: Today
+
+What happened today across everything, read-only: every entry dated today in every goal's
+log, in logs whose goal file is gone (under their slug), and in today's day file, newest
+first. Header row: `Today` at heading size bold, then `N entries · 1 h 05` in caption dim,
+over a hairline. Then one row per entry, hairline-separated, bleeding a page margin like
+the Goals rows but with no hover: the time at body bold, the type in a bold caption
+(`pomodoro`, `event · training`), and the goal's title in accent caption at the right,
+eliding at 40% of the row (nothing for an entry with no goal). Under it, what the entry says,
+as on the timeline. An empty day says `Nothing logged today.` The day file it reads is the one
+for the day the app was started: it doesn't roll over at midnight while the app stays open.
+
 ## Screen: Goals
 
 Header row: `Goals` at heading size bold, then `Add event` and `New goal` buttons pushed
@@ -87,7 +101,9 @@ estimate survives); clearing estimate or done-by removes the key. The slug and f
 never change. Under the fields, a tick box `can be focused on at the laptop` (EventDialog's
 square mark, ticked by default): unticked writes `focusable: no`, ticked removes the line
 again, and the ompom break's goal picker leaves those goals out (goal-files.md §6), along
-with done and cancelled ones.
+with done and cancelled ones. `New goal` opens the same dialog empty, with `Create goal`:
+it writes `goals/<slug>.md` with the fields given and an empty `## Tasks`, and an unticked
+box writes `focusable: no` there too.
 
 One row per goal, hairline-separated, sized to its text. Each row bleeds a page margin past
 the column on both sides, padding restored inside, so a fill runs past the text. Selected or
@@ -106,7 +122,7 @@ pushed right (the second one accent-filled). Hovering the title shows the pencil
 (its slot always reserved), opening the same `Edit goal` dialog as a Goals row's pencil. Under it, a hairline band like the Goals filter
 row holding `← Goals`, or `← Journal` when the goal was opened from a journal tag (caption, dim, navigates back; its text on the column edge, its hover
 fill in the margin) and a `running` chip. Below, a `Flow` of figures at body size:
-`<N> poms · <H>m in`, `≈ <N> poms left`, `<done> of <total> tasks`. No progress rule.
+`<N> poms · 1 h 05 in`, `≈ <N> poms left`, `<done> of <total> tasks`. No progress rule.
 
 Body splits into the timeline (flexible) and a right rail with a 1px hairline between. The
 rail is 3/8 of the page column (≈315px at full measure), but never narrower than its two rows
@@ -116,9 +132,10 @@ of controls; task names elide instead.
 headers (`Sun 20 Sep` caption bold + a dim `3 poms · 1 h 15` summary beside it). Each entry
 is a row of: a right-aligned time in faint caption, as wide as `00:00`, a 7px square node
 centred on a 1px vertical rule, then the content. Node styles: 1px bordered square for a
-pomodoro, filled accent for a coaching session, 1px **dashed** for an event. Content is a
-caption label (`25 min`, `coaching`, `event · training · 1 h 30`), the `focus:` line at body
-size, and the `done:`/`left:`/`else:` lines beneath at bodySmall in dim, all wrapped prose.
+pomodoro, 1px **dashed** for an event. Content is a caption label (`25 min`,
+`event · training · 1 h 30`), then what the entry says (`EntryNotes`, the same as on
+Today): an older entry's `focus:` line or an event's own line at body size, and the
+`done:`/`left:`/`else:` lines beneath at bodySmall in dim, all wrapped prose.
 
 **Right rail** — caption heading `Tasks` with `N of M done` beside it and a small `+ task`
 button; then one row per task, hairline-separated, each a checkbox (checked and struck through
@@ -272,15 +289,20 @@ Read the files directly, in QML, without shelling out to ompom's helper:
 - `~/Notes/Omvision/goals/*.md` — front-matter is a flat `key: value` subset between `---`
   fences; `## Tasks` holds `- [ ]` / `- [x]` lines with an optional trailing `≈N`.
 - `~/Notes/Omvision/goals/<slug>.log.md` — entries headed
-  `### <D Mon HH:MM> · <N>m` or `### <D Mon HH:MM> · event · <kind> · <dur>`, then
-  `focus:` / `done:` / `left:` lines, or a free line for an event.
+  `### <D Mon HH:MM> · <N>m` or `### <D Mon HH:MM> · event · <kind> · <dur>`, then an
+  `id:` and `done:` / `left:` / `else:` lines (`focus:` in older entries), or a free line
+  for an event.
 - `~/Notes/Omvision/days/YYYY-MM-DD.md` — same entry grammar, for runs with no goal.
 - `~/Notes/Omvision/journal/YYYY-MM-DD.md` — free-form markdown, one file per calendar day,
-  no grammar to fail to parse. Omvision is its only writer.
+  no grammar to fail to parse. Omvision writes it, and at night the ompom overlay's journal
+  page, which never writes over a save it didn't read (goal-files.md §5); the Journal
+  screen takes such a change in when it has no unsaved edits.
 - The full contract, including every tolerance rule, is
   `docs/goal-files.md`. **Read it before writing a parser.**
 
 Anything that fails to parse is skipped, never fatal — a broken file must not blank the app.
-Edits appear without a restart: Quickshell has no directory watcher, so the goals and journal
-directories are listed every 2s (`find`), and each file found (and today's day file) is read
-through a `FileView` that watches it.
+Edits appear without a restart: Quickshell has no directory watcher, so the goals, days and
+journal directories are listed every 2s (`find`), and each file found (and today's day file) is
+read through a `FileView` that watches it. A `FileView` can't watch a file that doesn't exist
+yet, so a log or day file that appears later (a goal's first entry, the day's first run with
+no goal) is read when the listing first finds it.

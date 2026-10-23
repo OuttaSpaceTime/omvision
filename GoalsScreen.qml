@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 
@@ -12,7 +14,6 @@ Item {
   property int leftInset: 0
 
   property var goalsData: ({})
-  property var todaySummary: ({ poms: 0, minutes: 0 })
   property string selectedSlug: ""
   signal openGoal(string slug)
   signal addEventRequested()
@@ -23,20 +24,15 @@ Item {
 
   readonly property var goalList: Util.goalsByTitle(goalsData)
 
-  function statusOf(g) { return g.meta.status || "active" }
-
+  // Parser reads a goal with no `status:` as active, so status is always set.
   function countByStatus(status) {
-    var n = 0
-    for (let i = 0; i < goalList.length; i++) if (statusOf(goalList[i]) === status) n++
-    return n
+    return goalList.filter(function(g) { return g.meta.status === status }).length
   }
 
-  readonly property var filteredList: goalList.filter(function(g) { return statusOf(g) === root.filterStatus })
+  readonly property var filteredList: goalList.filter(function(g) { return g.meta.status === root.filterStatus })
 
   function lastSessionLabel(entries) {
-    if (entries.length === 0) return "never"
-    var latest = entries[entries.length - 1]
-    return latest.heading
+    return entries.length > 0 ? entries[entries.length - 1].heading : "never"
   }
 
   Column {
@@ -58,12 +54,10 @@ Item {
       spacing: 0
 
       RowLayout {
-        id: headerRow
         width: parent.width
         spacing: Theme.spaceMd
 
         Text {
-          id: titleText
           text: "Goals"
           font.family: Theme.fontFamily
           font.pixelSize: Theme.headingSize
@@ -73,8 +67,8 @@ Item {
 
         Item { Layout.fillWidth: true }
 
-        Button { id: addEventBtn; label: "Add event"; inert: false; onActivated: root.addEventRequested() }
-        Button { id: newGoalBtn; label: "New goal"; inert: false; onActivated: root.newGoalRequested() }
+        Button { label: "Add event"; onActivated: root.addEventRequested() }
+        Button { label: "New goal"; onActivated: root.newGoalRequested() }
       }
 
       // The filters are always their own row, never sharing the title's.
@@ -106,21 +100,13 @@ Item {
           spacing: Theme.spaceMd
           Repeater {
             model: ["active", "done", "cancelled"]
-            delegate: Text {
+            delegate: TextChip {
+              id: filterChip
               required property string modelData
-              readonly property bool isSelected: root.filterStatus === modelData
-              text: modelData + " " + root.countByStatus(modelData)
-              font.family: Theme.fontFamily
+              selected: root.filterStatus === modelData
+              label: modelData + " " + root.countByStatus(modelData)
               font.pixelSize: Theme.captionSize
-              color: isSelected ? Theme.accentColor : Theme.dim
-              font.underline: isSelected
-
-              MouseArea {
-                anchors.fill: parent
-                anchors.margins: -Theme.chipHitSlop
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.filterStatus = parent.modelData
-              }
+              onClicked: root.filterStatus = filterChip.modelData
             }
           }
         }
@@ -159,8 +145,7 @@ Item {
             required property var modelData
             required property int index
 
-            readonly property var g: modelData
-            readonly property bool isSelected: root.selectedSlug === g.slug
+            readonly property bool isSelected: root.selectedSlug === modelData.slug
             // Passive, so the row stays hovered while the pointer is over
             // the edit pencil's own MouseArea.
             HoverHandler { id: rowHover }
@@ -219,34 +204,28 @@ Item {
                 RowLayout {
                   spacing: Theme.spaceSm
                   Text {
-                    text: rowItem.g.meta.title
+                    text: rowItem.modelData.meta.title
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.titleSize
                     font.bold: true
                     color: Theme.ink
                   }
-                  Text {
-                    visible: rowItem.g.meta.status === "active"
+                  CaptionLabel {
+                    visible: rowItem.modelData.meta.status === "active"
                     text: "running"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.captionSize
-                    font.bold: true
                     color: Theme.accentColor
                   }
-                  Text {
-                    visible: rowItem.g.meta.status !== "active" && !!rowItem.g.meta.done_by
-                    text: rowItem.g.meta.done_by ? ("due " + Parser.formatShortDate(rowItem.g.meta.done_by)) : ""
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.captionSize
-                    font.bold: true
+                  CaptionLabel {
+                    visible: rowItem.modelData.meta.status !== "active" && !!rowItem.modelData.meta.done_by
+                    text: rowItem.modelData.meta.done_by ? ("due " + Parser.formatShortDate(rowItem.modelData.meta.done_by)) : ""
                     color: Theme.red
                   }
                 }
 
                 Text {
                   Layout.fillWidth: true
-                  visible: rowItem.g.meta.why.length > 0
-                  text: rowItem.g.meta.why
+                  visible: rowItem.modelData.meta.why.length > 0
+                  text: rowItem.modelData.meta.why
                   font.family: Theme.fontFamily
                   font.pixelSize: Theme.bodySmallSize
                   color: Theme.dim
@@ -261,13 +240,12 @@ Item {
                 // knowing from the estimate rides along here, where it
                 // elides cleanly instead of clipping at the window edge.
                 Text {
-                  readonly property int doneCount: Parser.doneTaskCount(rowItem.g.meta.tasks)
-                  readonly property int poms: Parser.pomodoroCount(rowItem.g.logEntries)
-                  readonly property var est: rowItem.g.meta.estimate
+                  readonly property int doneCount: Parser.doneTaskCount(rowItem.modelData.meta.tasks)
+                  readonly property var est: rowItem.modelData.meta.estimate
                   Layout.fillWidth: true
                   elide: Text.ElideRight
                   text: {
-                    var parts = [doneCount + " of " + rowItem.g.meta.tasks.length + " tasks done"]
+                    var parts = [doneCount + " of " + rowItem.modelData.meta.tasks.length + " tasks done"]
                     // `estimate:` is poms REMAINING, not the goal's total
                     // (goal-files.md: the coach rewrites it down each
                     // session, it doesn't start high and get subtracted
@@ -277,7 +255,7 @@ Item {
                     // a bare number reads as a second fraction over the
                     // same M -- it isn't, it's a different unit entirely.
                     if (est !== undefined) parts.push("≈ " + est + " poms left")
-                    parts.push("last session " + root.lastSessionLabel(rowItem.g.logEntries))
+                    parts.push("last session " + root.lastSessionLabel(rowItem.modelData.logEntries))
                     return parts.join(" · ")
                   }
                   font.family: Theme.fontFamily
@@ -295,7 +273,7 @@ Item {
             MouseArea {
               anchors.fill: parent
               cursorShape: Qt.PointingHandCursor
-              onClicked: root.openGoal(rowItem.g.slug)
+              onClicked: root.openGoal(rowItem.modelData.slug)
             }
 
             // Overlaid rather than inside rowContent, and declared after the
@@ -304,12 +282,12 @@ Item {
             // caption lines elide short of it and hovering shifts nothing.
             PencilIcon {
               id: goalPencil
-              objectName: "goalEdit:" + rowItem.g.slug
+              objectName: "goalEdit:" + rowItem.modelData.slug
               visible: rowItem.hovered
               anchors.right: parent.right
               anchors.rightMargin: Theme.panelPadding
               anchors.verticalCenter: parent.verticalCenter
-              onClicked: root.editGoalRequested(rowItem.g.slug)
+              onClicked: root.editGoalRequested(rowItem.modelData.slug)
             }
           }
         }

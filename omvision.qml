@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQml.Models
 import Quickshell
@@ -39,6 +41,7 @@ ShellRoot {
 
   property string currentScreen: "goals" // today | goals | coaching | journal | goalDetail
   property string openGoalSlug: ""
+  readonly property var openGoalData: goalsData[openGoalSlug] || null
   // The screen a goal's back link returns to: the Goals list, or the
   // journal when the goal was opened from an `@` tag there, so reading up
   // on a goal mid-sentence puts you back in the sentence.
@@ -86,6 +89,16 @@ ShellRoot {
   property var orphanLogs: ({}) // slug -> entries
   property var dayEntries: []
 
+  // Which logs, and whether today's day file, the last listing found. A
+  // FileView only watches a file that exists: one pointed at a file that
+  // isn't there yet never sees it appear, so a goal's first log entry, or
+  // the day's first goal-less run, stayed off screen until a restart. The
+  // listing is what notices a file appear; its loader then reads it
+  // (onLogListedChanged, onTodayFileListedChanged).
+  property var logSlugs: []
+  property bool todayFileListed: false
+  onTodayFileListedChanged: dayFile.reload()
+
   // Each of these state objects is replaced whole, never edited in place:
   // see Util.js for why.
   function syncGoal(slug, meta, entries) {
@@ -96,13 +109,16 @@ ShellRoot {
     root.orphanLogs = Util.withKey(root.orphanLogs, slug, entries || [])
   }
 
+  // `text` is listProc's output: the goal files and logs, and the day files.
   function applyGoalsList(text) {
     var lines = String(text || "").split("\n")
     var slugs = []
     var logStems = []
+    var todayListed = false
     for (let i = 0; i < lines.length; i++) {
       const p = lines[i].trim()
       if (p === "") continue
+      if (p.indexOf(Paths.daysDir + "/") === 0) { if (p === root.todayPath) todayListed = true; continue }
       const base = p.replace(/^.*\//, "")
       if (!base.match(/\.md$/)) continue
       const stem = base.replace(/\.md$/, "")
@@ -113,6 +129,9 @@ ShellRoot {
       slugs.push(stem)
     }
     slugs.sort()
+    logStems.sort()
+    root.todayFileListed = todayListed
+    if (!Util.sameList(logStems, root.logSlugs)) root.logSlugs = logStems
 
     // A log whose goal file is gone (renamed, deleted, or written by the
     // timer against a slug that never had one) still describes pomodoros
@@ -137,8 +156,6 @@ ShellRoot {
     // Drop stale entries for goals whose files disappeared.
     root.goalsData = Util.pickKeys(root.goalsData, slugs)
   }
-
-  readonly property var todaySummary: computeTodaySummary(goalsData, dayEntries)
 
   // ---- write path: <slug>.md (read-modify-write, re-read every time) -----
   // Every change to a goal file, and every new one, goes through goalFiles
@@ -277,13 +294,12 @@ ShellRoot {
   function handleCreateGoal(fields, resultFn) {
     var title = String(fields.title || "").trim()
     if (title === "") { if (resultFn) resultFn(false, "Title is required.", ""); return }
-    var clean = {
-      title: title,
-      why: String(fields.why || "").trim(),
-      estimate: fields.estimate,
-      doneBy: fields.doneBy
-    }
-    root.createGoalFile(clean, function(ok, message, slug) {
+    // The dialog's fields as they came, so create and edit take one payload
+    // and a field the dialog gains reaches both: a copy here that listed
+    // each field once dropped `focusable`. Writer makes each value one line.
+    // The title is the trimmed one, since the slug and the same-goal check
+    // are taken from it.
+    root.createGoalFile(Object.assign({}, fields, { title: title }), function(ok, message, slug) {
       // Don't wait on the 2s directory poll -- a goal just created should
       // show up in the list right away.
       if (ok) listProc.running = true
@@ -291,24 +307,11 @@ ShellRoot {
     })
   }
 
-  // Today's pomodoros across every goal log and the day file.
-  function computeTodaySummary(data, entries) {
-    var todayKey = Parser.dayKey(new Date())
-    var today = []
-    function collect(list) {
-      for (let i = 0; i < list.length; i++) {
-        if (Parser.dayKey(list[i].date) === todayKey) today.push(list[i])
-      }
-    }
-    for (let slug in data) collect(data[slug].logEntries || [])
-    collect(entries || [])
-    return { poms: Parser.pomodoroCount(today), minutes: Parser.pomodoroMinutes(today) }
-  }
-
   // ---- directory listing: polled since Quickshell has no folder watcher --
+  // A folder that doesn't exist yet only costs a line on find's stderr.
   Process {
     id: listProc
-    command: ["/usr/bin/find", Paths.goalsDir, "-maxdepth", "1", "-type", "f", "-name", "*.md"]
+    command: ["/usr/bin/find", Paths.goalsDir, Paths.daysDir, "-maxdepth", "1", "-type", "f", "-name", "*.md"]
     stdout: StdioCollector {
       id: listCollector
       onStreamFinished: root.applyGoalsList(text)
@@ -351,6 +354,8 @@ ShellRoot {
       readonly property string slug: modelData
       property var meta: null
       property var entries: []
+      readonly property bool logListed: root.logSlugs.indexOf(loader.slug) >= 0
+      onLogListedChanged: logFile.reload()
 
       property FileView mdFile: FileView {
         path: Paths.goalFile(loader.slug)
@@ -613,93 +618,92 @@ ShellRoot {
           height: parent.height
 
           GoalsScreen {
-          anchors.fill: parent
-          leftInset: sidebarSlot.width
-          visible: root.currentScreen === "goals"
-          goalsData: root.goalsData
-          todaySummary: root.todaySummary
-          selectedSlug: root.openGoalSlug
-          onOpenGoal: function(slug) { root.openGoal(slug, "goals") }
-          onAddEventRequested: root.openEventDialog("")
-          onNewGoalRequested: root.openNewGoalDialog()
-          onEditGoalRequested: function(slug) { root.openEditGoalDialog(slug) }
-        }
+            anchors.fill: parent
+            leftInset: sidebarSlot.width
+            visible: root.currentScreen === "goals"
+            goalsData: root.goalsData
+            selectedSlug: root.openGoalSlug
+            onOpenGoal: function(slug) { root.openGoal(slug, "goals") }
+            onAddEventRequested: root.openEventDialog("")
+            onNewGoalRequested: root.openNewGoalDialog()
+            onEditGoalRequested: function(slug) { root.openEditGoalDialog(slug) }
+          }
 
-        GoalDetailScreen {
-          id: goalDetailScreen
-          anchors.fill: parent
-          leftInset: sidebarSlot.width
-          visible: root.currentScreen === "goalDetail"
-          slug: root.openGoalSlug
-          meta: root.goalsData[root.openGoalSlug] ? root.goalsData[root.openGoalSlug].meta : null
-          logEntries: root.goalsData[root.openGoalSlug] ? root.goalsData[root.openGoalSlug].logEntries : []
-          backLabel: root.goalBackScreen === "journal" ? "← Journal" : "← Goals"
-          onBack: root.currentScreen = root.goalBackScreen
-          onToggleTask: function(index) {
-            root.editGoalFile(root.openGoalSlug, "update the task", function(lines) {
-              return Writer.toggleTask(lines, index)
+          GoalDetailScreen {
+            id: goalDetailScreen
+            anchors.fill: parent
+            leftInset: sidebarSlot.width
+            visible: root.currentScreen === "goalDetail"
+            slug: root.openGoalSlug
+            meta: root.openGoalData ? root.openGoalData.meta : null
+            logEntries: root.openGoalData ? root.openGoalData.logEntries : []
+            backLabel: root.goalBackScreen === "journal" ? "← Journal" : "← Goals"
+            onBack: root.currentScreen = root.goalBackScreen
+            onToggleTask: function(index) {
+              root.editGoalFile(root.openGoalSlug, "update the task", function(lines) {
+                return Writer.toggleTask(lines, index)
+              })
+            }
+            onAddTask: function(text) {
+              root.editGoalFile(root.openGoalSlug, "add the task", function(lines) {
+                return Writer.addTask(lines, text)
+              }, function(ok, message) { goalDetailScreen.onAddTaskResult(ok, message) })
+            }
+            onEditTask: function(index, text) {
+              root.editGoalFile(root.openGoalSlug, "update the task", function(lines) {
+                return Writer.editTask(lines, index, text)
+              }, function(ok, message) { goalDetailScreen.onEditTaskResult(ok, message) })
+            }
+            onCloseGoal: root.editGoalFile(root.openGoalSlug, "close the goal", function(lines) {
+              return Writer.setStatus(lines, "done")
             })
+            onReopenGoal: root.editGoalFile(root.openGoalSlug, "reopen the goal", function(lines) {
+              return Writer.setStatus(lines, "active")
+            })
+            onCancelGoal: function(reason, takeaway) {
+              root.editGoalFile(root.openGoalSlug, "cancel the goal", function(lines) {
+                var out = Writer.setStatus(lines, "cancelled")
+                if (!out) return null
+                return Writer.appendCancelNote(out, Writer.headingTimestamp(new Date()), reason, takeaway)
+              }, function(ok, message) { goalDetailScreen.onCancelResult(ok, message) })
+            }
+            onAddEventRequested: root.openEventDialog(root.openGoalSlug)
+            onEditGoalRequested: root.openEditGoalDialog(root.openGoalSlug)
+            onCoachRequested: {
+              coachingScreen.selectedSlug = root.openGoalSlug
+              root.currentScreen = "coaching"
+            }
           }
-          onAddTask: function(text) {
-            root.editGoalFile(root.openGoalSlug, "add the task", function(lines) {
-              return Writer.addTask(lines, text)
-            }, function(ok, message) { goalDetailScreen.onAddTaskResult(ok, message) })
-          }
-          onEditTask: function(index, text) {
-            root.editGoalFile(root.openGoalSlug, "update the task", function(lines) {
-              return Writer.editTask(lines, index, text)
-            }, function(ok, message) { goalDetailScreen.onEditTaskResult(ok, message) })
-          }
-          onCloseGoal: root.editGoalFile(root.openGoalSlug, "close the goal", function(lines) {
-            return Writer.setStatus(lines, "done")
-          })
-          onReopenGoal: root.editGoalFile(root.openGoalSlug, "reopen the goal", function(lines) {
-            return Writer.setStatus(lines, "active")
-          })
-          onCancelGoal: function(reason, takeaway) {
-            root.editGoalFile(root.openGoalSlug, "cancel the goal", function(lines) {
-              var out = Writer.setStatus(lines, "cancelled")
-              if (!out) return null
-              return Writer.appendCancelNote(out, Writer.headingTimestamp(new Date()), reason, takeaway)
-            }, function(ok, message) { goalDetailScreen.onCancelResult(ok, message) })
-          }
-          onAddEventRequested: root.openEventDialog(root.openGoalSlug)
-          onEditGoalRequested: root.openEditGoalDialog(root.openGoalSlug)
-          onCoachRequested: {
-            coachingScreen.selectedSlug = root.openGoalSlug
-            root.currentScreen = "coaching"
-          }
-        }
 
-        TodayScreen {
-          anchors.fill: parent
-          leftInset: sidebarSlot.width
-          visible: root.currentScreen === "today"
-          goalsData: root.goalsData
-          dayEntries: root.dayEntries
-          orphanLogs: root.orphanLogs
-        }
+          TodayScreen {
+            anchors.fill: parent
+            leftInset: sidebarSlot.width
+            visible: root.currentScreen === "today"
+            goalsData: root.goalsData
+            dayEntries: root.dayEntries
+            orphanLogs: root.orphanLogs
+          }
 
-        CoachingScreen {
-          id: coachingScreen
-          anchors.fill: parent
-          leftInset: sidebarSlot.width
-          visible: root.currentScreen === "coaching"
-          goalsData: root.goalsData
-        }
+          CoachingScreen {
+            id: coachingScreen
+            anchors.fill: parent
+            leftInset: sidebarSlot.width
+            visible: root.currentScreen === "coaching"
+            goalsData: root.goalsData
+          }
 
-        JournalScreen {
-          id: journalScreen
-          anchors.fill: parent
-          leftInset: sidebarSlot.width
-          visible: root.currentScreen === "journal"
-          journalFiles: root.journalFiles
-          journalContents: root.journalContents
-          goalsData: root.goalsData
-          sidebarShown: !root.sidebarHidden()
-          onToggleSidebar: root.toggleSidebar()
-          onOpenGoal: function(slug) { root.openGoal(slug, "journal") }
-        }
+          JournalScreen {
+            id: journalScreen
+            anchors.fill: parent
+            leftInset: sidebarSlot.width
+            visible: root.currentScreen === "journal"
+            journalFiles: root.journalFiles
+            journalContents: root.journalContents
+            goalsData: root.goalsData
+            sidebarShown: !root.sidebarHidden()
+            onToggleSidebar: root.toggleSidebar()
+            onOpenGoal: function(slug) { root.openGoal(slug, "journal") }
+          }
         }
       }
 
