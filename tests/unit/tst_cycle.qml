@@ -44,8 +44,8 @@ TestCase {
 
   // The night at `t`, its page open and the day's journal read as `text`.
   function nightPage(t, text) {
-    var s = started(at(22, 0))
-    tickAt(s, at(22, 21))
+    var s = started(at(21, 30))
+    tickAt(s, at(21, 51))
     var read = ofType(Cycle.openNotes(s, ctx(t)), "readJournal")[0]
     Cycle.journalReadExited(s, ctx(t), 0, read.cycle, read.day, text)
     return s
@@ -257,52 +257,52 @@ TestCase {
 
   // ---- the night -----------------------------------------------------------------
   function test_bedtime_ends_whatever_runs() {
-    var s = started(at(22, 0))
+    var s = started(at(21, 30))
     s.doneText = "x"
-    var fx = tickAt(s, at(22, 15))
+    var fx = tickAt(s, at(21, 45))
     compare(s.phase, "bedtime")
     compare(logs(fx), [], "a run cut short isn't logged")
     compare(s.doneText, "")
     compare(Cycle.overlayVisible(s), true)
 
-    var p = started(at(21, 49))
+    var p = started(at(21, 19))
     p.activeGoalSlug = "g"
-    tickAt(p, at(22, 15) - 1000)
+    tickAt(p, at(21, 45) - 1000)
     compare(p.phase, "prompt")
-    fx = tickAt(p, at(22, 15))
+    fx = tickAt(p, at(21, 45))
     compare(logs(fx).length, 1, "a finished run at its prompt is logged first")
     compare(logs(fx)[0].slug, "g")
 
-    var b = started(at(21, 40))
-    toBreak(b, at(21, 40))
+    var b = started(at(21, 10))
+    toBreak(b, at(21, 10))
     b.leftText = "tomorrow"
-    fx = tickAt(b, at(22, 16))
+    fx = tickAt(b, at(21, 46))
     compare(JSON.parse(logs(fx)[0].entry).left, "tomorrow", "and a break's with its notes")
   }
 
   function test_snoozes_then_the_night() {
-    var s = started(at(22, 0))
-    tickAt(s, at(22, 15))
+    var s = started(at(21, 30))
+    tickAt(s, at(21, 45))
     for (let n = 0; n < Cycle.MAX_SNOOZES; n++) {
-      Cycle.snooze(s, ctx(at(22, 15)))
+      Cycle.snooze(s, ctx(at(21, 45)))
       compare(s.phase, "snooze")
       compare(Cycle.overlayVisible(s), false)
-      compare(Cycle.barLabel(s, at(22, 15) + 18 * 1000), "sleep in 00:42")
-      tickAt(s, at(22, 16))
+      compare(Cycle.barLabel(s, at(21, 45) + 18 * 1000), "sleep in 00:42")
+      tickAt(s, at(21, 46))
       compare(s.phase, "bedtime")
     }
-    Cycle.snooze(s, ctx(at(22, 16)))
+    Cycle.snooze(s, ctx(at(21, 46)))
     compare(s.phase, "bedtime", "three is all")
     s.snoozesUsed = 0
-    Cycle.snooze(s, ctx(at(22, 19)))
-    tickAt(s, at(22, 20))
-    compare(s.phase, "sleep", "22:20 starts the night even mid-snooze")
-    compare(Cycle.remainingSec(s, at(22, 20)), 7 * 3600 + 10 * 60)
-    compare(Cycle.countdownLabel(s, at(22, 20)), "7:10:00")
-    compare(Cycle.countdownLabel(s, at(22, 20) + 1000), "7:09:59", "in seconds")
+    Cycle.snooze(s, ctx(at(21, 49)))
+    tickAt(s, at(21, 50))
+    compare(s.phase, "sleep", "21:50 starts the night even mid-snooze")
+    compare(Cycle.remainingSec(s, at(21, 50)), 7 * 3600 + 40 * 60)
+    compare(Cycle.countdownLabel(s, at(21, 50)), "7:40:00")
+    compare(Cycle.countdownLabel(s, at(21, 50) + 1000), "7:39:59", "in seconds")
     compare(Cycle.countdownLabel(s, at(5, 29, 1) + 30 * 1000), "00:30")
-    compare(Cycle.barLabel(s, at(22, 20)), "sleep")
-    compare(Cycle.cycleMode(s, ctx(at(22, 30))), [])
+    compare(Cycle.barLabel(s, at(21, 50)), "sleep")
+    compare(Cycle.cycleMode(s, ctx(at(22, 0))), [])
     compare(s.phase, "sleep", "no mode switch out of it")
   }
 
@@ -310,43 +310,43 @@ TestCase {
     var s = started(noon)
     Cycle.cycleMode(s, ctx(noon)); Cycle.cycleMode(s, ctx(noon))
     compare(s.mode, "off")
-    tickAt(s, at(22, 21))
+    tickAt(s, at(21, 51))
     compare(s.phase, "sleep")
     var p = started(noon)
     Cycle.togglePause(p, ctx(noon))
-    tickAt(p, at(22, 21))
+    tickAt(p, at(21, 51))
     compare(p.phase, "sleep")
     compare(p.paused, false)
   }
 
   function test_the_nights_page_is_the_days_journal() {
-    var s = started(at(22, 0))
-    tickAt(s, at(22, 21))
-    var fx = Cycle.openNotes(s, ctx(at(22, 30)))
+    var s = started(at(21, 30))
+    tickAt(s, at(21, 51))
+    var fx = Cycle.openNotes(s, ctx(at(22, 0)))
     compare(fx, [{ type: "readJournal", day: "2026-10-16", cycle: s.cycle }], "today's journal is read")
     compare(s.journalLoaded, false)
-    compare(Cycle.saveJournal(s, ctx(at(22, 30))), [], "nothing is saved over a day not read yet")
-    Cycle.journalReadExited(s, ctx(at(22, 30)), 0, s.cycle, "2026-10-16", "morning\n")
+    compare(Cycle.saveJournal(s, ctx(at(22, 0))), [], "nothing is saved over a day not read yet")
+    Cycle.journalReadExited(s, ctx(at(22, 0)), 0, s.cycle, "2026-10-16", "morning\n")
     compare([s.journalText, s.journalBase, s.journalLoaded], ["morning\n", "morning\n", true])
 
     s.journalText = "morning\nlights out"
-    fx = Cycle.saveJournal(s, ctx(at(22, 31)))
+    fx = Cycle.saveJournal(s, ctx(at(22, 1)))
     compare(fx, [{ type: "writeJournal", day: "2026-10-16", base: "morning\n", text: "morning\nlights out", cycle: s.cycle }])
     s.journalText += "!"
-    compare(Cycle.saveJournal(s, ctx(at(22, 31), { finishedLog: false, journalSave: true })), [], "one write at a time")
-    fx = Cycle.journalWriteExited(s, ctx(at(22, 31)), 0, s.cycle, "2026-10-16", "morning\n", "morning\nlights out", "")
+    compare(Cycle.saveJournal(s, ctx(at(22, 1), { finishedLog: false, journalSave: true })), [], "one write at a time")
+    fx = Cycle.journalWriteExited(s, ctx(at(22, 1)), 0, s.cycle, "2026-10-16", "morning\n", "morning\nlights out", "")
     compare(s.journalBase, "morning\nlights out")
     compare(ofType(fx, "writeJournal")[0].text, "morning\nlights out!", "what was typed meanwhile follows")
-    Cycle.journalWriteExited(s, ctx(at(22, 31)), 0, s.cycle, "2026-10-16", "morning\nlights out", "morning\nlights out!", "")
-    compare(Cycle.closeNotes(s, ctx(at(22, 40))), [], "a close with nothing new writes nothing")
+    Cycle.journalWriteExited(s, ctx(at(22, 1)), 0, s.cycle, "2026-10-16", "morning\nlights out", "morning\nlights out!", "")
+    compare(Cycle.closeNotes(s, ctx(at(22, 10))), [], "a close with nothing new writes nothing")
   }
 
   // Omvision saved the day after the page read it: the helper refuses and
   // sends the file's text back, and the page's typing goes after it.
   function test_a_save_made_in_omvision_meanwhile_is_kept() {
-    var s = nightPage(at(22, 30), "a")
+    var s = nightPage(at(22, 0), "a")
     s.journalText = "a b"
-    var fx = Cycle.journalWriteExited(s, ctx(at(22, 31)), Cycle.JOURNAL_CHANGED_EXIT, s.cycle, "2026-10-16", "a", "a b", "a c")
+    var fx = Cycle.journalWriteExited(s, ctx(at(22, 1)), Cycle.JOURNAL_CHANGED_EXIT, s.cycle, "2026-10-16", "a", "a b", "a c")
     compare([s.journalText, s.journalBase], ["a c b", "a c"])
     compare(ofType(fx, "writeJournal")[0].base, "a c", "written again over the file's text")
     compare(Cycle.mergeJournal("x", "", "y"), "x\n\ny", "a new page goes after the file's text")
@@ -356,29 +356,29 @@ TestCase {
 
     // A refusal sending back the text the write was based on would repeat
     // forever: it's a failure, not a merge.
-    s = nightPage(at(22, 30), "a")
+    s = nightPage(at(22, 0), "a")
     s.journalText = "a b"
-    fx = Cycle.journalWriteExited(s, ctx(at(22, 31)), Cycle.JOURNAL_CHANGED_EXIT, s.cycle, "2026-10-16", "a", "a b", "a")
+    fx = Cycle.journalWriteExited(s, ctx(at(22, 1)), Cycle.JOURNAL_CHANGED_EXIT, s.cycle, "2026-10-16", "a", "a b", "a")
     compare(ofType(fx, "writeJournal"), [])
     compare(s.journalFailed, true)
   }
 
   function test_a_failed_read_or_save_says_so_and_saves_nothing() {
-    var s = started(at(22, 0))
-    tickAt(s, at(22, 21))
-    Cycle.openNotes(s, ctx(at(22, 30)))
-    Cycle.journalReadExited(s, ctx(at(22, 30)), 1, s.cycle, "2026-10-16", "")
+    var s = started(at(21, 30))
+    tickAt(s, at(21, 51))
+    Cycle.openNotes(s, ctx(at(22, 0)))
+    Cycle.journalReadExited(s, ctx(at(22, 0)), 1, s.cycle, "2026-10-16", "")
     compare([s.journalFailed, s.journalLoaded], [true, false])
-    compare(Cycle.closeNotes(s, ctx(at(22, 31))), [])
-    var read = ofType(Cycle.openNotes(s, ctx(at(22, 32))), "readJournal")[0]
-    Cycle.journalReadExited(s, ctx(at(22, 32)), 0, read.cycle, read.day, "t")
+    compare(Cycle.closeNotes(s, ctx(at(22, 1))), [])
+    var read = ofType(Cycle.openNotes(s, ctx(at(22, 2))), "readJournal")[0]
+    Cycle.journalReadExited(s, ctx(at(22, 2)), 0, read.cycle, read.day, "t")
     compare(s.journalFailed, false, "opening the page again retries")
     s.journalText = "t2"
-    var fx = Cycle.journalWriteExited(s, ctx(at(22, 33)), 1, s.cycle, "2026-10-16", "t", "t2", "")
+    var fx = Cycle.journalWriteExited(s, ctx(at(22, 3)), 1, s.cycle, "2026-10-16", "t", "t2", "")
     compare(s.journalFailed, true)
     compare(s.journalBase, "t", "the text isn't taken as saved")
     compare(ofType(fx, "warn").length, 1)
-    compare(ofType(Cycle.closeNotes(s, ctx(at(22, 34))), "writeJournal").length, 1, "leaving the page retries")
+    compare(ofType(Cycle.closeNotes(s, ctx(at(22, 4))), "writeJournal").length, 1, "leaving the page retries")
   }
 
   // The page opens on the calendar day, as the Journal screen does, except
@@ -416,43 +416,43 @@ TestCase {
   }
 
   function test_skip_sleep_lasts_the_night() {
-    var s = started(at(22, 0))
+    var s = started(at(21, 30))
     tickAt(s, at(23, 0))
     compare(s.phase, "sleep")
     Cycle.skipSleep(s, ctx(at(23, 0)))
     compare(s.phase, "focus")
     tickAt(s, at(2, 0, 1))
     compare(Cycle.atNight(s), false, "the rest of this night")
-    tickAt(s, at(22, 21, 1))
+    tickAt(s, at(21, 51, 1))
     compare(s.phase, "sleep", "and the next one as usual")
   }
 
   // The case that matters when the laptop is needed before bed: skipped at
-  // 21:57, neither the 22:15 prompt nor the 22:20 night screen comes, and the
+  // 21:27, neither the 21:45 prompt nor the 21:50 night screen comes, and the
   // run in progress isn't cut off.
   function test_skip_sleep_before_bedtime_keeps_bedtime_away() {
-    var s = started(at(21, 57))
-    Cycle.skipSleep(s, ctx(at(21, 57)))
+    var s = started(at(21, 27))
+    Cycle.skipSleep(s, ctx(at(21, 27)))
     compare(s.sleepSkippedNight, "2026-10-16")
     compare(s.phase, "focus", "the run in progress carries on")
-    tickAt(s, at(22, 15))
-    verify(s.phase !== "bedtime", "no Time to sleep at 22:15")
-    tickAt(s, at(22, 21))
-    compare(Cycle.atNight(s), false, "no night screen at 22:21")
+    tickAt(s, at(21, 45))
+    verify(s.phase !== "bedtime", "no Time to sleep at 21:45")
+    tickAt(s, at(21, 51))
+    compare(Cycle.atNight(s), false, "no night screen at 21:51")
     tickAt(s, at(3, 0, 1))
     compare(Cycle.atNight(s), false, "nor in the small hours")
-    tickAt(s, at(22, 15, 1))
-    compare(s.phase, "bedtime", "the next night's 22:15 is as usual")
+    tickAt(s, at(21, 45, 1))
+    compare(s.phase, "bedtime", "the next night's 21:45 is as usual")
   }
 
-  // Skipped during the 22:15-22:20 prompt, before the night screen is up.
+  // Skipped during the 21:45-21:50 prompt, before the night screen is up.
   function test_skip_sleep_at_the_bedtime_prompt() {
-    var s = started(at(22, 0))
-    tickAt(s, at(22, 16))
+    var s = started(at(21, 30))
+    tickAt(s, at(21, 46))
     compare(s.phase, "bedtime")
-    Cycle.skipSleep(s, ctx(at(22, 16)))
+    Cycle.skipSleep(s, ctx(at(21, 46)))
     compare(s.phase, "focus")
-    tickAt(s, at(22, 21))
+    tickAt(s, at(21, 51))
     compare(Cycle.atNight(s), false)
   }
 
@@ -543,9 +543,9 @@ TestCase {
   // so a deploy before about 01:30 was refused. An open journal page isn't
   // carried, but read again.
   function test_a_night_hands_off_at_any_hour() {
-    var s = nightPage(at(22, 30), "late")
-    var t = started(at(22, 25))
-    var r = Cycle.restore(t, ctx(at(22, 35)), JSON.stringify(Cycle.snapshot(s, at(22, 35))))
+    var s = nightPage(at(22, 0), "late")
+    var t = started(at(21, 55))
+    var r = Cycle.restore(t, ctx(at(22, 5)), JSON.stringify(Cycle.snapshot(s, at(22, 5))))
     compare(r.error, "")
     compare(t.phase, "sleep")
     compare(t.notesOpen, true)

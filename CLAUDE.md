@@ -64,7 +64,7 @@ reading and writing files under `~/Notes/Omvision/`.
 - A change to either plugin isn't done until it's deployed: once `bin/check` passes, run
   `bin/omvision-deploy` without waiting to be asked, and confirm with `--dry-run` that
   nothing differs. A fix once sat undeployed, and the user tested the old engine all
-  night thinking it was the new one. One exception: between 22:15 and 05:30 a deploy lands
+  night thinking it was the new one. One exception: between 21:45 and 05:30 a deploy lands
   straight on the bedtime or night screen, so ask first then.
 - Quickshell's `FileView` fails silently in four ways in this build:
   1. `setText()` called synchronously inside `onLoaded` writes the file but drops

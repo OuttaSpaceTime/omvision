@@ -2,8 +2,8 @@ import QtQuick
 
 import "../../Parser.js" as Parser
 
-// Bedtime and the night, on the engine's clock: "Time to sleep" at 22:15,
-// the snoozes, the night's screen from 22:20, its journal page, and 05:30.
+// Bedtime and the night, on the engine's clock: "Time to sleep" at 21:45,
+// the snoozes, the night's screen from 21:50, its journal page, and 05:30.
 EngineTest {
   name: "night"
 
@@ -11,8 +11,8 @@ EngineTest {
     toBreak()
     engine.setNote("doneText", "d")
     var before = entries(dayLog()).length
-    clockAt(0, 22, 16)
-    compare(engine.phase, "bedtime", "22:15 puts up Time to sleep")
+    clockAt(0, 21, 46)
+    compare(engine.phase, "bedtime", "21:45 puts up Time to sleep")
     verify(engine.overlayVisible)
     compare(engine.doneText, "", "on an empty page")
     tryVerify(function() { return entries(dayLog()).length === before + 1 }, 4000, "the cut-short break is logged")
@@ -22,7 +22,7 @@ EngineTest {
   }
 
   function test_three_snoozes_of_a_minute() {
-    clockAt(0, 22, 16)
+    clockAt(0, 21, 46)
     for (let n = 3; n > 0; n--) {
       compare(item("snoozeButton").label, "+1 minute (" + n + " left)")
       click("snoozeButton")
@@ -38,13 +38,13 @@ EngineTest {
   }
 
   function test_22_20_starts_the_night_with_only_its_notes() {
-    clockAt(0, 22, 16)
+    clockAt(0, 21, 46)
     click("snoozeButton")
-    clockAt(0, 22, 21)
+    clockAt(0, 21, 51)
     compare(engine.phase, "sleep", "even mid-snooze")
     verify(engine.overlayVisible)
-    verify(near(engine.remaining, 7 * 3600 + 9 * 60), "counting down to 05:30")
-    verify(/^7:0[89]:\d\d$/.test(engine.countdownLabel), "in hours, minutes and seconds: " + engine.countdownLabel)
+    verify(near(engine.remaining, 7 * 3600 + 39 * 60), "counting down to 05:30")
+    verify(/^7:3[89]:\d\d$/.test(engine.countdownLabel), "in hours, minutes and seconds: " + engine.countdownLabel)
     item("takeNotesButton")
     verify(!shows("extendBreakButton:1") && !shows("snoozeButton") && !shows("goodNightButton"))
     key(Qt.Key_G, Qt.ControlModifier)
@@ -58,7 +58,7 @@ EngineTest {
   // end, and what's typed is saved into the file itself -- the day file
   // gets nothing. A save Omvision made meanwhile isn't written over.
   function test_the_nights_page_is_the_days_journal() {
-    clockAt(0, 22, 21)
+    clockAt(0, 21, 51)
     writeFile(journalFile(), "morning\n")
     var log = dayLog()
     click("takeNotesButton")
@@ -84,7 +84,7 @@ EngineTest {
   // Qt drops a byte-order mark the helper would otherwise count as text, so
   // every save would look like the file had changed under it.
   function test_a_journal_with_a_byte_order_mark_still_saves() {
-    clockAt(0, 22, 21)
+    clockAt(0, 21, 51)
     writeFile(journalFile(), "\ufeffmorning")
     click("takeNotesButton")
     tryCompare(editor(), "text", "morning", 4000)
@@ -95,7 +95,7 @@ EngineTest {
   }
 
   function test_skip_sleep_lasts_the_night() {
-    clockAt(0, 22, 21)
+    clockAt(0, 21, 51)
     engine.skipSleep()
     compare(engine.phase, "focus")
     verify(!engine.overlayVisible)
@@ -105,7 +105,7 @@ EngineTest {
 
   function test_the_night_survives_a_deploy_at_any_hour() {
     clockAt(1, 1, 0)
-    compare(engine.phase, "sleep", "a fresh engine after 22:20 goes straight to the night")
+    compare(engine.phase, "sleep", "a fresh engine after 21:50 goes straight to the night")
     writeFile(journalFile(), "late")
     click("takeNotesButton")
     tryCompare(editor(), "text", "late", 4000)
@@ -134,16 +134,16 @@ EngineTest {
     engine.cycleMode(); engine.cycleMode()
     compare(engine.mode, "off")
     verify(!engine.countdownRunning)
-    clockAt(0, 22, 16)
+    clockAt(0, 21, 46)
     compare(engine.phase, "bedtime")
     verify(engine.overlayVisible)
-    clockAt(0, 22, 21)
+    clockAt(0, 21, 51)
     compare(engine.phase, "sleep")
     clockAt(1, 5, 31)
     engine.cycleMode()
     engine.togglePause()
     verify(engine.mode === "normal" && engine.paused)
-    clockAt(1, 22, 21)
+    clockAt(1, 21, 51)
     compare(engine.phase, "sleep")
     verify(!engine.paused)
   }

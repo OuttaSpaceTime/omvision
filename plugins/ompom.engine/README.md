@@ -10,7 +10,7 @@ The pomodoro timer engine behind Ompom — an Omarchy shell plugin that runs the
 - The break shows its countdown with **+1 / +2 / +3 min** to lengthen it, **Take notes**, and **Ctrl+G** to pick the next run's goal (done, cancelled and `focusable: no` goals aren't offered).
 - In a break, **Take notes** opens one page with three sections, *Done*, *Next* and *Notes*, each headed like a markdown heading; click a heading to fold it. The arrows move through the page as through one markdown file, stopping on the headings, where Return folds and unfolds. Esc or ← goes back to the countdown, and the notes stay as written until the break ends.
 - When the break ends, the run is logged with its notes — to the goal's `<slug>.log.md`, or `~/Notes/Omvision/days/<date>.md` without a goal — and the next focus run starts straight away. If the write is refused, the break holds at 0:00 with **Try again** and **Skip**.
-- **Bedtime**: at 22:15 whatever is running stops (a finished run is logged, a focus run cut off part-way isn't) and **Time to sleep** comes up, with **+1 minute** (up to 3 times) and **Good night**. From 22:20 until 05:30 the laptop shows only the night's screen: a countdown to 05:30, in hours, minutes and seconds, and **Take notes**. Logging in during that time lands straight on it. At 05:30 a fresh run starts. This holds in every mode, Off too, and with the timer paused.
+- **Bedtime**: at 21:45 whatever is running stops (a finished run is logged, a focus run cut off part-way isn't) and **Time to sleep** comes up, with **+1 minute** (up to 3 times) and **Good night**. From 21:50 until 05:30 the laptop shows only the night's screen: a countdown to 05:30, in hours, minutes and seconds, and **Take notes**. Logging in during that time lands straight on it. At 05:30 a fresh run starts. This holds in every mode, Off too, and with the timer paused.
 - At night **Take notes** opens the day's journal, `~/Notes/Omvision/journal/<date>.md`, the same file Omvision's Journal screen shows, set the same way but without the app around it: free writing, no questions. It opens on the day's text with the caret at the end and saves as you type. If Omvision saved the day meanwhile, nothing it wrote is lost: what you typed goes after it.
 - No settings screen — mode and pause are controlled entirely from the bar icon (see [ompom.bar](../ompom.bar)).
 
@@ -41,9 +41,9 @@ omarchy-shell ompom skipSleep      # ends tonight's bedtime screen, for when the
 ```
 
 `skipSleep` is the only way out of the night, and nothing on the overlay offers it.
-It works at any hour of the night's span, before bedtime included: run at 21:57, it keeps
-the 22:15 prompt and the 22:20 night screen away, and the run in progress carries on. It lasts
-the rest of this night only (until 05:30); the next night's 22:15 is as usual. It is kept in
+It works at any hour of the night's span, before bedtime included: run at 21:27, it keeps
+the 21:45 prompt and the 21:50 night screen away, and the run in progress carries on. It lasts
+the rest of this night only (until 05:30); the next night's 21:45 is as usual. It is kept in
 the engine's state, so a deploy carries it over, but a plain shell restart starts a fresh
 engine and the night comes back: run it again.
 With the overlay up, run it from a TTY (Ctrl+Alt+F3, log in).

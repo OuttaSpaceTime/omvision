@@ -75,17 +75,17 @@ var MAX_EXTENSIONS = 3
 var RUNS_PER_SET = 4
 
 // --- bedtime ---
-// At 22:15 the engine stops whatever it was doing and puts up "Time to
+// At 21:45 the engine stops whatever it was doing and puts up "Time to
 // sleep" (phase "bedtime"); +1 minute takes the overlay down for a minute
-// ("snooze"), three times at most. From 22:20 to 05:30 the night's screen
+// ("snooze"), three times at most. From 21:50 to 05:30 the night's screen
 // ("sleep") is the only thing on the laptop: a countdown to 05:30 and the
 // journal, nothing else. It follows the clock rather than a countdown of
 // its own (followTheClock(), every tick), so a login, a resume from suspend
 // or a deploy at any hour of the night lands on the right screen, and a
 // suspended night still ends at 05:30. It holds in every mode, "off" too:
 // bedtime isn't a pomodoro, and switching the timer off is no way around it.
-var BEDTIME_MINUTE = 22 * 60 + 15
-var LIGHTS_OUT_MINUTE = 22 * 60 + 20
+var BEDTIME_MINUTE = 21 * 60 + 45
+var LIGHTS_OUT_MINUTE = 21 * 60 + 50
 var WAKE_MINUTE = 5 * 60 + 30
 var MAX_SNOOZES = 3
 
@@ -623,8 +623,8 @@ function finishedLogExited(s, ctx, code, cycle, payload) {
 // ---- the night ---------------------------------------------------------------
 
 // Every tick, before anything else: puts the engine where the clock says it
-// belongs. Into bed from any phase at 22:15, straight into the night from
-// 22:20 on (whatever snooze or prompt was up), and back to a fresh run at
+// belongs. Into bed from any phase at 21:45, straight into the night from
+// 21:50 on (whatever snooze or prompt was up), and back to a fresh run at
 // 05:30.
 function followTheClock(s, ctx) {
   var d = new Date(ctx.nowMs)
@@ -650,7 +650,7 @@ function goToBed(s, ctx) {
 }
 
 // "+1 minute" on "Time to sleep": the overlay goes for a minute, and comes
-// back. Never past 22:20, where followTheClock() starts the night.
+// back. Never past 21:50, where followTheClock() starts the night.
 function snooze(s, ctx) {
   if (s.phase !== "bedtime" || s.snoozesUsed >= MAX_SNOOZES) return []
   s.snoozesUsed += 1
@@ -659,7 +659,7 @@ function snooze(s, ctx) {
   return []
 }
 
-// "Good night", or 22:20.
+// "Good night", or 21:50.
 function startSleep(s, ctx) {
   if (s.phase === "bedtime" || s.phase === "snooze") s.phase = "sleep"
   return []
@@ -678,7 +678,7 @@ function wake(s, ctx) {
 // The way out of a night, for when the laptop is really needed: an IPC call
 // only (`omarchy-shell ompom skipSleep`, from a TTY if need be), so nothing
 // on the overlay offers it. It lasts the rest of this night; the next one
-// starts at 22:15 as usual.
+// starts at 21:45 as usual.
 function skipSleep(s, ctx) {
   s.sleepSkippedNight = nightOf(new Date(ctx.nowMs))
   return followTheClock(s, ctx)

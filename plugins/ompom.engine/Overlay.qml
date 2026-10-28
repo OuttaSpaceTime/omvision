@@ -217,7 +217,7 @@ Item {
         }
       }
 
-      // The same three minutes the focus run gets, and gone at 22:20 with
+      // The same three minutes the focus run gets, and gone at 21:50 with
       // this whole screen.
       Row {
         visible: overlay.engine.phase === "bedtime"
