@@ -317,7 +317,7 @@ TestCase {
   }
 
   function test_parseLogEntries_else_line() {
-    // The contract's §4 example, with the break screen's "What else?" line.
+    // The contract's §4 example, with the break screen's "Notes" line.
     var text = "### 20 Sep 14:25 · 25m\n" +
                "focus: Wire the goal picker into the IPC\n" +
                "done: status call wired through the IPC\n" +

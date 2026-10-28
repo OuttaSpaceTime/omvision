@@ -473,8 +473,8 @@ function doneTaskCount(tasks) {
 // What an entry says, as the lines Today and the timeline show under its
 // heading (EntryNotes.qml): [{ text, prominent }], empty for an entry that
 // says nothing. A pomodoro's `focus:` (older entries only) and an event's
-// free line are prominent; a pomodoro's three notes, "What's done?",
-// "What's left?" and "What else?" (§4), follow, each only if answered.
+// free line are prominent; a pomodoro's three notes, "Done",
+// "Next" and "Notes" (§4), follow, each only if answered.
 function entryNoteLines(e) {
   var out = []
   function add(text, prominent) { if (text) out.push({ text: text, prominent: prominent }) }

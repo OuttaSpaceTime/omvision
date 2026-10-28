@@ -151,7 +151,7 @@ Heading: `### <D Mon HH:MM> · <N>m` — day of month with no leading zero,
 three-letter month, 24-hour clock, then the pomodoro's length (§4's duration
 formatting below: `25m`, or `1h15` from an hour up).
 Body: an `id:` line, then `done:`, `left:` and `else:` lines, the three sections
-of the break's notes ("What's done?", "What's left?", "What else?"). Each note is
+of the break's notes ("Done", "Next", "Notes"). Each note is
 optional — omit the line entirely if the section was left blank, don't write it
 empty. An entry for a break where nothing was written is just its heading and id.
 

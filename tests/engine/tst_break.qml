@@ -53,7 +53,7 @@ EngineTest {
     var started = engine.focusStartedIso
     toBreak()
     click("takeNotesButton")
-    tryVerify(function() { return section("done").edit.activeFocus }, 4000, "the caret in What's done?")
+    tryVerify(function() { return section("done").edit.activeFocus }, 4000, "the caret in Done")
     type("- one\ntwo")
     key(Qt.Key_Escape)
     var before = entries(dayLog()).length

@@ -4,7 +4,7 @@ import qs.Commons
 import "ListContinue.js" as ListContinue
 
 // One section of the break's notes: its heading, drawn as the markdown
-// heading it reads as ("# What's done?", in the journal's own styling), and
+// heading it reads as ("# Done", in the journal's own styling), and
 // the text under it. Clicking the heading folds the text away; a folded
 // heading is dimmed, the only sign of it, since a ▾/▸ arrow beside it was one
 // more thing on a page meant to look like writing. The heading is fixed

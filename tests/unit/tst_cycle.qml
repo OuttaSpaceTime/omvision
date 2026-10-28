@@ -427,6 +427,35 @@ TestCase {
     compare(s.phase, "sleep", "and the next one as usual")
   }
 
+  // The case that matters when the laptop is needed before bed: skipped at
+  // 21:57, neither the 22:15 prompt nor the 22:20 night screen comes, and the
+  // run in progress isn't cut off.
+  function test_skip_sleep_before_bedtime_keeps_bedtime_away() {
+    var s = started(at(21, 57))
+    Cycle.skipSleep(s, ctx(at(21, 57)))
+    compare(s.sleepSkippedNight, "2026-10-16")
+    compare(s.phase, "focus", "the run in progress carries on")
+    tickAt(s, at(22, 15))
+    verify(s.phase !== "bedtime", "no Time to sleep at 22:15")
+    tickAt(s, at(22, 21))
+    compare(Cycle.atNight(s), false, "no night screen at 22:21")
+    tickAt(s, at(3, 0, 1))
+    compare(Cycle.atNight(s), false, "nor in the small hours")
+    tickAt(s, at(22, 15, 1))
+    compare(s.phase, "bedtime", "the next night's 22:15 is as usual")
+  }
+
+  // Skipped during the 22:15-22:20 prompt, before the night screen is up.
+  function test_skip_sleep_at_the_bedtime_prompt() {
+    var s = started(at(22, 0))
+    tickAt(s, at(22, 16))
+    compare(s.phase, "bedtime")
+    Cycle.skipSleep(s, ctx(at(22, 16)))
+    compare(s.phase, "focus")
+    tickAt(s, at(22, 21))
+    compare(Cycle.atNight(s), false)
+  }
+
   function test_after_lights_out_a_fresh_engine_goes_straight_to_the_night() {
     var s = started(at(1, 0, 1))
     tickAt(s, at(1, 0, 1))

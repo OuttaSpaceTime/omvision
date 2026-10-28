@@ -5,12 +5,12 @@ import QtQuick
 EngineTest {
   name: "notes"
 
-  // A break with its notes open and the caret in What's done?.
+  // A break with its notes open and the caret in Done.
   function openNotes() {
     toBreak()
     click("takeNotesButton")
     verify(engine.notesOpen)
-    tryVerify(function() { return section("done").edit.activeFocus }, 4000, "the caret in What's done?")
+    tryVerify(function() { return section("done").edit.activeFocus }, 4000, "the caret in Done")
   }
 
   function test_lists_go_on_and_the_first_letter_moves_nothing() {
@@ -39,7 +39,7 @@ EngineTest {
     var flick = item("notesPage")
     settle(els.edit)
     mouseClick(els.edit, 10, 5)
-    verify(els.edit.activeFocus, "the caret in What else?")
+    verify(els.edit.activeFocus, "the caret in Notes")
     for (let i = 0; i < 20; i++) type("line " + i + "\n")
     wait(50)
     var caret = els.edit.mapToItem(flick, els.edit.cursorRectangle)
@@ -63,7 +63,7 @@ EngineTest {
   function test_headings_fold() {
     openNotes()
     var done = section("done")
-    compare(done.heading.text, "# What's done?", "a markdown heading")
+    compare(done.heading.text, "# Done", "a markdown heading")
     mouseClick(done.heading, 20, done.heading.height / 2)
     verify(!done.open && !done.edit.visible, "a click folds its section")
     mouseClick(done.heading, 20, done.heading.height / 2)
@@ -99,7 +99,7 @@ EngineTest {
     verify(left.edit.activeFocus, "Up goes back into it")
     key(Qt.Key_Up)
     type("x")
-    verify(left.heading.activeFocus && left.heading.text === "# What's left?" && engine.leftText === "",
+    verify(left.heading.activeFocus && left.heading.text === "# Next" && engine.leftText === "",
            "typing on a heading changes nothing")
     key(Qt.Key_Return)
     verify(!left.open && left.heading.activeFocus, "Return on a heading folds it, caret stays")

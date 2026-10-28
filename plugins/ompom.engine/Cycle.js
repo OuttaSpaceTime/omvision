@@ -33,9 +33,9 @@
 // here with the key rather than in Overlay.qml: the log keeps one line per
 // question, so a question renamed or added is a change to both.
 var NOTES = [
-  { field: "doneText", key: "done", title: "What's done?" },
-  { field: "leftText", key: "left", title: "What's left?" },
-  { field: "elseText", key: "else", title: "What else?" }
+  { field: "doneText", key: "done", title: "Done" },
+  { field: "leftText", key: "left", title: "Next" },
+  { field: "elseText", key: "else", title: "Notes" }
 ]
 
 var MODES = ["normal", "long", "off"]
@@ -45,7 +45,7 @@ var NIGHT_PHASES = ["bedtime", "snooze", "sleep"]
 // (startNextRun()), on whatever goal is selected, and the engine comes up in
 // "focus" so logging in never drops a blocking overlay on top of whatever
 // you were doing. A "What's your focus?" screen before every run used to
-// sit here; the break notes' "What's left?" already says what comes next.
+// sit here; the break notes' "Next" already says what comes next.
 var PHASES = ["focus", "prompt", "extend", "break"].concat(NIGHT_PHASES)
 
 var DURATIONS = {
