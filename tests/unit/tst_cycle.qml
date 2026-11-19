@@ -45,8 +45,8 @@ TestCase {
 
   // The night at `t`, its page open and the day's journal read as `text`.
   function nightPage(t, text) {
-    var s = started(at(21, 30))
-    tickAt(s, at(21, 51))
+    var s = started(at(21, 15))
+    tickAt(s, at(21, 36))
     var read = ofType(Cycle.openNotes(s, ctx(t)), "readJournal")[0]
     Cycle.journalReadExited(s, ctx(t), 0, read.cycle, read.day, text)
     return s
@@ -139,7 +139,7 @@ TestCase {
 
   function test_the_day_starts_with_the_timer_off() {
     var s = started(noon)
-    tickAt(s, at(21, 51))
+    tickAt(s, at(21, 36))
     compare(s.phase, "sleep")
     tickAt(s, at(5, 30, 1))
     compare(s.phase, "focus")
@@ -301,51 +301,51 @@ TestCase {
 
   // ---- the night -----------------------------------------------------------------
   function test_bedtime_ends_whatever_runs() {
-    var s = started(at(21, 30))
+    var s = started(at(21, 15))
     s.doneText = "x"
-    var fx = tickAt(s, at(21, 45))
+    var fx = tickAt(s, at(21, 30))
     compare(s.phase, "bedtime")
     compare(logs(fx), [], "a run cut short isn't logged")
     compare(s.doneText, "")
     compare(Cycle.overlayVisible(s), true)
 
-    var p = started(at(21, 19))
+    var p = started(at(21, 4))
     p.activeGoalSlug = "g"
-    tickAt(p, at(21, 45) - 1000)
+    tickAt(p, at(21, 30) - 1000)
     compare(p.phase, "prompt")
-    fx = tickAt(p, at(21, 45))
+    fx = tickAt(p, at(21, 30))
     compare(logs(fx).length, 1, "a finished run at its prompt is logged first")
     compare(logs(fx)[0].slug, "g")
 
-    var b = started(at(21, 10))
-    toBreak(b, at(21, 10))
+    var b = started(at(20, 55))
+    toBreak(b, at(20, 55))
     b.leftText = "tomorrow"
-    fx = tickAt(b, at(21, 46))
+    fx = tickAt(b, at(21, 31))
     compare(JSON.parse(logs(fx)[0].entry).left, "tomorrow", "and a break's with its notes")
   }
 
   function test_snoozes_then_the_night() {
-    var s = started(at(21, 30))
-    tickAt(s, at(21, 45))
+    var s = started(at(21, 15))
+    tickAt(s, at(21, 30))
     for (let n = 0; n < Cycle.MAX_SNOOZES; n++) {
-      Cycle.snooze(s, ctx(at(21, 45)))
+      Cycle.snooze(s, ctx(at(21, 30)))
       compare(s.phase, "snooze")
       compare(Cycle.overlayVisible(s), false)
-      compare(Cycle.barLabel(s, at(21, 45) + 18 * 1000), "sleep in 00:42")
-      tickAt(s, at(21, 46))
+      compare(Cycle.barLabel(s, at(21, 30) + 18 * 1000), "sleep in 00:42")
+      tickAt(s, at(21, 31))
       compare(s.phase, "bedtime")
     }
-    Cycle.snooze(s, ctx(at(21, 46)))
+    Cycle.snooze(s, ctx(at(21, 31)))
     compare(s.phase, "bedtime", "three is all")
     s.snoozesUsed = 0
-    Cycle.snooze(s, ctx(at(21, 49)))
-    tickAt(s, at(21, 50))
-    compare(s.phase, "sleep", "21:50 starts the night even mid-snooze")
-    compare(Cycle.remainingSec(s, at(21, 50)), 7 * 3600 + 40 * 60)
-    compare(Cycle.countdownLabel(s, at(21, 50)), "7:40:00")
-    compare(Cycle.countdownLabel(s, at(21, 50) + 1000), "7:39:59", "in seconds")
+    Cycle.snooze(s, ctx(at(21, 34)))
+    tickAt(s, at(21, 35))
+    compare(s.phase, "sleep", "21:35 starts the night even mid-snooze")
+    compare(Cycle.remainingSec(s, at(21, 35)), 7 * 3600 + 55 * 60)
+    compare(Cycle.countdownLabel(s, at(21, 35)), "7:55:00")
+    compare(Cycle.countdownLabel(s, at(21, 35) + 1000), "7:54:59", "in seconds")
     compare(Cycle.countdownLabel(s, at(5, 29, 1) + 30 * 1000), "00:30")
-    compare(Cycle.barLabel(s, at(21, 50)), "sleep")
+    compare(Cycle.barLabel(s, at(21, 35)), "sleep")
     compare(Cycle.cycleMode(s, ctx(at(22, 0))), [])
     compare(s.phase, "sleep", "no mode switch out of it")
   }
@@ -354,18 +354,18 @@ TestCase {
     var s = started(noon)
     Cycle.cycleMode(s, ctx(noon)); Cycle.cycleMode(s, ctx(noon))
     compare(s.mode, "off")
-    tickAt(s, at(21, 51))
+    tickAt(s, at(21, 36))
     compare(s.phase, "sleep")
     var p = started(noon)
     Cycle.togglePause(p, ctx(noon))
-    tickAt(p, at(21, 51))
+    tickAt(p, at(21, 36))
     compare(p.phase, "sleep")
     compare(p.paused, false)
   }
 
   function test_the_nights_page_is_the_days_journal() {
-    var s = started(at(21, 30))
-    tickAt(s, at(21, 51))
+    var s = started(at(21, 15))
+    tickAt(s, at(21, 36))
     var fx = Cycle.openNotes(s, ctx(at(22, 0)))
     compare(fx, [{ type: "readJournal", day: "2026-10-16", cycle: s.cycle }], "today's journal is read")
     compare(s.journalLoaded, false)
@@ -408,8 +408,8 @@ TestCase {
   }
 
   function test_a_failed_read_or_save_says_so_and_saves_nothing() {
-    var s = started(at(21, 30))
-    tickAt(s, at(21, 51))
+    var s = started(at(21, 15))
+    tickAt(s, at(21, 36))
     Cycle.openNotes(s, ctx(at(22, 0)))
     Cycle.journalReadExited(s, ctx(at(22, 0)), 1, s.cycle, "2026-10-16", "")
     compare([s.journalFailed, s.journalLoaded], [true, false])
@@ -460,43 +460,43 @@ TestCase {
   }
 
   function test_skip_sleep_lasts_the_night() {
-    var s = started(at(21, 30))
+    var s = started(at(21, 15))
     tickAt(s, at(23, 0))
     compare(s.phase, "sleep")
     Cycle.skipSleep(s, ctx(at(23, 0)))
     compare(s.phase, "focus")
     tickAt(s, at(2, 0, 1))
     compare(Cycle.atNight(s), false, "the rest of this night")
-    tickAt(s, at(21, 51, 1))
+    tickAt(s, at(21, 36, 1))
     compare(s.phase, "sleep", "and the next one as usual")
   }
 
   // The case that matters when the laptop is needed before bed: skipped at
-  // 21:27, neither the 21:45 prompt nor the 21:50 night screen comes, and the
+  // 21:12, neither the 21:30 prompt nor the 21:35 night screen comes, and the
   // run in progress isn't cut off.
   function test_skip_sleep_before_bedtime_keeps_bedtime_away() {
-    var s = started(at(21, 27))
-    Cycle.skipSleep(s, ctx(at(21, 27)))
+    var s = started(at(21, 12))
+    Cycle.skipSleep(s, ctx(at(21, 12)))
     compare(s.sleepSkippedNight, "2026-10-16")
     compare(s.phase, "focus", "the run in progress carries on")
-    tickAt(s, at(21, 45))
-    verify(s.phase !== "bedtime", "no Time to sleep at 21:45")
-    tickAt(s, at(21, 51))
-    compare(Cycle.atNight(s), false, "no night screen at 21:51")
+    tickAt(s, at(21, 30))
+    verify(s.phase !== "bedtime", "no Time to sleep at 21:30")
+    tickAt(s, at(21, 36))
+    compare(Cycle.atNight(s), false, "no night screen at 21:36")
     tickAt(s, at(3, 0, 1))
     compare(Cycle.atNight(s), false, "nor in the small hours")
-    tickAt(s, at(21, 45, 1))
-    compare(s.phase, "bedtime", "the next night's 21:45 is as usual")
+    tickAt(s, at(21, 30, 1))
+    compare(s.phase, "bedtime", "the next night's 21:30 is as usual")
   }
 
-  // Skipped during the 21:45-21:50 prompt, before the night screen is up.
+  // Skipped during the 21:30-21:35 prompt, before the night screen is up.
   function test_skip_sleep_at_the_bedtime_prompt() {
-    var s = started(at(21, 30))
-    tickAt(s, at(21, 46))
+    var s = started(at(21, 15))
+    tickAt(s, at(21, 31))
     compare(s.phase, "bedtime")
-    Cycle.skipSleep(s, ctx(at(21, 46)))
+    Cycle.skipSleep(s, ctx(at(21, 31)))
     compare(s.phase, "focus")
-    tickAt(s, at(21, 51))
+    tickAt(s, at(21, 36))
     compare(Cycle.atNight(s), false)
   }
 
@@ -588,7 +588,7 @@ TestCase {
   // carried, but read again.
   function test_a_night_hands_off_at_any_hour() {
     var s = nightPage(at(22, 0), "late")
-    var t = started(at(21, 55))
+    var t = started(at(21, 40))
     var r = Cycle.restore(t, ctx(at(22, 5)), JSON.stringify(Cycle.snapshot(s, at(22, 5))))
     compare(r.error, "")
     compare(t.phase, "sleep")
