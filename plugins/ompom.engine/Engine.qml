@@ -54,7 +54,10 @@ Item {
     Qt.resolvedUrl("notes-helper.py").toString().replace(/^file:\/\//, ""))
 
   // ---- the state (Cycle.fresh()'s keys; see there for each) ----------------
-  property string mode: "normal"
+  // The engine starts from these defaults, not from Cycle.fresh() (which
+  // only names the keys), so "off" here is what keeps a login from
+  // starting the timer.
+  property string mode: "off"
   property string phase: "focus"
   property bool paused: false
   property real endsAtMs: 0
@@ -160,6 +163,7 @@ Item {
   function tick() { root.run("tick") }
   function togglePause() { root.run("togglePause"); return root.statusJson() }
   function cycleMode() { root.run("cycleMode"); return root.statusJson() }
+  function setMode(mode) { root.run("setMode", mode); return root.statusJson() }
   function skipSleep() { root.run("skipSleep"); return root.statusJson() }
   function addExtension() { root.run("addExtension") }
   function startBreak() { root.run("startBreak") }
@@ -215,7 +219,12 @@ Item {
   // The engine comes up in a fresh run, sized for its mode (the demo's
   // short one included) and stamped with its start, without which its log
   // entry would be refused (notes-helper.py parses "started").
-  Component.onCompleted: root.run("startNextRun")
+  // The timer comes up off (Cycle.fresh()); the demo is there to be watched,
+  // so it switches itself on.
+  Component.onCompleted: {
+    root.run("startNextRun")
+    if (root.demo) root.setMode("normal")
+  }
 
   // ---- the writes ----------------------------------------------------------------
   // Every notes-helper.py call that writes, and the one place the demo is
@@ -370,6 +379,26 @@ Item {
     }
   }
 
+  // The bar popup's recent days (notes-helper.py recent). The IPC call
+  // answers with the last read and starts a fresh one, so a popup that
+  // asks again a moment later sees the new count.
+  property string progressJson: "[]"
+  Process {
+    id: recentProc
+    command: [root.pythonBin, root.notesHelperPath, "recent"]
+    // Read once at load too, so the first popup after a login shows the
+    // week rather than seven empty days until its second ask.
+    running: true
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: if (text.trim().charAt(0) === "[") root.progressJson = text.trim()
+    }
+  }
+  function progress() {
+    if (!recentProc.running) recentProc.running = true
+    return root.progressJson
+  }
+
   IpcHandler {
     // Its own target in the demo, so a script aimed at "ompom" can never
     // be answered by the demo instead of the real engine.
@@ -377,6 +406,10 @@ Item {
     function status(): string { return root.statusJson() }
     function togglePause(): string { return root.togglePause() }
     function cycleMode(): string { return root.cycleMode() }
+    function setMode(mode: string): string { return root.setMode(mode) }
+    // A fresh focus run from now, in the same mode (Cycle.restartRun()).
+    function restart(): string { root.run("restartRun"); return root.statusJson() }
+    function progress(): string { return root.progress() }
     // For bin/omvision-deploy only -- see Cycle.snapshot().
     function snapshot(): string { return root.snapshotJson() }
     function restore(json: string): string { return root.restore(json) }

@@ -18,10 +18,11 @@ TestCase {
     return { nowMs: nowMs, durations: Cycle.DURATIONS, busy: busy || { finishedLog: false, journalSave: false } }
   }
 
-  // A fresh engine at `nowMs`, as Engine.qml starts one.
+  // A fresh engine at `nowMs`, as Engine.qml starts one, switched on.
   function started(nowMs) {
     var s = Cycle.fresh()
     Cycle.startNextRun(s, ctx(nowMs))
+    Cycle.setMode(s, ctx(nowMs), "normal")
     return s
   }
 
@@ -101,6 +102,49 @@ TestCase {
     tickAt(s, noon + gap)
     compare(s.phase, "focus", "a run the laptop slept through hasn't happened")
     compare(Cycle.remainingSec(s, noon + gap), 25 * 60)
+  }
+
+  function test_the_engine_comes_up_off_and_only_the_bar_starts_it() {
+    var s = Cycle.fresh()
+    Cycle.startNextRun(s, ctx(noon))
+    compare(s.mode, "off")
+    compare(Cycle.countdownRunning(s), false)
+    tickAt(s, noon + 3600 * 1000)
+    compare(s.phase, "focus", "nothing runs out while off")
+    compare(Cycle.barLabel(s, noon), "")
+    Cycle.setMode(s, ctx(noon + 3600 * 1000), "long")
+    compare(s.mode, "long")
+    compare(Cycle.remainingSec(s, noon + 3600 * 1000), 50 * 60)
+    Cycle.setMode(s, ctx(noon + 3600 * 1000 + 60000), "long")
+    compare(Cycle.remainingSec(s, noon + 3600 * 1000 + 60000), 49 * 60, "picking the running mode restarts nothing")
+    compare(Cycle.setMode(s, ctx(noon), "bogus"), [])
+    compare(s.mode, "long")
+  }
+
+  function test_restart_is_only_mid_focus() {
+    var s = started(noon)
+    Cycle.togglePause(s, ctx(noon + 60000))
+    Cycle.restartRun(s, ctx(noon + 120000))
+    compare(s.paused, false)
+    compare(Cycle.remainingSec(s, noon + 120000), 25 * 60)
+    var b = started(noon)
+    toBreak(b, noon)
+    Cycle.restartRun(b, ctx(noon + 26 * 60000))
+    compare(b.phase, "break", "no restart out of a break")
+    var o = Cycle.fresh()
+    Cycle.startNextRun(o, ctx(noon))
+    Cycle.restartRun(o, ctx(noon))
+    compare(Cycle.countdownRunning(o), false, "no restart while off")
+  }
+
+  function test_the_day_starts_with_the_timer_off() {
+    var s = started(noon)
+    tickAt(s, at(21, 51))
+    compare(s.phase, "sleep")
+    tickAt(s, at(5, 30, 1))
+    compare(s.phase, "focus")
+    compare(s.mode, "off")
+    compare(Cycle.countdownRunning(s), false)
   }
 
   function test_the_timer_off_holds_still_and_modes_cycle() {

@@ -84,7 +84,10 @@ QsTestCase {
     noon.setHours(12, 0, 0, 0)
     engine.clockOffsetMs = noon.getTime() - Date.now()
     // A fresh engine's state, then a fresh run from noon on it.
-    compare(engine.restore(JSON.stringify(Cycle.snapshot(Cycle.fresh(), engine.now().getTime()))).indexOf("error"), -1,
+    // Switched on: every test here is of a running timer.
+    var on = Cycle.fresh()
+    on.mode = "normal"
+    compare(engine.restore(JSON.stringify(Cycle.snapshot(on, engine.now().getTime()))).indexOf("error"), -1,
             "the engine took the fresh state")
     engine.resetRun()
     if (engine.activeGoalSlug !== "") {

@@ -113,7 +113,9 @@ var SUSPEND_GAP_MS = 5000
 // countdown, which follows the clock anyway, is no exception.
 function fresh() {
   return {
-    mode: "normal",
+    // Off until asked: the timer never starts by itself, at login or at
+    // 05:30 (wake()). Only the bar starts it (setMode()).
+    mode: "off",
     phase: "focus",
     paused: false,
     endsAtMs: 0,
@@ -297,6 +299,9 @@ function status(s, nowMs) {
     extensionsUsed: s.extensionsUsed,
     maxExtensions: MAX_EXTENSIONS,
     breakIsLong: s.breakIsLong,
+    runsInSet: s.runsInSet,
+    runsPerSet: RUNS_PER_SET,
+    goal: s.activeGoalSlug,
     overlay: overlayVisible(s)
   }
 }
@@ -432,14 +437,30 @@ function resetRun(s, ctx) {
   return startNextRun(s, ctx)
 }
 
+// The bar's "Restart": a fresh focus run from now, in the same mode. Only
+// mid-focus: a break, the prompt and the night end on their own, as with a
+// mode switch. The run cut off isn't a pomodoro, so nothing is logged.
+function restartRun(s, ctx) {
+  if (s.mode === "off" || s.phase !== "focus") return []
+  s.paused = false
+  return startNextRun(s, ctx)
+}
+
 function cycleMode(s, ctx) {
+  return setMode(s, ctx, MODES[(MODES.indexOf(s.mode) + 1) % MODES.length])
+}
+
+// The bar's popup picks a mode directly. Picking the one already running
+// changes nothing, so a stray click never restarts a run.
+function setMode(s, ctx, mode) {
+  if (MODES.indexOf(mode) === -1 || mode === s.mode) return []
   if (s.phase === "extend" || s.phase === "break" || atNight(s)) return []
   // A finished pomodoro is logged before the reset below throws its cycle
   // away. Switching mode at the +1 minute / Start break prompt used to drop
   // a run that had fully happened, just because no break was taken to log
   // it.
   var fx = logFinishedRunOnTheWayOut(s, ctx)
-  s.mode = MODES[(MODES.indexOf(s.mode) + 1) % MODES.length]
+  s.mode = mode
   // A mode switch never raises the overlay (it only comes up when a run
   // ends), so clicking through the modes on the bar just restarts the run in
   // each one, and the last one clicked is the one that runs.
@@ -672,6 +693,8 @@ function wake(s, ctx) {
   var fx = s.phase === "sleep" ? saveJournal(s, ctx) : []
   if (s.phase === "sleep" && ctx.busy.journalSave && s.journalLoaded && s.journalText !== s.journalBase)
     warn(fx, "ompom: the journal for " + s.journalDay + " not saved at 05:30: " + s.journalText)
+  // The day starts with the timer off, whatever ran yesterday.
+  s.mode = "off"
   return fx.concat(resetRun(s, ctx))
 }
 

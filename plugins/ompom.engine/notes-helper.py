@@ -57,6 +57,11 @@ Subcommands:
                           midnight is filed under the day it started.
                           Same O_APPEND, no-read-back discipline as
                           append-log, for the same reason.
+  recent                  print a JSON array of the last RECENT_DAYS days,
+                          oldest first, as {day, runs, minutes}: the
+                          pomodoros (not events) in every goal log and day
+                          file, one per id, filed under the day of their id.
+                          Read-only; an unreadable file is skipped.
   read-active/write-active  the single-line slug (or empty) at
                           ~/.local/state/omvision/active-goal.
   read-journal <day>      print ~/Notes/Omvision/journal/<day>.md as it
@@ -376,6 +381,66 @@ def day_file_name(payload):
     return dt.strftime("%Y-%m-%d") + ".md"
 
 
+RECENT_DAYS = 7
+# A pomodoro's header (not an event's) and the id line under it.
+RUN_HEADER_RE = re.compile(r"### .* · (\d+)(m|h)(\d\d)?$")
+RUN_ID_RE = re.compile(r"id: (\d{4}-\d\d-\d\d)T\d\d:\d\d:\d\d$")
+
+
+def runs_in(text, runs):
+    """Adds {id: minutes} for each pomodoro in a log's text. A later
+    entry with the same id replaces the earlier one, as readers keep the
+    last (goal-files.md §4). Entries without an id line are skipped."""
+    lines = text.splitlines()
+    for i, line in enumerate(lines[:-1]):
+        h = RUN_HEADER_RE.fullmatch(line)
+        if not h or "· event ·" in line:
+            continue
+        m = RUN_ID_RE.fullmatch(lines[i + 1])
+        if not m:
+            continue
+        n = int(h.group(1))
+        minutes = n if h.group(2) == "m" else n * 60 + int(h.group(3) or 0)
+        runs[lines[i + 1][4:]] = minutes
+
+
+def read_tail(dir_fd, name, cap):
+    """The last `cap` bytes of `name` under dir_fd, refusing to follow a
+    symlink, or b"" if it can't be read. The tail, not the head: logs only
+    grow at the end, where the recent runs are. An entry cut at the start
+    loses its header or its id, and runs_in() skips it."""
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dir_fd)
+    except OSError:
+        return b""
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return b""
+        os.lseek(fd, max(0, os.fstat(fd).st_size - cap), os.SEEK_SET)
+        return os.read(fd, cap)
+    finally:
+        os.close(fd)
+
+
+def handle_recent(goals_fd, days_fd, today):
+    runs = {}
+    for fd, suffix in ((goals_fd, ".log.md"), (days_fd, ".md")):
+        try:
+            names = os.listdir(fd)
+        except OSError:
+            continue
+        for name in names:
+            if not name.endswith(suffix):
+                continue
+            runs_in(read_tail(fd, name, MAX_GOAL_FILE_BYTES).decode("utf-8", "replace"), runs)
+    out = []
+    for back in range(RECENT_DAYS - 1, -1, -1):
+        day = (today - datetime.timedelta(days=back)).isoformat()
+        mins = [m for rid, m in runs.items() if rid.startswith(day)]
+        out.append({"day": day, "runs": len(mins), "minutes": sum(mins)})
+    return out
+
+
 def handle_read_active(state_fd):
     content = read_capped(state_fd, ACTIVE_GOAL_NAME, MAX_SLUG_BYTES)
     slug = (content or b"")[:MAX_SLUG_BYTES].decode("utf-8", "replace").strip()
@@ -416,6 +481,7 @@ USAGE = """\
 usage: notes-helper.py list-goals
        notes-helper.py append-log <slug> < entry.json
        notes-helper.py append-day < entry.json
+       notes-helper.py recent
        notes-helper.py read-active
        notes-helper.py write-active < slug
        notes-helper.py read-journal <YYYY-MM-DD>
@@ -436,6 +502,21 @@ def cmd_list_goals():
         print(f"notes-helper: {e}", file=sys.stderr)
         return 1
 
+    return 0
+
+
+def cmd_recent():
+    try:
+        with ExitStack() as stack:
+            home_fd = stack.enter_context(opened(home_dir_fd()))
+            notes_fd = stack.enter_context(opened(sub_dir_fd(home_fd, "Notes")))
+            omvision_fd = stack.enter_context(opened(sub_dir_fd(notes_fd, "Omvision")))
+            goals_fd = stack.enter_context(opened(sub_dir_fd(omvision_fd, "goals")))
+            days_fd = stack.enter_context(opened(sub_dir_fd(omvision_fd, "days")))
+            print(json.dumps(handle_recent(goals_fd, days_fd, datetime.date.today())))
+    except OSError as e:
+        print(f"notes-helper: {e}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -611,6 +692,8 @@ def main():
         return cmd_append_log(argv[1])
     if len(argv) == 1 and argv[0] == "append-day":
         return cmd_append_day()
+    if len(argv) == 1 and argv[0] == "recent":
+        return cmd_recent()
     if len(argv) == 1 and argv[0] == "read-active":
         return cmd_read_active()
     if len(argv) == 1 and argv[0] == "write-active":

@@ -4,7 +4,7 @@
   "name": "Ompom",
   "version": "1.0.0",
   "author": "outtaspacetime",
-  "description": "Pomodoro timer bar icon. Left-click pauses/resumes the current run, right-click cycles Normal / Long Focus / Off.",
+  "description": "Pomodoro timer bar icon. Left-click opens a panel (on/off, mode, pause, restart, last 7 days), right-click switches the timer on or off, middle-click pauses.",
   "kinds": [
     "bar-widget"
   ],
@@ -13,7 +13,7 @@
   },
   "barWidget": {
     "displayName": "Ompom",
-    "description": "Pomodoro timer: left-click pause/resume, right-click cycle Normal / Long Focus / Off.",
+    "description": "Pomodoro timer: left-click panel, right-click on/off, middle-click pause.",
     "category": "Productivity",
     "allowMultiple": false,
     "defaultSection": "center"
